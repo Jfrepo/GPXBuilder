@@ -145,6 +145,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
         <span class="label-caps">Library</span>
         <div style="display:flex; gap:.3rem;">
           <button class="icon-btn" id="newRouteBtn">+ Route</button>
+          <button class="icon-btn" id="exportSelectedBtn" title="Export all tracks ticked Show">Export Selected</button>
           <button class="icon-btn drawer-close" id="drawerCloseBtn">&times;</button>
         </div>
       </div>
@@ -265,7 +266,7 @@ var state = {
 };
 
 var els = {};
-["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn",
+["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn",
  "fileInput","importBtn","saveBtn",
  "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
@@ -626,6 +627,17 @@ function pasteTrack(){
   var copy=deepClone(state.clipboardTrack); copy.id=uid(); copy.name=copy.name+' copy'; copy.createdAt=copy.updatedAt=new Date().toISOString(); copy.visible=true; copy.stats=computeStats(copy);
   state.library.unshift(copy); persistLibrary(); state.trackMenuId=null; renderLibrary(); render();
 }
+function exportTrackItem(item){
+  if(!item)return;
+  var xml=buildGpx(item),blob=new Blob([xml],{type:'application/gpx+xml'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=(item.name||'track').replace(/[^a-z0-9\-_]+/gi,'_')+'.gpx';document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},2000);
+}
+function exportSelectedTracks(){
+  var selected=state.library.filter(function(item){return item.visible!==false;});
+  if(!selected.length){window.alert('Tick Show on one or more tracks to export.');return;}
+  selected.forEach(function(item,i){setTimeout(function(){exportTrackItem(item);},i*180);});
+}
 function renameTrack(id){
   var item=state.library.find(function(t){return t.id===id;});if(!item)return;
   var name=window.prompt('Rename track',item.name); if(!name||!name.trim())return;
@@ -662,7 +674,7 @@ function renderLibrary(){
     }
     if(state.trackMenuId===item.id){
       var menu=document.createElement('div');menu.className='track-menu';
-      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack],['Delete',function(){deleteLibraryTrack(item.id)}]].forEach(function(x){
+      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack],['Export',function(){exportTrackItem(item)}],['Delete',function(){deleteLibraryTrack(item.id)}]].forEach(function(x){
         var b=document.createElement('button');b.type='button';b.textContent=x[0];if(x[0]==='Delete')b.className='danger';if(x[0]==='Paste'&&!state.clipboardTrack)b.disabled=true;
         b.onclick=function(ev){ev.stopPropagation();x[1]();};menu.appendChild(b);
       });d.appendChild(menu);
@@ -939,17 +951,8 @@ els.importConfirmBtn.onclick = function(){
 };
 
 // ---------- export ----------
-els.exportBtn.onclick = function(){
-  if(!state.current) return;
-  var xml = buildGpx(state.current);
-  var blob = new Blob([xml], {type:'application/gpx+xml'});
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = (state.current.name||'track').replace(/[^a-z0-9\-_]+/gi,'_') + '.gpx';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
-};
+els.exportBtn.onclick = function(){ if(state.current) exportTrackItem(state.current); };
+els.exportSelectedBtn.onclick = exportSelectedTracks;
 
 // ---------- top buttons ----------
 els.saveBtn.onclick = function(){
