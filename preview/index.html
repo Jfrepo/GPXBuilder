@@ -155,7 +155,8 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
         <span class="label-caps">Library</span>
         <div style="display:flex; gap:.3rem;">
           <button class="icon-btn" id="newRouteBtn">+ Route</button>
-          <button class="icon-btn" id="exportSelectedBtn" title="Export all tracks ticked Show">Export Selected</button>
+          <button class="icon-btn" id="exportSelectedBtn" title="Export all selected tracks">Export Selected</button>
+          <button class="icon-btn danger" id="deleteSelectedBtn" title="Delete all selected tracks">Delete</button>
           <button class="icon-btn drawer-close" id="drawerCloseBtn">&times;</button>
         </div>
       </div>
@@ -295,7 +296,7 @@ var state = {
 };
 
 var els = {};
-["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","selectAllTracks","selectAllWrap",
+["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
  "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
@@ -812,18 +813,22 @@ function exportSelectedTracks(){
   if(!selected.length){window.alert('Tick Show on one or more tracks to export.');return;}
   selected.forEach(function(item,i){setTimeout(function(){exportTrackItem(item);},i*180);});
 }
+function deleteSelectedTracks(){
+  var selected=state.library.filter(function(item){return item.visible!==false;});
+  if(!selected.length)return;
+  var label=selected.length===1?'this selected track':selected.length+' selected tracks';
+  if(!window.confirm('Delete '+label+' from the library? This cannot be undone.'))return;
+  var ids={};selected.forEach(function(item){ids[item.id]=true;});
+  state.library=state.library.filter(function(item){return !ids[item.id];});
+  if(state.currentId&&ids[state.currentId]){state.current=null;state.currentId=null;state.selection=null;state.history=[];state.future=[];state.extend=null;}
+  state.trackMenuId=null;state.paletteId=null;persistLibrary();renderLibrary();render();
+}
 function renameTrack(id){
   var item=state.library.find(function(t){return t.id===id;});if(!item)return;
   var name=window.prompt('Rename track',item.name); if(!name||!name.trim())return;
   item.name=name.trim();item.updatedAt=new Date().toISOString();persistLibrary();
   if(state.currentId===id&&state.current)state.current.name=item.name;
   state.trackMenuId=null;renderLibrary();refreshDock();
-}
-function deleteLibraryTrack(id){
-  if(!window.confirm('Delete this track from the library?'))return;
-  state.library=state.library.filter(function(t){return t.id!==id;});persistLibrary();
-  if(state.currentId===id){state.current=null;state.currentId=null;state.selection=null;}
-  state.trackMenuId=null;renderLibrary();render();
 }
 function updateSelectAll(){
   if(!els.selectAllTracks)return;
@@ -862,8 +867,8 @@ function renderLibrary(){
     }
     if(state.trackMenuId===item.id){
       var menu=document.createElement('div');menu.className='track-menu';
-      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack],['Export',function(){exportTrackItem(item)}],['Delete',function(){deleteLibraryTrack(item.id)}]].forEach(function(x){
-        var b=document.createElement('button');b.type='button';b.textContent=x[0];if(x[0]==='Delete')b.className='danger';if(x[0]==='Paste'&&!state.clipboardTrack)b.disabled=true;
+      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack],['Export',function(){exportTrackItem(item)}]].forEach(function(x){
+        var b=document.createElement('button');b.type='button';b.textContent=x[0];if(x[0]==='Paste'&&!state.clipboardTrack)b.disabled=true;
         b.onclick=function(ev){ev.stopPropagation();x[1]();};menu.appendChild(b);
       });d.appendChild(menu);
     }
@@ -1141,6 +1146,7 @@ els.importConfirmBtn.onclick = function(){
 // ---------- export ----------
 els.exportBtn.onclick = function(){ if(state.current) exportTrackItem(state.current); };
 els.exportSelectedBtn.onclick = exportSelectedTracks;
+els.deleteSelectedBtn.onclick = deleteSelectedTracks;
 
 // ---------- top buttons ----------
 els.saveBtn.onclick = function(){
