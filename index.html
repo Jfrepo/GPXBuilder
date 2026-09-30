@@ -867,7 +867,7 @@ function renderLibrary(){
     }
     if(state.trackMenuId===item.id){
       var menu=document.createElement('div');menu.className='track-menu';
-      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack],['Export',function(){exportTrackItem(item)}]].forEach(function(x){
+      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack]].forEach(function(x){
         var b=document.createElement('button');b.type='button';b.textContent=x[0];if(x[0]==='Paste'&&!state.clipboardTrack)b.disabled=true;
         b.onclick=function(ev){ev.stopPropagation();x[1]();};menu.appendChild(b);
       });d.appendChild(menu);
