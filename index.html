@@ -42,9 +42,10 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .icon-btn{display:inline-flex; align-items:center; justify-content:center; gap:.35rem; border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:3px; padding:.5rem .65rem; min-height:38px; font-size:.85rem;}
 .icon-btn:hover{border-color:var(--accent);}
 .icon-btn.primary{background:var(--accent); color:var(--accent-contrast); border-color:var(--accent); font-weight:600;}
-.icon-btn.danger{background:transparent; color:var(--danger); border-color:var(--danger);}
-.icon-btn.danger.confirming{background:var(--danger); color:#fff;}
-.icon-btn:disabled{opacity:.4; cursor:not-allowed;}
+.icon-btn.danger{background:rgba(193,68,45,.10);color:var(--danger);border-color:var(--danger);font-weight:600;}
+.icon-btn.danger.confirming{background:var(--danger);color:#fff;}
+.icon-btn:disabled{opacity:1;cursor:not-allowed;background:var(--surface-2);color:var(--text-muted);border-color:var(--border);}
+.icon-btn.danger:disabled{background:var(--surface-2);color:var(--text-muted);border-color:var(--border);}
 .local-chip{display:flex; align-items:center; gap:.35rem; font-size:.72rem; padding:.3rem .55rem; border-radius:20px; background:var(--surface-2); color:var(--text-muted);}
 .layout{display:flex; flex:1; min-height:0; position:relative;}
 .drawer{width:280px; flex:none; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0;}
@@ -117,7 +118,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
  .mobile-actions{grid-template-columns:repeat(3,1fr);gap:.25rem;margin:0}
  .mobile-actions .icon-btn{min-height:34px;height:34px;padding:.15rem .2rem;font-size:.76rem}
  .toolbar{grid-template-columns:repeat(4,1fr);gap:.2rem;margin-top:.2rem}
- .toolbar .icon-btn{min-height:32px;height:32px;padding:.1rem .15rem;font-size:.68rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .toolbar .icon-btn{min-height:38px;height:38px;padding:.18rem .35rem;font-size:.76rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-width:1.5px}
  .points-toggle{min-height:28px;height:28px;margin-top:.18rem;padding:.1rem .3rem;font-size:.7rem}
  .points-table-wrap{max-height:22dvh}
 }
