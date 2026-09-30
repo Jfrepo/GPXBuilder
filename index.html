@@ -398,7 +398,7 @@ function buildGpx(item){
 }
 
 // ---------- Leaflet map ----------
-var map = L.map('mapDiv', {zoomControl:true}).setView([45,-100], 4);
+var map = L.map('mapDiv', {zoomControl:true}).setView([-32.5,147.0], 6);
 // Note: raw tile.openstreetmap.org blocks requests from local (file://) pages because
 // they arrive with no/"null" referrer, which OSM's usage policy treats as unidentified
 // bulk traffic. Esri's public World basemaps are built for exactly this kind of open
