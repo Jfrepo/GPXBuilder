@@ -509,10 +509,11 @@ function startNewRoute(){
 function updateModeBanner(){
   var active = state.mode==='draw' || state.mode==='move' || state.mode==='extend';
   els.modeBanner.classList.toggle('hidden', !active);
-  if(state.mode==='move') els.modeBanner.textContent='Move point: tap the new location on the map';
-  else if(state.mode==='extend') els.modeBanner.textContent='Extend Track: tap map to add connected points · Complete Change when done';
-  else els.modeBanner.textContent='Drawing mode — click the map to add points';
-  els.finishDrawBtn.textContent = (state.mode==='extend' || state.mode==='draw') ? 'Complete Change' : (state.mode==='move' ? 'Cancel' : 'Complete Change');
+  var msg = els.modeBanner.querySelector('span');
+  if(state.mode==='move') msg.textContent='Move point: tap the new location on the map';
+  else if(state.mode==='extend') msg.textContent='Extend Track: tap map to add connected points';
+  else msg.textContent='Drawing mode — click the map to add points';
+  els.finishDrawBtn.textContent = state.mode==='move' ? 'Cancel' : 'Complete Change';
 }
 
 function fitToTrack(){
