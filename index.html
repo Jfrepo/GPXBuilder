@@ -69,7 +69,7 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .layer-toggle button{border:none; background:var(--surface); padding:.4rem .7rem; font-size:.78rem; color:var(--text);}
 .layer-toggle button.on{background:var(--accent); color:var(--accent-contrast);}
 .overlay-panel{position:absolute;left:4.2rem;top:.8rem;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.45rem .55rem;display:flex;align-items:center;gap:.45rem;font-size:.76rem;box-shadow:0 1px 5px rgba(0,0,0,.12)}
-.overlay-panel input[type=range]{width:140px}.slope-swipe{position:absolute;top:0;bottom:0;width:4px;background:#fff;border-left:1px solid #222;border-right:1px solid #222;z-index:740;pointer-events:none;box-shadow:0 0 5px rgba(0,0,0,.6)}.slope-swipe:after{content:'↔';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:var(--surface);color:var(--text);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
+.overlay-panel input[type=range]{width:140px}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
 .slope-ramp{width:150px;height:10px;margin:.2rem 0;background:linear-gradient(90deg,#888 0%,#ddd35a 20%,#eea044 45%,#d45b32 70%,#7b2d20 100%)}.contour-elev-label{background:transparent!important;border:0!important}.contour-elev-label span{display:inline-block;background:rgba(255,250,235,.88);color:#6b431f;border-radius:2px;padding:0 2px;font:600 10px/13px 'IBM Plex Mono',monospace;white-space:nowrap}
 @media(max-width:700px){.overlay-panel{left:4.2rem;top:.8rem}.overlay-panel input{width:90px}.slope-legend{font-size:.62rem}.slope-ramp{width:120px}}
 .dock{background:var(--surface); border-top:1px solid var(--border); padding:.7rem .8rem;}
@@ -164,7 +164,6 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <label><input type="checkbox" id="slopeOverlayToggle"> Contours</label>
           <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Reveal NSW contour overlay left to right">
         </div>
-        <div class="slope-swipe hidden" id="slopeSwipe"></div>
         <div class="slope-legend hidden" id="slopeLegend"><strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span></div>
         <div id="mapDiv"></div>
       </div>
@@ -264,7 +263,7 @@ var state = {
 var els = {};
 ["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn",
  "fileInput","importBtn","saveBtn",
- "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","slopeOverlayToggle","slopeReveal","slopeSwipe","slopeLegend",
+ "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","slopeOverlayToggle","slopeReveal","slopeLegend",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
  "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
@@ -470,10 +469,9 @@ function contourExportUrl(){
     '&layers=show:2&format=png32&transparent=true&dpi=144&f=image';
 }
 function updateSlopeClip(){
-  if(!slopeOn) return;
+  if(!slopeOn || !slopeLayer) return;
   var pct=+els.slopeReveal.value;
-  slopePane.style.clipPath='inset(0 '+(100-pct)+'% 0 0)';
-  els.slopeSwipe.style.left='calc('+pct+'% - 2px)';
+  slopeLayer.setOpacity(Math.max(0,Math.min(1,pct/100)));
 }
 function refreshSlopeImage(){
   if(!slopeOn) return;
@@ -485,7 +483,7 @@ function refreshSlopeImage(){
   els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Contour lines show elevation shape<br>Closer spacing = steeper terrain</span>';
   var bounds=map.getBounds(), url=contourExportUrl();
   if(slopeLayer) map.removeLayer(slopeLayer);
-  slopeLayer=L.imageOverlay(url,bounds,{pane:'slopePane',opacity:1,interactive:false,errorOverlayUrl:''}).addTo(map);
+  slopeLayer=L.imageOverlay(url,bounds,{pane:'slopePane',opacity:(+els.slopeReveal.value/100),interactive:false,errorOverlayUrl:''}).addTo(map);
   slopeLayer.once('load',function(){updateSlopeClip();});
   slopeLayer.once('error',function(){
     els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Overlay failed to load — pan or zoom to retry</span>';
@@ -500,11 +498,9 @@ function queueSlopeRefresh(){
 els.slopeOverlayToggle.onchange=function(){
   slopeOn=this.checked;
   els.slopeLegend.classList.toggle('hidden',!slopeOn);
-  els.slopeSwipe.classList.toggle('hidden',!slopeOn);
-  if(slopeOn) refreshSlopeImage();
+    if(slopeOn) refreshSlopeImage();
   else {
     if(slopeLayer){map.removeLayer(slopeLayer);slopeLayer=null;}
-    slopePane.style.clipPath='';
   }
 };
 els.slopeReveal.oninput=updateSlopeClip;
