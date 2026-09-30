@@ -63,10 +63,15 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .main{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
 .map-wrap{flex:1; position:relative; min-height:0;}
 #mapDiv{width:100%; height:100%;}
+.leaflet-control-attribution{display:none!important;}
 .mode-banner{position:absolute; left:50%; top:.8rem; transform:translateX(-50%); background:var(--accent); color:var(--accent-contrast); padding:.4rem .8rem; border-radius:20px; font-size:.8rem; font-weight:600; z-index:750; display:flex; gap:.5rem; align-items:center;}
 .layer-toggle{position:absolute; right:.7rem; top:.8rem; z-index:750; background:var(--surface); border:1px solid var(--border); border-radius:4px; overflow:hidden; display:flex;}
 .layer-toggle button{border:none; background:var(--surface); padding:.4rem .7rem; font-size:.78rem; color:var(--text);}
 .layer-toggle button.on{background:var(--accent); color:var(--accent-contrast);}
+.overlay-panel{position:absolute;left:4.2rem;top:.8rem;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.45rem .55rem;display:flex;align-items:center;gap:.45rem;font-size:.76rem;box-shadow:0 1px 5px rgba(0,0,0,.12)}
+.overlay-panel input[type=range]{width:140px}.slope-swipe{position:absolute;top:0;bottom:0;width:4px;background:#fff;border-left:1px solid #222;border-right:1px solid #222;z-index:740;pointer-events:none;box-shadow:0 0 5px rgba(0,0,0,.6)}.slope-swipe:after{content:'↔';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:var(--surface);color:var(--text);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
+.slope-ramp{width:150px;height:10px;margin:.2rem 0;background:linear-gradient(90deg,#888 0%,#ddd35a 20%,#eea044 45%,#d45b32 70%,#7b2d20 100%)}.contour-elev-label{background:transparent!important;border:0!important}.contour-elev-label span{display:inline-block;background:rgba(255,250,235,.88);color:#6b431f;border-radius:2px;padding:0 2px;font:600 10px/13px 'IBM Plex Mono',monospace;white-space:nowrap}
+@media(max-width:700px){.overlay-panel{left:4.2rem;top:.8rem}.overlay-panel input{width:90px}.slope-legend{font-size:.62rem}.slope-ramp{width:120px}}
 .dock{background:var(--surface); border-top:1px solid var(--border); padding:.7rem .8rem;}
 .stats-row{display:flex; flex-wrap:wrap; gap:1.1rem; margin-bottom:.6rem;}
 .stat{display:flex; flex-direction:column; gap:.05rem; min-width:64px;}
@@ -100,33 +105,6 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 @media (min-width: 900px){ .drawer-close, .hamburger{display:none;} }
 .tiny{font-size:.7rem;}
 .leaflet-marker-sel{filter:drop-shadow(0 0 2px var(--line-selected));}
-
-/* ---------- Mobile UI v1 ---------- */
-.mobile-actions{display:none;}
-@media (max-width:767px){
- html,body{height:100%;overflow:hidden}.app{height:100dvh;min-height:100dvh}
- .topbar{min-height:58px;padding:max(.45rem,env(safe-area-inset-top)) .65rem .45rem;gap:.45rem;flex:none}
- .brand{min-width:0}.brand .name{font-size:1.45rem;white-space:nowrap}.local-chip{display:none}
- .topbar #importBtn,.topbar #saveBtn{display:none}
- .hamburger{width:44px;min-width:44px;height:44px;padding:0;font-size:1.15rem}
- .layout,.main{min-height:0}.main{height:100%}.map-wrap{flex:1 1 auto;min-height:46dvh}
- .leaflet-control-attribution{font-size:9px;max-width:72vw;line-height:1.15}.leaflet-control-scale{display:none}
- .layer-toggle{right:.55rem;top:.55rem}.layer-toggle button{min-height:42px;padding:.45rem .7rem;font-size:.82rem}
- .mode-banner{top:.55rem;max-width:calc(100% - 7rem);white-space:normal;line-height:1.15}
- .dock{flex:0 0 auto;max-height:42dvh;overflow-y:auto;overscroll-behavior:contain;padding:.65rem .7rem calc(.7rem + env(safe-area-inset-bottom))}
- .stats-row{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:.45rem .65rem;margin-bottom:.55rem}
- .stat{min-width:0}.stat .v{font-size:.96rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.stat .k{font-size:.61rem}
- .stat:first-child{grid-column:1/-1}.stat:first-child .v{font-family:'Source Sans 3',system-ui,sans-serif;font-size:1.05rem;font-weight:600}
- .mobile-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin:.15rem 0 .6rem}
- .mobile-actions .icon-btn{min-height:46px;width:100%;padding:.45rem .35rem;font-size:.88rem}
- .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}.toolbar .grp{display:contents}
- .toolbar .icon-btn{width:100%;min-height:46px;margin:0;padding:.5rem .35rem}.toolbar .icon-btn:disabled{display:none}
- .points-toggle{min-height:40px;margin-top:.35rem;font-size:.84rem}.points-table-wrap{max-height:34dvh}
- .drawer{width:min(86vw,320px);padding-top:env(safe-area-inset-top)}.drawer-head .icon-btn{min-height:44px}
- .dialog{max-height:calc(100dvh - 2rem);overflow:auto}
-}
-@media (max-width:390px){.brand .name{font-size:1.28rem}.stats-row{grid-template-columns:1fr 1fr 1fr}}
-
 /* ---------- Mobile UI v1.1: 80% map / compact controls ---------- */
 @media (max-width:767px){
  .topbar{min-height:48px;height:48px;padding:max(.2rem,env(safe-area-inset-top)) .45rem .2rem}
@@ -143,8 +121,6 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
  .points-toggle{min-height:28px;height:28px;margin-top:.18rem;padding:.1rem .3rem;font-size:.7rem}
  .points-table-wrap{max-height:22dvh}
 }
-
-
 </style>
 </head>
 <body>
@@ -184,6 +160,12 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <button id="layerStreetsBtn" class="on">Streets</button>
           <button id="layerTerrainBtn">Terrain</button>
         </div>
+        <div class="overlay-panel">
+          <label><input type="checkbox" id="slopeOverlayToggle"> Contours</label>
+          <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Reveal NSW contour overlay left to right">
+        </div>
+        <div class="slope-swipe hidden" id="slopeSwipe"></div>
+        <div class="slope-legend hidden" id="slopeLegend"><strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span></div>
         <div id="mapDiv"></div>
       </div>
 
@@ -196,11 +178,13 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <div class="stat"><span class="v" id="statElev">&mdash;</span><span class="k">Ascent</span></div>
           <div class="stat"><span class="v" id="statSel">&mdash;</span><span class="k">Selected point</span></div>
         </div>
-        <div class="mobile-actions" aria-label="Primary actions">\n          <button class="icon-btn" id="mobileImportBtn">Import</button>\n          <button class="icon-btn primary" id="mobileNewRouteBtn">New route</button>\n          <button class="icon-btn" id="mobileExportBtn" disabled>Export</button>\n        </div>\n        <div class="toolbar">
+        <div class="toolbar">
           <div class="grp">
-            <button class="icon-btn" id="splitAfterBtn" disabled title="Split right after the selected point">Split after</button>
-            <button class="icon-btn" id="splitBeforeBtn" disabled title="Split right before the selected point">Split before</button>
+            <button class="icon-btn" id="splitAfterBtn" disabled title="Split the GPX track at the selected point">Split at point</button>
             <button class="icon-btn" id="joinNextBtn" disabled title="Rejoin with the next segment">Join next</button>
+            <button class="icon-btn" id="movePointBtn" disabled title="Move the selected point to a new map location">Move point</button>
+            <button class="icon-btn" id="extendTrackBtn" disabled title="Extend the track from the selected endpoint">Extend Track</button>
+            <button class="icon-btn primary hidden" id="completeChangeBtn" title="Finish the current map edit">Complete Change</button>
           </div>
           <div class="grp">
             <button class="icon-btn danger" id="deletePointBtn" disabled title="Delete just this point">Delete point</button>
@@ -273,15 +257,16 @@ var state = {
   selection: null,
   mode: 'view',
   history: [], future: [],
-  pendingImport: null
+  pendingImport: null,
+  extend: null
 };
 
 var els = {};
 ["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn",
- "fileInput","importBtn","saveBtn","mobileImportBtn","mobileNewRouteBtn","mobileExportBtn",
- "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn",
+ "fileInput","importBtn","saveBtn",
+ "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","slopeOverlayToggle","slopeReveal","slopeSwipe","slopeLegend",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
- "splitAfterBtn","splitBeforeBtn","joinNextBtn","deletePointBtn","deleteSegBtn",
+ "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
  "pointsToggle","pointsWrap","pointsBody",
  "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
@@ -300,6 +285,26 @@ function haversine(a,b){
   return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
 }
 function fmtKm(m){ return (m/1000).toFixed(m<10000?2:1) + ' km'; }
+function bearing(a,b){
+  var y=Math.sin(toRad(b.lon-a.lon))*Math.cos(toRad(b.lat));
+  var x=Math.cos(toRad(a.lat))*Math.sin(toRad(b.lat))-Math.sin(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.cos(toRad(b.lon-a.lon));
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function turnAngle(a,b,c){
+  var d=Math.abs(bearing(a,b)-bearing(b,c));
+  if(d>180) d=360-d;
+  return d;
+}
+function cornerWaypoints(item){
+  var out=[];
+  (item.segments||[]).forEach(function(seg,si){
+    for(var i=1;i<seg.length-1;i++){
+      var angle=turnAngle(seg[i-1],seg[i],seg[i+1]);
+      if(angle>=0.1) out.push({p:seg[i],seg:si,pt:i,angle:angle});
+    }
+  });
+  return out;
+}
 function fmtDate(iso){ try{ var d=new Date(iso); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }catch(e){ return ''; } }
 
 // ---------- local storage ----------
@@ -383,10 +388,25 @@ function buildGpx(item){
   var lines = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
   lines.push('<gpx version="1.1" creator="Switchback Map" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
+  var corners=cornerWaypoints(item);
+  corners.forEach(function(w,i){
+    lines.push('  <wpt lat="'+w.p.lat+'" lon="'+w.p.lon+'">');
+    if(w.p.ele!=null) lines.push('    <ele>'+w.p.ele+'</ele>');
+    lines.push('    <name>Corner '+(i+1)+'</name>');
+    lines.push('    <desc>Track corner waypoint</desc>');
+    lines.push('  </wpt>');
+  });
   if(item.type==='route'){
     lines.push('  <rte>');
     lines.push('    <name>'+esc(item.name)+'</name>');
-    (item.segments[0]||[]).forEach(function(p){
+    var routePts=[];
+    (item.segments||[]).forEach(function(seg){
+      seg.forEach(function(p){
+        var last=routePts[routePts.length-1];
+        if(!last || last.lat!==p.lat || last.lon!==p.lon) routePts.push(p);
+      });
+    });
+    routePts.forEach(function(p){
       lines.push('    <rtept lat="'+p.lat+'" lon="'+p.lon+'">');
       if(p.ele!=null) lines.push('      <ele>'+p.ele+'</ele>');
       lines.push('    </rtept>');
@@ -412,7 +432,7 @@ function buildGpx(item){
 }
 
 // ---------- Leaflet map ----------
-var map = L.map('mapDiv', {zoomControl:true}).setView([45,-100], 4);
+var map = L.map('mapDiv', {zoomControl:true}).setView([-32.5,147.0], 6);
 // Note: raw tile.openstreetmap.org blocks requests from local (file://) pages because
 // they arrive with no/"null" referrer, which OSM's usage policy treats as unidentified
 // bulk traffic. Esri's public World basemaps are built for exactly this kind of open
@@ -435,13 +455,82 @@ els.layerTerrainBtn.onclick = function(){
   els.layerTerrainBtn.classList.add('on'); els.layerStreetsBtn.classList.remove('on');
 };
 
+
+var slopePane = map.createPane('slopePane');
+slopePane.style.zIndex = 350;
+slopePane.style.pointerEvents = 'none';
+var slopeLayer=null, slopeOn=false, slopeRefreshTimer=null;
+var contourMapService='https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Elevation_and_Depth_Theme/MapServer';
+
+function contourExportUrl(){
+  var b=map.getBounds(), size=map.getSize();
+  var sw=L.CRS.EPSG3857.project(b.getSouthWest()), ne=L.CRS.EPSG3857.project(b.getNorthEast());
+  return contourMapService+'/export?bbox='+[sw.x,sw.y,ne.x,ne.y].join(',')+
+    '&bboxSR=3857&imageSR=3857&size='+Math.max(1,Math.round(size.x))+','+Math.max(1,Math.round(size.y))+
+    '&layers=show:2&format=png32&transparent=true&dpi=144&f=image';
+}
+function updateSlopeClip(){
+  if(!slopeOn) return;
+  var pct=+els.slopeReveal.value;
+  slopePane.style.clipPath='inset(0 '+(100-pct)+'% 0 0)';
+  els.slopeSwipe.style.left='calc('+pct+'% - 2px)';
+}
+function refreshSlopeImage(){
+  if(!slopeOn) return;
+  if(map.getZoom()<12){
+    if(slopeLayer){map.removeLayer(slopeLayer);slopeLayer=null;}
+    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Zoom in to level 12+ to display contour lines</span>';
+    return;
+  }
+  els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Contour lines show elevation shape<br>Closer spacing = steeper terrain</span>';
+  var bounds=map.getBounds(), url=contourExportUrl();
+  if(slopeLayer) map.removeLayer(slopeLayer);
+  slopeLayer=L.imageOverlay(url,bounds,{pane:'slopePane',opacity:1,interactive:false,errorOverlayUrl:''}).addTo(map);
+  slopeLayer.once('load',function(){updateSlopeClip();});
+  slopeLayer.once('error',function(){
+    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Overlay failed to load — pan or zoom to retry</span>';
+  });
+  updateSlopeClip();
+}
+function queueSlopeRefresh(){
+  if(!slopeOn) return;
+  clearTimeout(slopeRefreshTimer);
+  slopeRefreshTimer=setTimeout(refreshSlopeImage,180);
+}
+els.slopeOverlayToggle.onchange=function(){
+  slopeOn=this.checked;
+  els.slopeLegend.classList.toggle('hidden',!slopeOn);
+  els.slopeSwipe.classList.toggle('hidden',!slopeOn);
+  if(slopeOn) refreshSlopeImage();
+  else {
+    if(slopeLayer){map.removeLayer(slopeLayer);slopeLayer=null;}
+    slopePane.style.clipPath='';
+  }
+};
+els.slopeReveal.oninput=updateSlopeClip;
+map.on('moveend zoomend resize',queueSlopeRefresh);
+
 var trackLayerGroup = L.layerGroup().addTo(map);
 
 map.on('click', function(ev){
   if(state.mode==='draw' && state.current){
     var segs = state.current.segments;
-    segs[segs.length-1].push({lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)});
     pushHistory();
+    segs[segs.length-1].push({lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)});
+    render();
+  } else if(state.mode==='move' && state.current && state.selection){
+    var mp = segAt(state.selection.seg)[state.selection.pt];
+    if(mp){
+      pushHistory();
+      mp.lat=+ev.latlng.lat.toFixed(6); mp.lon=+ev.latlng.lng.toFixed(6);
+    }
+    state.mode='view'; updateModeBanner(); render();
+  } else if(state.mode==='extend' && state.current && state.extend){
+    var eseg=segAt(state.extend.seg);
+    var np={lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)};
+    pushHistory();
+    if(state.extend.atStart){ eseg.unshift(np); state.selection={seg:state.extend.seg,pt:0}; }
+    else { eseg.push(np); state.selection={seg:state.extend.seg,pt:eseg.length-1}; }
     render();
   } else {
     state.selection = null;
@@ -494,7 +583,7 @@ function loadItem(id){
   if(!item) return;
   state.current = deepClone(item);
   state.currentId = id;
-  state.selection = null; state.history=[]; state.future=[];
+  state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='view'; updateModeBanner();
   render();
   fitToTrack();
@@ -503,12 +592,21 @@ function loadItem(id){
 function startNewRoute(){
   var center = map.getCenter();
   state.current = {id:uid(), type:'route', name:'New route', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
-  state.currentId = null; state.selection = null; state.history=[]; state.future=[];
+  state.currentId = null; state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='draw'; updateModeBanner();
   render();
   renderLibrary();
 }
-function updateModeBanner(){ els.modeBanner.classList.toggle('hidden', state.mode!=='draw'); }
+function updateModeBanner(){
+  var active = state.mode==='draw' || state.mode==='move' || state.mode==='extend';
+  els.modeBanner.classList.toggle('hidden', !active);
+  var msg = els.modeBanner.querySelector('span');
+  if(state.mode==='move') msg.textContent='Move point: tap the new location on the map';
+  else if(state.mode==='extend') msg.textContent='Extend Track: tap map to add connected points';
+  else msg.textContent='Drawing mode — click the map to add points';
+  els.finishDrawBtn.textContent = state.mode==='move' ? 'Cancel' : 'Complete Change';
+  els.completeChangeBtn.classList.toggle('hidden', !(state.mode==='draw' || state.mode==='extend'));
+}
 
 function fitToTrack(){
   var latlngs = [];
@@ -550,7 +648,10 @@ function render(){
 function getCss(varName){
   return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#2563a8';
 }
-function selectPoint(seg,pt){ state.selection = {seg:seg, pt:pt}; render(); }
+function selectPoint(seg,pt){
+  if(state.mode==='move' || state.mode==='extend') return;
+  state.selection = {seg:seg, pt:pt}; render();
+}
 
 // ---------- editing operations ----------
 function segAt(i){ return state.current.segments[i]; }
@@ -558,47 +659,57 @@ function splitAfter(){
   if(!state.current||!state.selection) return;
   var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
   if(pi>=seg.length-1) return;
-  state.current.segments.splice(si,1, seg.slice(0,pi+1), seg.slice(pi+1));
+  pushHistory();
+  state.current.segments.splice(si,1, seg.slice(0,pi+1), seg.slice(pi));
   state.selection={seg:si, pt:pi};
-  pushHistory(); render();
-}
-function splitBefore(){
-  if(!state.current||!state.selection) return;
-  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
-  if(pi<=0) return;
-  state.current.segments.splice(si,1, seg.slice(0,pi), seg.slice(pi));
-  state.selection={seg:si+1, pt:0};
-  pushHistory(); render();
+  render();
 }
 function joinNext(){
   if(!state.current||!state.selection) return;
   var si=state.selection.seg;
   if(si>=state.current.segments.length-1) return;
-  var merged = segAt(si).concat(segAt(si+1));
+  pushHistory();
+  var a=segAt(si), b=segAt(si+1);
+  var duplicate=a.length && b.length && a[a.length-1].lat===b[0].lat && a[a.length-1].lon===b[0].lon;
+  var merged = a.concat(duplicate ? b.slice(1) : b);
   state.current.segments.splice(si,2,merged);
-  state.selection={seg:si, pt:segAt(si).length-1};
-  pushHistory(); render();
+  state.selection={seg:si, pt:Math.max(0,a.length-1)};
+  render();
 }
 function deletePoint(){
   if(!state.current||!state.selection) return;
   var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  pushHistory();
   seg.splice(pi,1);
   if(seg.length===0) state.current.segments.splice(si,1);
   state.selection=null;
-  pushHistory(); render();
+  render();
 }
 function deleteSegment(){
   if(!state.current||!state.selection) return;
+  pushHistory();
   state.current.segments.splice(state.selection.seg,1);
   if(state.current.segments.length===0) state.current.segments.push([]);
   state.selection=null;
-  pushHistory(); render();
+  render();
+}
+function movePoint(){
+  if(!state.current || !state.selection) return;
+  state.mode='move'; updateModeBanner(); refreshToolbar();
+}
+function extendTrack(){
+  if(!state.current || !state.selection) return;
+  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  if(!seg || (pi!==0 && pi!==seg.length-1)) return;
+  state.extend={seg:si, atStart:pi===0};
+  state.mode='extend'; updateModeBanner(); refreshToolbar();
 }
 function reverseTrack(){
   if(!state.current) return;
+  pushHistory();
   state.current.segments = state.current.segments.slice().reverse().map(function(s){ return s.slice().reverse(); });
   state.selection=null;
-  pushHistory(); render();
+  render();
 }
 
 // ---------- toolbar/dock ----------
@@ -616,14 +727,15 @@ function refreshToolbar(){
   var hasTrack=!!state.current, sel=state.selection;
   var seg = (sel && state.current) ? segAt(sel.seg) : null;
   els.splitAfterBtn.disabled = !sel || !seg || sel.pt>=seg.length-1;
-  els.splitBeforeBtn.disabled = !sel || !seg || sel.pt<=0;
   els.joinNextBtn.disabled = !sel || !state.current || sel.seg>=state.current.segments.length-1;
+  els.movePointBtn.disabled = !sel || state.mode!=='view';
+  els.extendTrackBtn.disabled = !sel || !seg || (sel.pt!==0 && sel.pt!==seg.length-1) || state.mode!=='view';
   els.deletePointBtn.disabled = !sel;
   els.deleteSegBtn.disabled = !sel;
   els.reverseBtn.disabled = !hasTrack;
   els.undoBtn.disabled = !state.history.length;
   els.redoBtn.disabled = !state.future.length;
-  els.exportBtn.disabled = !hasTrack;\n  els.mobileExportBtn.disabled = !hasTrack;
+  els.exportBtn.disabled = !hasTrack;
   els.deleteTrackBtn.disabled = !state.currentId;
   els.saveBtn.disabled = !hasTrack;
 }
@@ -696,7 +808,7 @@ function upsertLocal(item){
 }
 
 // ---------- import ----------
-els.importBtn.onclick = function(){ els.fileInput.click(); };\nels.mobileImportBtn.onclick = function(){ els.fileInput.click(); };
+els.importBtn.onclick = function(){ els.fileInput.click(); };
 els.fileInput.onchange = function(ev){
   var files = Array.prototype.slice.call(ev.target.files||[]);
   if(!files.length) return;
@@ -765,10 +877,11 @@ els.saveBtn.onclick = function(){
     openNameDialog({title:'Save to library', value:state.current.name, help:'Saved in this browser on this device.', mode:'save'});
   }
 };
-els.newRouteBtn.onclick = startNewRoute;\nels.mobileNewRouteBtn.onclick = startNewRoute;\nels.mobileExportBtn.onclick = function(){ els.exportBtn.click(); };
+els.newRouteBtn.onclick = startNewRoute;
 els.finishDrawBtn.onclick = function(){
-  state.mode='view'; updateModeBanner();
-  if(!state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
+  var wasDraw = state.mode==='draw';
+  state.mode='view'; state.extend=null; updateModeBanner(); render();
+  if(wasDraw && !state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
 };
 els.deleteTrackBtn.onclick = function(){
   armConfirm(els.deleteTrackBtn, function(){
@@ -782,8 +895,10 @@ els.deleteTrackBtn.onclick = function(){
 els.deleteSegBtn.onclick = function(){ armConfirm(els.deleteSegBtn, deleteSegment); };
 els.deletePointBtn.onclick = function(){ armConfirm(els.deletePointBtn, deletePoint); };
 els.splitAfterBtn.onclick = splitAfter;
-els.splitBeforeBtn.onclick = splitBefore;
 els.joinNextBtn.onclick = joinNext;
+els.movePointBtn.onclick = movePoint;
+els.extendTrackBtn.onclick = extendTrack;
+els.completeChangeBtn.onclick = function(){ els.finishDrawBtn.click(); };
 els.reverseBtn.onclick = reverseTrack;
 els.undoBtn.onclick = undo;
 els.redoBtn.onclick = redo;
@@ -801,13 +916,17 @@ els.hamburgerBtn.onclick = openDrawer;
 els.drawerCloseBtn.onclick = closeDrawer;
 els.drawerBackdrop.onclick = closeDrawer;
 
-setTimeout(function(){ map.invalidateSize(); }, 50);
+setTimeout(function(){
+  map.invalidateSize();
+  if(!state.current) map.setView([-32.5,147.0], 6);
+}, 100);
 window.addEventListener('resize', function(){ map.invalidateSize(); });
 
 // ---------- boot ----------
 loadLibrary();
 renderLibrary();
 refreshDock();
+map.setView([-32.5,147.0], 6);
 })();
 </script>
 </body>
