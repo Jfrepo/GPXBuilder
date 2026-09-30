@@ -127,6 +127,24 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 }
 @media (max-width:390px){.brand .name{font-size:1.28rem}.stats-row{grid-template-columns:1fr 1fr 1fr}}
 
+/* ---------- Mobile UI v1.1: 80% map / compact controls ---------- */
+@media (max-width:767px){
+ .topbar{min-height:48px;height:48px;padding:max(.2rem,env(safe-area-inset-top)) .45rem .2rem}
+ .brand .name{font-size:1.18rem}.hamburger{width:38px;min-width:38px;height:38px}
+ .main{display:flex;flex-direction:column;height:calc(100dvh - 48px)}
+ .map-wrap{flex:0 0 80%;height:80%;min-height:0}
+ .dock{flex:0 0 20%;height:20%;max-height:20%;box-sizing:border-box;padding:.25rem .4rem calc(.25rem + env(safe-area-inset-bottom));overflow-y:auto}
+ .stats-row{grid-template-columns:1.7fr repeat(3,1fr);gap:.12rem .35rem;margin:0 0 .18rem}
+ .stat:first-child{grid-column:auto}.stat .k{font-size:.52rem;line-height:1}.stat .v{font-size:.78rem;line-height:1.05}.stat:first-child .v{font-size:.82rem}
+ .mobile-actions{grid-template-columns:repeat(3,1fr);gap:.25rem;margin:0}
+ .mobile-actions .icon-btn{min-height:34px;height:34px;padding:.15rem .2rem;font-size:.76rem}
+ .toolbar{grid-template-columns:repeat(4,1fr);gap:.2rem;margin-top:.2rem}
+ .toolbar .icon-btn{min-height:32px;height:32px;padding:.1rem .15rem;font-size:.68rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .points-toggle{min-height:28px;height:28px;margin-top:.18rem;padding:.1rem .3rem;font-size:.7rem}
+ .points-table-wrap{max-height:22dvh}
+}
+
+
 </style>
 </head>
 <body>
