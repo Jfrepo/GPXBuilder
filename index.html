@@ -58,7 +58,7 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .type-dot.track{background:var(--line-track);}
 .type-dot.route{background:var(--warn);}
 .track-item .ti-name{font-weight:600; font-size:.92rem; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.track-item .ti-meta{font-size:.72rem; color:var(--text-muted); padding-left:1.05rem;}
+.track-item .ti-meta{font-size:.72rem; color:var(--text-muted); padding-left:1.05rem;}.track-colours{display:flex;gap:.35rem;padding:.35rem 0 0 1.05rem}.track-colour{width:28px;height:28px;border:2px solid rgba(0,0,0,.18);border-radius:50%;padding:0;min-height:28px}.track-colour.on{outline:2px solid var(--text);outline-offset:2px}
 .empty-note{padding:1rem; font-size:.85rem; color:var(--text-muted);}
 .main{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
 .map-wrap{flex:1; position:relative; min-height:0;}
@@ -599,6 +599,14 @@ function redo(){
 }
 
 // ---------- library UI ----------
+var TRACK_COLOURS=[{name:'Blue',value:'#2563a8'},{name:'Red',value:'#d43f3a'},{name:'Green',value:'#2f8a4c'},{name:'Yellow',value:'#e0a800'}];
+function setTrackColour(id,colour){
+  var item=state.library.find(function(t){return t.id===id;});
+  if(!item) return;
+  item.color=colour; item.updatedAt=new Date().toISOString(); persistLibrary();
+  if(state.currentId===id && state.current){state.current.color=colour;render();}
+  renderLibrary();
+}
 function renderLibrary(){
   var wrap = els.trackList;
   wrap.innerHTML = '';
@@ -610,10 +618,20 @@ function renderLibrary(){
     var st = item.stats || computeStats(item);
     var d = document.createElement('div');
     d.className = 'track-item' + (item.id===state.currentId ? ' active':'');
-    d.innerHTML = '<div class="row1"><span class="type-dot '+(item.type==='route'?'route':'track')+'"></span>'+
+    d.innerHTML = '<div class="row1"><span class="type-dot '+(item.type==='route'?'route':'track')+'" style="background:'+(item.color||'')+'"></span>'+
       '<span class="ti-name">'+esc(item.name)+'</span></div>'+
       '<div class="ti-meta">'+fmtKm(st.distanceMeters||0)+' &middot; '+(st.points||0)+' pts &middot; '+fmtDate(item.updatedAt)+'</div>';
-    d.addEventListener('click', function(){ loadItem(item.id); closeDrawerMobile(); });
+    if(item.id===state.currentId){
+      var colours=document.createElement('div'); colours.className='track-colours';
+      TRACK_COLOURS.forEach(function(opt){
+        var b=document.createElement('button'); b.type='button'; b.className='track-colour'+(item.color===opt.value?' on':'');
+        b.style.background=opt.value; b.title=opt.name; b.setAttribute('aria-label','Set track colour '+opt.name);
+        b.addEventListener('click',function(ev){ev.stopPropagation();setTrackColour(item.id,opt.value);});
+        colours.appendChild(b);
+      });
+      d.appendChild(colours);
+    }
+    d.addEventListener('click', function(){ loadItem(item.id); renderLibrary(); });
     wrap.appendChild(d);
   });
 }
@@ -630,7 +648,7 @@ function loadItem(id){
 }
 function startNewRoute(){
   var center = map.getCenter();
-  state.current = {id:uid(), type:'route', name:'New route', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
+  state.current = {id:uid(), type:'route', name:'New route', color:'#2563a8', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
   state.currentId = null; state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='draw'; updateModeBanner();
   render();
@@ -659,7 +677,7 @@ function fitToTrack(){
 function render(){
   trackLayerGroup.clearLayers();
   if(state.current){
-    var lineColor = state.current.type==='route' ? getCss('--warn') : getCss('--line-track');
+    var lineColor = state.current.color || (state.current.type==='route' ? getCss('--warn') : getCss('--line-track'));
     state.current.segments.forEach(function(seg, si){
       if(seg.length>1){
         var latlngs = seg.map(function(p){ return [p.lat,p.lon]; });
