@@ -153,6 +153,12 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 @media (prefers-color-scheme:dark) and (min-width:768px){
   .toolbar{background:rgba(27,34,39,.95)}
 }
+
+@media (min-width:768px){
+ #desktopToolbarHost{position:absolute;right:.7rem;top:4.2rem;bottom:.75rem;width:132px;z-index:740;pointer-events:none}
+ #desktopToolbarHost .toolbar{position:static!important;right:auto!important;top:auto!important;bottom:auto!important;width:100%!important;max-height:100%;pointer-events:auto}
+}
+@media (max-width:767px){#desktopToolbarHost{display:none}}
 </style>
 </head>
 <body>
@@ -218,6 +224,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           </div>
         </div>
         <div class="slope-legend hidden" id="slopeLegend"><strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span></div>
+        <div id="desktopToolbarHost"></div>
         <div id="mapDiv"></div>
       </div>
 
@@ -319,7 +326,7 @@ var state = {
 var els = {};
 ["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
- "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
+ "mapWrap","desktopToolbarHost","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
  "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
@@ -327,6 +334,20 @@ var els = {};
  "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
  "importOverlay","importList","importCancelBtn","importConfirmBtn"
 ].forEach(function(id){ els[id] = document.getElementById(id); });
+
+var toolbarEl=document.querySelector('.toolbar');
+var dockEl=document.querySelector('.dock');
+var pointsToggleEl=document.getElementById('pointsToggle');
+function placeEditingToolbar(){
+  if(!toolbarEl||!dockEl||!els.desktopToolbarHost)return;
+  if(window.matchMedia('(min-width:768px)').matches){
+    if(toolbarEl.parentNode!==els.desktopToolbarHost)els.desktopToolbarHost.appendChild(toolbarEl);
+  }else{
+    if(toolbarEl.parentNode!==dockEl)dockEl.insertBefore(toolbarEl,pointsToggleEl);
+  }
+}
+placeEditingToolbar();
+window.addEventListener('resize',placeEditingToolbar);
 
 // ---------- helpers ----------
 function uid(){ return 'tr_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
