@@ -144,11 +144,11 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <button id="layerTerrainBtn">Terrain</button>
         </div>
         <div class="overlay-panel">
-          <label><input type="checkbox" id="slopeOverlayToggle"> Slope °</label>
-          <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Reveal slope overlay left to right">
+          <label><input type="checkbox" id="slopeOverlayToggle"> Contours</label>
+          <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Reveal NSW contour overlay left to right">
         </div>
         <div class="slope-swipe hidden" id="slopeSwipe"></div>
-        <div class="slope-legend hidden" id="slopeLegend"><strong>Slope gradient</strong><div class="slope-ramp"></div><span>0° flat &nbsp;→&nbsp; 90° vertical</span></div>
+        <div class="slope-legend hidden" id="slopeLegend"><strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span></div>
         <div id="mapDiv"></div>
       </div>
 
@@ -436,26 +436,25 @@ var slopePane = map.createPane('slopePane');
 slopePane.style.zIndex = 350;
 slopePane.style.pointerEvents = 'none';
 var slopeLayer=null, slopeOn=false, slopeRefreshTimer=null;
-var slopeService='https://utility.arcgis.com/usrsvcs/rest/services/5fd2b0a396ec4767979c958fbc6df1f1/ImageServer';
+var contourService='https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Elevation_and_Depth_Theme/MapServer';
 
-function slopeExportUrl(){
+function contourExportUrl(){
   var b=map.getBounds(), size=map.getSize();
   var sw=L.CRS.EPSG3857.project(b.getSouthWest()), ne=L.CRS.EPSG3857.project(b.getNorthEast());
-  var rule=encodeURIComponent(JSON.stringify({rasterFunction:'Slope_Degrees_Map'}));
-  return slopeService+'/exportImage?bbox='+[sw.x,sw.y,ne.x,ne.y].join(',')+
+  return contourService+'/export?bbox='+[sw.x,sw.y,ne.x,ne.y].join(',')+
     '&bboxSR=3857&imageSR=3857&size='+Math.max(1,Math.round(size.x))+','+Math.max(1,Math.round(size.y))+
-    '&format=png32&transparent=true&interpolation=RSP_BilinearInterpolation&renderingRule='+rule+'&f=image';
+    '&layers=show:2&format=png32&transparent=true&dpi=120&f=image';
 }
 function refreshSlopeImage(){
   if(!slopeOn) return;
-  var bounds=map.getBounds(), url=slopeExportUrl();
+  var bounds=map.getBounds(), url=contourExportUrl();
   if(slopeLayer) map.removeLayer(slopeLayer);
-  slopeLayer=L.imageOverlay(url,bounds,{pane:'slopePane',opacity:.82,interactive:false}).addTo(map);
+  slopeLayer=L.imageOverlay(url,bounds,{pane:'slopePane',opacity:1,interactive:false}).addTo(map);
   updateSlopeClip();
 }
 function updateSlopeClip(){
   if(!slopeOn) return;
-  var pct=+els.slopeReveal.value, w=els.mapWrap.clientWidth;
+  var pct=+els.slopeReveal.value;
   slopePane.style.clipPath='inset(0 '+(100-pct)+'% 0 0)';
   els.slopeSwipe.style.left='calc('+pct+'% - 2px)';
 }
