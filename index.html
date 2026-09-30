@@ -100,6 +100,33 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 @media (min-width: 900px){ .drawer-close, .hamburger{display:none;} }
 .tiny{font-size:.7rem;}
 .leaflet-marker-sel{filter:drop-shadow(0 0 2px var(--line-selected));}
+
+/* ---------- Mobile UI v1 ---------- */
+.mobile-actions{display:none;}
+@media (max-width:767px){
+ html,body{height:100%;overflow:hidden}.app{height:100dvh;min-height:100dvh}
+ .topbar{min-height:58px;padding:max(.45rem,env(safe-area-inset-top)) .65rem .45rem;gap:.45rem;flex:none}
+ .brand{min-width:0}.brand .name{font-size:1.45rem;white-space:nowrap}.local-chip{display:none}
+ .topbar #importBtn,.topbar #saveBtn{display:none}
+ .hamburger{width:44px;min-width:44px;height:44px;padding:0;font-size:1.15rem}
+ .layout,.main{min-height:0}.main{height:100%}.map-wrap{flex:1 1 auto;min-height:46dvh}
+ .leaflet-control-attribution{font-size:9px;max-width:72vw;line-height:1.15}.leaflet-control-scale{display:none}
+ .layer-toggle{right:.55rem;top:.55rem}.layer-toggle button{min-height:42px;padding:.45rem .7rem;font-size:.82rem}
+ .mode-banner{top:.55rem;max-width:calc(100% - 7rem);white-space:normal;line-height:1.15}
+ .dock{flex:0 0 auto;max-height:42dvh;overflow-y:auto;overscroll-behavior:contain;padding:.65rem .7rem calc(.7rem + env(safe-area-inset-bottom))}
+ .stats-row{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:.45rem .65rem;margin-bottom:.55rem}
+ .stat{min-width:0}.stat .v{font-size:.96rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.stat .k{font-size:.61rem}
+ .stat:first-child{grid-column:1/-1}.stat:first-child .v{font-family:'Source Sans 3',system-ui,sans-serif;font-size:1.05rem;font-weight:600}
+ .mobile-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin:.15rem 0 .6rem}
+ .mobile-actions .icon-btn{min-height:46px;width:100%;padding:.45rem .35rem;font-size:.88rem}
+ .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}.toolbar .grp{display:contents}
+ .toolbar .icon-btn{width:100%;min-height:46px;margin:0;padding:.5rem .35rem}.toolbar .icon-btn:disabled{display:none}
+ .points-toggle{min-height:40px;margin-top:.35rem;font-size:.84rem}.points-table-wrap{max-height:34dvh}
+ .drawer{width:min(86vw,320px);padding-top:env(safe-area-inset-top)}.drawer-head .icon-btn{min-height:44px}
+ .dialog{max-height:calc(100dvh - 2rem);overflow:auto}
+}
+@media (max-width:390px){.brand .name{font-size:1.28rem}.stats-row{grid-template-columns:1fr 1fr 1fr}}
+
 </style>
 </head>
 <body>
@@ -151,7 +178,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <div class="stat"><span class="v" id="statElev">&mdash;</span><span class="k">Ascent</span></div>
           <div class="stat"><span class="v" id="statSel">&mdash;</span><span class="k">Selected point</span></div>
         </div>
-        <div class="toolbar">
+        <div class="mobile-actions" aria-label="Primary actions">\n          <button class="icon-btn" id="mobileImportBtn">Import</button>\n          <button class="icon-btn primary" id="mobileNewRouteBtn">New route</button>\n          <button class="icon-btn" id="mobileExportBtn" disabled>Export</button>\n        </div>\n        <div class="toolbar">
           <div class="grp">
             <button class="icon-btn" id="splitAfterBtn" disabled title="Split right after the selected point">Split after</button>
             <button class="icon-btn" id="splitBeforeBtn" disabled title="Split right before the selected point">Split before</button>
@@ -233,7 +260,7 @@ var state = {
 
 var els = {};
 ["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn",
- "fileInput","importBtn","saveBtn",
+ "fileInput","importBtn","saveBtn","mobileImportBtn","mobileNewRouteBtn","mobileExportBtn",
  "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
  "splitAfterBtn","splitBeforeBtn","joinNextBtn","deletePointBtn","deleteSegBtn",
@@ -578,7 +605,7 @@ function refreshToolbar(){
   els.reverseBtn.disabled = !hasTrack;
   els.undoBtn.disabled = !state.history.length;
   els.redoBtn.disabled = !state.future.length;
-  els.exportBtn.disabled = !hasTrack;
+  els.exportBtn.disabled = !hasTrack;\n  els.mobileExportBtn.disabled = !hasTrack;
   els.deleteTrackBtn.disabled = !state.currentId;
   els.saveBtn.disabled = !hasTrack;
 }
@@ -651,7 +678,7 @@ function upsertLocal(item){
 }
 
 // ---------- import ----------
-els.importBtn.onclick = function(){ els.fileInput.click(); };
+els.importBtn.onclick = function(){ els.fileInput.click(); };\nels.mobileImportBtn.onclick = function(){ els.fileInput.click(); };
 els.fileInput.onchange = function(ev){
   var files = Array.prototype.slice.call(ev.target.files||[]);
   if(!files.length) return;
@@ -720,7 +747,7 @@ els.saveBtn.onclick = function(){
     openNameDialog({title:'Save to library', value:state.current.name, help:'Saved in this browser on this device.', mode:'save'});
   }
 };
-els.newRouteBtn.onclick = startNewRoute;
+els.newRouteBtn.onclick = startNewRoute;\nels.mobileNewRouteBtn.onclick = startNewRoute;\nels.mobileExportBtn.onclick = function(){ els.exportBtn.click(); };
 els.finishDrawBtn.onclick = function(){
   state.mode='view'; updateModeBanner();
   if(!state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
