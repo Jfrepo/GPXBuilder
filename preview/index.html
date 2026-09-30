@@ -520,7 +520,7 @@ var terrainLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/serv
   maxZoom: 19, attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, HERE, Garmin, USGS, NGA, EPA, NPS'
 });
 streetsLayer.addTo(map);
-L.control.scale({metric:true, imperial:true}).addTo(map);
+L.control.scale({metric:true, imperial:false}).addTo(map);
 
 var OverlayToggleControl=L.Control.extend({
   options:{position:'topleft'},
