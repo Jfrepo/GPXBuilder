@@ -59,7 +59,7 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .type-dot.track{background:var(--line-track);}
 .type-dot.route{background:var(--warn);}
 .track-item .ti-name{font-weight:600; font-size:.92rem; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.track-item .ti-meta{font-size:.72rem; color:var(--text-muted); padding-left:1.05rem;}.track-colours{display:flex;gap:.35rem;padding:.35rem 0 0 1.05rem}.track-colour{width:28px;height:28px;border:2px solid rgba(0,0,0,.18);border-radius:50%;padding:0;min-height:28px}.track-colour.on{outline:2px solid var(--text);outline-offset:2px}
+.track-item .ti-meta{font-size:.72rem; color:var(--text-muted); padding-left:1.05rem;}.track-row{display:flex;align-items:center;gap:.42rem}.track-show{width:18px;height:18px;flex:none;margin:0}.track-swatch{width:14px;height:14px;min-height:14px;flex:none;border:1px solid rgba(0,0,0,.35);border-radius:2px;padding:0}.track-more{margin-left:auto;width:30px;height:30px;min-height:30px;padding:0;border:0;background:transparent;color:var(--text);font-size:1.25rem;font-weight:700}.track-menu{display:flex;flex-wrap:wrap;gap:.28rem;padding:.4rem 0 0 2rem}.track-menu button{min-height:30px;padding:.25rem .48rem;font-size:.72rem;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:3px}.track-menu button.danger{color:var(--danger);border-color:var(--danger)}.track-palette{display:flex;gap:.38rem;padding:.38rem 0 0 2rem}.track-palette button{width:24px;height:24px;min-height:24px;border:2px solid rgba(0,0,0,.22);border-radius:3px;padding:0}.track-palette button.on{outline:2px solid var(--text);outline-offset:1px}
 .empty-note{padding:1rem; font-size:.85rem; color:var(--text-muted);}
 .main{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
 .map-wrap{flex:1; position:relative; min-height:0;}
@@ -258,7 +258,10 @@ var state = {
   mode: 'view',
   history: [], future: [],
   pendingImport: null,
-  extend: null
+  extend: null,
+  trackMenuId: null,
+  paletteId: null,
+  clipboardTrack: null
 };
 
 var els = {};
@@ -601,38 +604,70 @@ function redo(){
 
 // ---------- library UI ----------
 var TRACK_COLOURS=[{name:'Blue',value:'#2563a8'},{name:'Red',value:'#d43f3a'},{name:'Purple',value:'#7c3aed'},{name:'Yellow',value:'#e0a800'}];
+function defaultTrackColour(item){return item.color||(item.type==='route'?getCss('--warn'):getCss('--line-track'));}
 function setTrackColour(id,colour){
-  var item=state.library.find(function(t){return t.id===id;});
-  if(!item) return;
+  var item=state.library.find(function(t){return t.id===id;}); if(!item)return;
   item.color=colour; item.updatedAt=new Date().toISOString(); persistLibrary();
-  if(state.currentId===id && state.current){state.current.color=colour;render();}
-  renderLibrary();
+  if(state.currentId===id&&state.current)state.current.color=colour;
+  state.paletteId=null; renderLibrary(); render();
+}
+function setTrackVisible(id,visible){
+  var item=state.library.find(function(t){return t.id===id;}); if(!item)return;
+  item.visible=visible; persistLibrary(); renderLibrary(); render();
+}
+function duplicateTrack(id){
+  var src=state.library.find(function(t){return t.id===id;}); if(!src)return;
+  var copy=deepClone(src); copy.id=uid(); copy.name=src.name+' copy'; copy.createdAt=copy.updatedAt=new Date().toISOString(); copy.visible=true; copy.stats=computeStats(copy);
+  state.library.unshift(copy); persistLibrary(); state.trackMenuId=null; renderLibrary(); render();
+}
+function copyTrack(id){var src=state.library.find(function(t){return t.id===id;});if(src)state.clipboardTrack=deepClone(src);state.trackMenuId=null;renderLibrary();}
+function pasteTrack(){
+  if(!state.clipboardTrack)return;
+  var copy=deepClone(state.clipboardTrack); copy.id=uid(); copy.name=copy.name+' copy'; copy.createdAt=copy.updatedAt=new Date().toISOString(); copy.visible=true; copy.stats=computeStats(copy);
+  state.library.unshift(copy); persistLibrary(); state.trackMenuId=null; renderLibrary(); render();
+}
+function renameTrack(id){
+  var item=state.library.find(function(t){return t.id===id;});if(!item)return;
+  var name=window.prompt('Rename track',item.name); if(!name||!name.trim())return;
+  item.name=name.trim();item.updatedAt=new Date().toISOString();persistLibrary();
+  if(state.currentId===id&&state.current)state.current.name=item.name;
+  state.trackMenuId=null;renderLibrary();refreshDock();
+}
+function deleteLibraryTrack(id){
+  if(!window.confirm('Delete this track from the library?'))return;
+  state.library=state.library.filter(function(t){return t.id!==id;});persistLibrary();
+  if(state.currentId===id){state.current=null;state.currentId=null;state.selection=null;}
+  state.trackMenuId=null;renderLibrary();render();
 }
 function renderLibrary(){
-  var wrap = els.trackList;
-  wrap.innerHTML = '';
-  if(!state.library.length){
-    wrap.innerHTML = '<div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div>';
-    return;
-  }
-  state.library.slice().sort(function(a,b){ return (b.updatedAt||'').localeCompare(a.updatedAt||''); }).forEach(function(item){
-    var st = item.stats || computeStats(item);
-    var d = document.createElement('div');
-    d.className = 'track-item' + (item.id===state.currentId ? ' active':'');
-    d.innerHTML = '<div class="row1"><span class="type-dot '+(item.type==='route'?'route':'track')+'" style="background:'+(item.color||'')+'"></span>'+
-      '<span class="ti-name">'+esc(item.name)+'</span></div>'+
-      '<div class="ti-meta">'+fmtKm(st.distanceMeters||0)+' &middot; '+(st.points||0)+' pts &middot; '+fmtDate(item.updatedAt)+'</div>';
-    if(item.id===state.currentId){
-      var colours=document.createElement('div'); colours.className='track-colours';
-      TRACK_COLOURS.forEach(function(opt){
-        var b=document.createElement('button'); b.type='button'; b.className='track-colour'+(item.color===opt.value?' on':'');
-        b.style.background=opt.value; b.title=opt.name; b.setAttribute('aria-label','Set track colour '+opt.name);
-        b.addEventListener('click',function(ev){ev.stopPropagation();setTrackColour(item.id,opt.value);});
-        colours.appendChild(b);
-      });
-      d.appendChild(colours);
+  var wrap=els.trackList;wrap.innerHTML='';
+  if(!state.library.length){wrap.innerHTML='<div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div>';return;}
+  state.library.slice().sort(function(a,b){return(b.updatedAt||'').localeCompare(a.updatedAt||'');}).forEach(function(item){
+    if(item.visible==null)item.visible=true;
+    var st=item.stats||computeStats(item),d=document.createElement('div');
+    d.className='track-item'+(item.id===state.currentId?' active':'');
+    var row=document.createElement('div');row.className='track-row';
+    var show=document.createElement('input');show.type='checkbox';show.className='track-show';show.checked=item.visible!==false;show.title='Show on map';
+    show.addEventListener('click',function(ev){ev.stopPropagation();setTrackVisible(item.id,show.checked);});
+    var sw=document.createElement('button');sw.type='button';sw.className='track-swatch';sw.style.background=defaultTrackColour(item);sw.title='Change track colour';
+    sw.addEventListener('click',function(ev){ev.stopPropagation();state.paletteId=state.paletteId===item.id?null:item.id;state.trackMenuId=null;renderLibrary();});
+    var name=document.createElement('span');name.className='ti-name';name.textContent=item.name;
+    var more=document.createElement('button');more.type='button';more.className='track-more';more.innerHTML='&#8942;';more.title='Track options';
+    more.addEventListener('click',function(ev){ev.stopPropagation();state.trackMenuId=state.trackMenuId===item.id?null:item.id;state.paletteId=null;renderLibrary();});
+    row.appendChild(show);row.appendChild(sw);row.appendChild(name);row.appendChild(more);d.appendChild(row);
+    var meta=document.createElement('div');meta.className='ti-meta';meta.textContent=fmtKm(st.distanceMeters||0)+' · '+(st.points||0)+' pts · '+fmtDate(item.updatedAt);d.appendChild(meta);
+    if(state.paletteId===item.id){
+      var pal=document.createElement('div');pal.className='track-palette';
+      TRACK_COLOURS.forEach(function(opt){var b=document.createElement('button');b.type='button';b.style.background=opt.value;b.title=opt.name;b.className=item.color===opt.value?'on':'';b.onclick=function(ev){ev.stopPropagation();setTrackColour(item.id,opt.value);};pal.appendChild(b);});d.appendChild(pal);
     }
-    d.addEventListener('click', function(){ loadItem(item.id); renderLibrary(); });
+    if(state.trackMenuId===item.id){
+      var menu=document.createElement('div');menu.className='track-menu';
+      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack],['Delete',function(){deleteLibraryTrack(item.id)}]].forEach(function(x){
+        var b=document.createElement('button');b.type='button';b.textContent=x[0];if(x[0]==='Delete')b.className='danger';if(x[0]==='Paste'&&!state.clipboardTrack)b.disabled=true;
+        b.onclick=function(ev){ev.stopPropagation();x[1]();};menu.appendChild(b);
+      });d.appendChild(menu);
+    }
+    d.addEventListener('click',function(){loadItem(item.id);});
     wrap.appendChild(d);
   });
 }
@@ -677,27 +712,19 @@ function fitToTrack(){
 // ---------- rendering track on map ----------
 function render(){
   trackLayerGroup.clearLayers();
-  if(state.current){
-    var lineColor = state.current.color || (state.current.type==='route' ? getCss('--warn') : getCss('--line-track'));
-    state.current.segments.forEach(function(seg, si){
-      if(seg.length>1){
-        var latlngs = seg.map(function(p){ return [p.lat,p.lon]; });
-        L.polyline(latlngs, {color:lineColor, weight:4, opacity:.85}).addTo(trackLayerGroup);
-      }
-      var stride = seg.length>1200 ? Math.ceil(seg.length/1200) : 1;
+  state.library.forEach(function(item){
+    if(item.visible===false||item.id===state.currentId)return;
+    var colour=defaultTrackColour(item);
+    (item.segments||[]).forEach(function(seg){if(seg.length>1)L.polyline(seg.map(function(p){return[p.lat,p.lon];}),{color:colour,weight:4,opacity:.72,interactive:false}).addTo(trackLayerGroup);});
+  });
+  if(state.current && state.current.visible!==false){
+    var lineColor=defaultTrackColour(state.current);
+    state.current.segments.forEach(function(seg,si){
+      if(seg.length>1)L.polyline(seg.map(function(p){return[p.lat,p.lon];}),{color:lineColor,weight:5,opacity:.92}).addTo(trackLayerGroup);
+      var stride=seg.length>1200?Math.ceil(seg.length/1200):1;
       for(var i=0;i<seg.length;i+=stride){
-        var p = seg[i];
-        var isSel = state.selection && state.selection.seg===si && state.selection.pt===i;
-        var isEnd = (i===0 || i===seg.length-1);
-        var r = isSel?8:(isEnd?6:4);
-        var fill = isSel ? getCss('--line-selected') : lineColor;
-        (function(si,i){
-          var m = L.circleMarker([p.lat,p.lon], {radius:r, color:'#fff', weight:1, fillColor:fill, fillOpacity:1}).addTo(trackLayerGroup);
-          m.on('click', function(ev){
-            L.DomEvent.stopPropagation(ev);
-            selectPoint(si,i);
-          });
-        })(si,i);
+        var p=seg[i],isSel=state.selection&&state.selection.seg===si&&state.selection.pt===i,isEnd=(i===0||i===seg.length-1),r=isSel?8:(isEnd?6:4),fill=isSel?getCss('--line-selected'):lineColor;
+        (function(si,i,p,r,fill){var m=L.circleMarker([p.lat,p.lon],{radius:r,color:'#fff',weight:1,fillColor:fill,fillOpacity:1}).addTo(trackLayerGroup);m.on('click',function(ev){L.DomEvent.stopPropagation(ev);selectPoint(si,i);});})(si,i,p,r,fill);
       }
     });
   }
