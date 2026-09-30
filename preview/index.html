@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Switchback Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --surface-2:#e3e7ea; --border:#c9ced3;
+  --text:#1a2226; --text-muted:#5c6670;
+  --accent:#1f6f6c; --accent-contrast:#ffffff;
+  --danger:#c1442d; --warn:#b7791e; --good:#2f7d4f;
+  --line-track:#2563a8; --line-selected:#c1442d;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#12171b; --surface:#1b2227; --surface-2:#232b31; --border:#333d44;
+    --text:#e7ebee; --text-muted:#9aa5ac;
+    --accent:#3fa39e; --accent-contrast:#08201f;
+    --danger:#e2694f; --warn:#d99a3d; --good:#4fae76;
+    --line-track:#5b9bd9; --line-selected:#e2694f;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box;}
+html,body{height:100%; margin:0;}
+body{background:var(--bg); color:var(--text); font-family:'Source Sans 3',system-ui,sans-serif;}
+.hidden{display:none!important;}
+h1,h2,h3,.disp{font-family:'Barlow Condensed',sans-serif; font-weight:700; letter-spacing:.01em;}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace; font-variant-numeric:tabular-nums;}
+.label-caps{font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-muted);}
+button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
+.app{display:flex; flex-direction:column; height:100vh;}
+.topbar{display:flex; align-items:center; gap:.6rem; padding:.55rem .8rem; background:var(--surface); border-bottom:1px solid var(--border); position:relative; z-index:900;}
+.brand{display:flex; align-items:baseline; gap:.4rem; margin-right:auto;}
+.brand .name{font-size:1.35rem; line-height:1;}
+.brand .tag{font-size:.68rem; color:var(--text-muted); letter-spacing:.04em;}
+.icon-btn{display:inline-flex; align-items:center; justify-content:center; gap:.35rem; border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:3px; padding:.5rem .65rem; min-height:38px; font-size:.85rem;}
+.icon-btn:hover{border-color:var(--accent);}
+.icon-btn.primary{background:var(--accent); color:var(--accent-contrast); border-color:var(--accent); font-weight:600;}
+.icon-btn.danger{background:transparent; color:var(--danger); border-color:var(--danger);}
+.icon-btn.danger.confirming{background:var(--danger); color:#fff;}
+.icon-btn:disabled{opacity:.4; cursor:not-allowed;}
+.local-chip{display:flex; align-items:center; gap:.35rem; font-size:.72rem; padding:.3rem .55rem; border-radius:20px; background:var(--surface-2); color:var(--text-muted);}
+.layout{display:flex; flex:1; min-height:0; position:relative;}
+.drawer{width:280px; flex:none; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0;}
+.drawer-head{padding:.8rem .9rem .5rem; display:flex; align-items:center; justify-content:space-between;}
+.track-list{overflow-y:auto; flex:1; padding:.3rem;}
+.track-item{display:flex; flex-direction:column; gap:.15rem; padding:.55rem .7rem; border-radius:4px; border:1px solid transparent; margin-bottom:.25rem;}
+.track-item:hover{background:var(--surface-2);}
+.track-item.active{border-color:var(--accent); background:var(--surface-2);}
+.track-item .row1{display:flex; align-items:center; gap:.4rem;}
+.type-dot{width:9px; height:9px; border-radius:2px; flex:none;}
+.type-dot.track{background:var(--line-track);}
+.type-dot.route{background:var(--warn);}
+.track-item .ti-name{font-weight:600; font-size:.92rem; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.track-item .ti-meta{font-size:.72rem; color:var(--text-muted); padding-left:1.05rem;}
+.empty-note{padding:1rem; font-size:.85rem; color:var(--text-muted);}
+.main{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
+.map-wrap{flex:1; position:relative; min-height:0;}
+#mapDiv{width:100%; height:100%;}
+.mode-banner{position:absolute; left:50%; top:.8rem; transform:translateX(-50%); background:var(--accent); color:var(--accent-contrast); padding:.4rem .8rem; border-radius:20px; font-size:.8rem; font-weight:600; z-index:750; display:flex; gap:.5rem; align-items:center;}
+.layer-toggle{position:absolute; right:.7rem; top:.8rem; z-index:750; background:var(--surface); border:1px solid var(--border); border-radius:4px; overflow:hidden; display:flex;}
+.layer-toggle button{border:none; background:var(--surface); padding:.4rem .7rem; font-size:.78rem; color:var(--text);}
+.layer-toggle button.on{background:var(--accent); color:var(--accent-contrast);}
+.dock{background:var(--surface); border-top:1px solid var(--border); padding:.7rem .8rem;}
+.stats-row{display:flex; flex-wrap:wrap; gap:1.1rem; margin-bottom:.6rem;}
+.stat{display:flex; flex-direction:column; gap:.05rem; min-width:64px;}
+.stat .v{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; font-size:1.05rem; font-weight:500;}
+.stat .k{font-size:.66rem; letter-spacing:.07em; text-transform:uppercase; color:var(--text-muted);}
+.toolbar{display:flex; flex-wrap:wrap; gap:.4rem;}
+.toolbar .grp{display:flex; gap:.3rem; padding-right:.5rem; margin-right:.2rem; border-right:1px solid var(--border);}
+.toolbar .grp:last-child{border-right:none;}
+.points-toggle{margin-top:.5rem; font-size:.78rem; color:var(--accent); background:none; border:none; padding:.2rem 0; text-decoration:underline;}
+.points-table-wrap{max-height:160px; overflow:auto; margin-top:.4rem; border:1px solid var(--border); border-radius:4px;}
+table.points{width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:.74rem;}
+table.points th{position:sticky; top:0; background:var(--surface-2); text-align:left; padding:.3rem .5rem; font-family:'Source Sans 3',sans-serif; font-weight:600;}
+table.points td{padding:.25rem .5rem; border-top:1px solid var(--border);}
+table.points tr.sel{background:var(--surface-2); outline:1px solid var(--accent);}
+table.points tr:hover{background:var(--surface-2); cursor:pointer;}
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; z-index:2000; padding:1rem;}
+.dialog{background:var(--surface); border-radius:6px; padding:1.1rem; width:100%; max-width:380px; border:1px solid var(--border);}
+.dialog h3{margin:0 0 .7rem; font-size:1.15rem;}
+.dialog input[type=text]{width:100%; padding:.55rem .6rem; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text); font-size:.95rem; margin-bottom:.7rem;}
+.dialog .btnrow{display:flex; gap:.5rem; justify-content:flex-end;}
+.import-list{max-height:220px; overflow:auto; margin:.6rem 0;}
+.import-row{display:flex; align-items:center; gap:.5rem; padding:.4rem 0; border-bottom:1px solid var(--border); font-size:.85rem;}
+.import-row .im-name{flex:1;}
+.help-text{font-size:.78rem; color:var(--text-muted); margin-top:.4rem; line-height:1.4;}
+.drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:800;}
+@media (max-width: 899px){
+  .drawer{position:fixed; left:0; top:0; bottom:0; z-index:850; transform:translateX(-100%); transition:transform .2s ease; box-shadow:2px 0 12px rgba(0,0,0,.2);}
+  .drawer.open{transform:translateX(0);}
+  .brand .tag{display:none;}
+}
+@media (min-width: 900px){ .drawer-close, .hamburger{display:none;} }
+.tiny{font-size:.7rem;}
+.leaflet-marker-sel{filter:drop-shadow(0 0 2px var(--line-selected));}
+
+/* ---------- Mobile UI v1 ---------- */
+.mobile-actions{display:none;}
+@media (max-width:767px){
+ html,body{height:100%;overflow:hidden}.app{height:100dvh;min-height:100dvh}
+ .topbar{min-height:58px;padding:max(.45rem,env(safe-area-inset-top)) .65rem .45rem;gap:.45rem;flex:none}
+ .brand{min-width:0}.brand .name{font-size:1.45rem;white-space:nowrap}.local-chip{display:none}
+ .topbar #importBtn,.topbar #saveBtn{display:none}
+ .hamburger{width:44px;min-width:44px;height:44px;padding:0;font-size:1.15rem}
+ .layout,.main{min-height:0}.main{height:100%}.map-wrap{flex:1 1 auto;min-height:46dvh}
+ .leaflet-control-attribution{font-size:9px;max-width:72vw;line-height:1.15}.leaflet-control-scale{display:none}
+ .layer-toggle{right:.55rem;top:.55rem}.layer-toggle button{min-height:42px;padding:.45rem .7rem;font-size:.82rem}
+ .mode-banner{top:.55rem;max-width:calc(100% - 7rem);white-space:normal;line-height:1.15}
+ .dock{flex:0 0 auto;max-height:42dvh;overflow-y:auto;overscroll-behavior:contain;padding:.65rem .7rem calc(.7rem + env(safe-area-inset-bottom))}
+ .stats-row{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:.45rem .65rem;margin-bottom:.55rem}
+ .stat{min-width:0}.stat .v{font-size:.96rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.stat .k{font-size:.61rem}
+ .stat:first-child{grid-column:1/-1}.stat:first-child .v{font-family:'Source Sans 3',system-ui,sans-serif;font-size:1.05rem;font-weight:600}
+ .mobile-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin:.15rem 0 .6rem}
+ .mobile-actions .icon-btn{min-height:46px;width:100%;padding:.45rem .35rem;font-size:.88rem}
+ .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}.toolbar .grp{display:contents}
+ .toolbar .icon-btn{width:100%;min-height:46px;margin:0;padding:.5rem .35rem}.toolbar .icon-btn:disabled{display:none}
+ .points-toggle{min-height:40px;margin-top:.35rem;font-size:.84rem}.points-table-wrap{max-height:34dvh}
+ .drawer{width:min(86vw,320px);padding-top:env(safe-area-inset-top)}.drawer-head .icon-btn{min-height:44px}
+ .dialog{max-height:calc(100dvh - 2rem);overflow:auto}
+}
+@media (max-width:390px){.brand .name{font-size:1.28rem}.stats-row{grid-template-columns:1fr 1fr 1fr}}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <button class="icon-btn hamburger" id="hamburgerBtn" title="Library">&#9776;</button>
+    <div class="brand">
+      <span class="name disp">Switchback Map</span>
+      <span class="tag">Local edition &middot; real OpenStreetMap tiles</span>
+    </div>
+    <span class="local-chip">&#128190; saved on this device only</span>
+    <input type="file" id="fileInput" accept=".gpx" multiple class="hidden">
+    <button class="icon-btn" id="importBtn">Import</button>
+    <button class="icon-btn primary" id="saveBtn">Save</button>
+  </div>
+
+  <div class="layout">
+    <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
+    <div class="drawer" id="drawer">
+      <div class="drawer-head">
+        <span class="label-caps">Library</span>
+        <div style="display:flex; gap:.3rem;">
+          <button class="icon-btn" id="newRouteBtn">+ Route</button>
+          <button class="icon-btn drawer-close" id="drawerCloseBtn">&times;</button>
+        </div>
+      </div>
+      <div class="track-list" id="trackList"><div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div></div>
+    </div>
+
+    <div class="main">
+      <div class="map-wrap" id="mapWrap">
+        <div class="mode-banner hidden" id="modeBanner">
+          <span>Drawing new route &mdash; click the map to add points</span>
+          <button class="icon-btn" id="finishDrawBtn" style="min-height:26px; padding:.2rem .5rem;">Done</button>
+        </div>
+        <div class="layer-toggle">
+          <button id="layerStreetsBtn" class="on">Streets</button>
+          <button id="layerTerrainBtn">Terrain</button>
+        </div>
+        <div id="mapDiv"></div>
+      </div>
+
+      <div class="dock">
+        <div class="stats-row">
+          <div class="stat"><span class="v" id="statName">&mdash;</span><span class="k">Name</span></div>
+          <div class="stat"><span class="v" id="statDist">0.0 km</span><span class="k">Distance</span></div>
+          <div class="stat"><span class="v" id="statPoints">0</span><span class="k">Points</span></div>
+          <div class="stat"><span class="v" id="statSegs">0</span><span class="k">Segments</span></div>
+          <div class="stat"><span class="v" id="statElev">&mdash;</span><span class="k">Ascent</span></div>
+          <div class="stat"><span class="v" id="statSel">&mdash;</span><span class="k">Selected point</span></div>
+        </div>
+        <div class="mobile-actions" aria-label="Primary actions">\n          <button class="icon-btn" id="mobileImportBtn">Import</button>\n          <button class="icon-btn primary" id="mobileNewRouteBtn">New route</button>\n          <button class="icon-btn" id="mobileExportBtn" disabled>Export</button>\n        </div>\n        <div class="toolbar">
+          <div class="grp">
+            <button class="icon-btn" id="splitAfterBtn" disabled title="Split right after the selected point">Split after</button>
+            <button class="icon-btn" id="splitBeforeBtn" disabled title="Split right before the selected point">Split before</button>
+            <button class="icon-btn" id="joinNextBtn" disabled title="Rejoin with the next segment">Join next</button>
+          </div>
+          <div class="grp">
+            <button class="icon-btn danger" id="deletePointBtn" disabled title="Delete just this point">Delete point</button>
+            <button class="icon-btn danger" id="deleteSegBtn" disabled title="Delete the whole isolated segment">Delete segment</button>
+          </div>
+          <div class="grp">
+            <button class="icon-btn" id="reverseBtn" disabled title="Reverse point order">Reverse</button>
+            <button class="icon-btn" id="undoBtn" disabled>Undo</button>
+            <button class="icon-btn" id="redoBtn" disabled>Redo</button>
+          </div>
+          <div class="grp">
+            <button class="icon-btn" id="exportBtn" disabled title="Export as GPX for your Zumo">Export GPX</button>
+            <button class="icon-btn danger" id="deleteTrackBtn" disabled title="Delete from this device's library">Delete track</button>
+          </div>
+        </div>
+        <button class="points-toggle" id="pointsToggle">Show point list</button>
+        <div class="points-table-wrap hidden" id="pointsWrap">
+          <table class="points">
+            <thead><tr><th>#</th><th>Seg</th><th>Lat</th><th>Lon</th><th>Ele (m)</th><th>Dist (km)</th></tr></thead>
+            <tbody id="pointsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="nameOverlay">
+  <div class="dialog">
+    <h3 id="nameDialogTitle">Save to library</h3>
+    <input type="text" id="nameInput" placeholder="e.g. Blue Ridge Loop">
+    <div class="help-text" id="nameHelp"></div>
+    <div class="btnrow">
+      <button class="icon-btn" id="nameCancelBtn">Cancel</button>
+      <button class="icon-btn primary" id="nameSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="importOverlay">
+  <div class="dialog" style="max-width:420px;">
+    <h3>Import from GPX</h3>
+    <div class="help-text">Found the following in your file(s). Pick which ones to add.</div>
+    <div class="import-list" id="importList"></div>
+    <div class="btnrow">
+      <button class="icon-btn" id="importCancelBtn">Cancel</button>
+      <button class="icon-btn primary" id="importConfirmBtn">Add selected</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  if (typeof L === 'undefined') {
+    document.write('<div style="padding:2rem;font-family:sans-serif;max-width:560px;margin:2rem auto;background:#fff3f0;border:1px solid #c1442d;border-radius:6px;color:#1a2226;">'
+      + '<strong>Map library failed to load.</strong><br><br>This file needs an internet connection the first time it opens (it fetches the map engine and tiles from the web). Check your connection and reload the page. If it still fails, your browser or network may be blocking cdnjs.cloudflare.com or tile.openstreetmap.org.'
+      + '</div>');
+  }
+</script>
+<script>
+(function(){
+"use strict";
+
+var STORAGE_KEY = 'switchback_local_tracks_v1';
+
+var state = {
+  library: [],
+  current: null,
+  currentId: null,
+  selection: null,
+  mode: 'view',
+  history: [], future: [],
+  pendingImport: null
+};
+
+var els = {};
+["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn",
+ "fileInput","importBtn","saveBtn","mobileImportBtn","mobileNewRouteBtn","mobileExportBtn",
+ "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn",
+ "statName","statDist","statPoints","statSegs","statElev","statSel",
+ "splitAfterBtn","splitBeforeBtn","joinNextBtn","deletePointBtn","deleteSegBtn",
+ "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
+ "pointsToggle","pointsWrap","pointsBody",
+ "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
+ "importOverlay","importList","importCancelBtn","importConfirmBtn"
+].forEach(function(id){ els[id] = document.getElementById(id); });
+
+// ---------- helpers ----------
+function uid(){ return 'tr_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+function toRad(d){ return d*Math.PI/180; }
+function haversine(a,b){
+  var R=6371000, dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
+  var la1=toRad(a.lat), la2=toRad(b.lat);
+  var h = Math.pow(Math.sin(dLat/2),2) + Math.cos(la1)*Math.cos(la2)*Math.pow(Math.sin(dLon/2),2);
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+function fmtKm(m){ return (m/1000).toFixed(m<10000?2:1) + ' km'; }
+function fmtDate(iso){ try{ var d=new Date(iso); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }catch(e){ return ''; } }
+
+// ---------- local storage ----------
+function loadLibrary(){
+  try{
+    var raw = localStorage.getItem(STORAGE_KEY);
+    state.library = raw ? JSON.parse(raw) : [];
+  }catch(e){ state.library = []; }
+}
+function persistLibrary(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.library)); }catch(e){ console.warn('could not save locally', e); }
+}
+
+// ---------- stats ----------
+function computeStats(item){
+  var dist=0, points=0, segs=item.segments.length, ascent=0, hasEle=false;
+  item.segments.forEach(function(seg){
+    points += seg.length;
+    for(var i=1;i<seg.length;i++){
+      dist += haversine(seg[i-1], seg[i]);
+      if(seg[i].ele!=null && seg[i-1].ele!=null){
+        hasEle = true;
+        var d = seg[i].ele - seg[i-1].ele;
+        if(d>0) ascent += d;
+      }
+    }
+  });
+  return {distanceMeters:dist, points:points, segments:segs, ascent: hasEle? Math.round(ascent): null};
+}
+
+// ---------- GPX parsing / building (same schema as Switchback) ----------
+function parseGpxFile(text, filename){
+  var doc;
+  try{ doc = new DOMParser().parseFromString(text, 'application/xml'); } catch(e){ return []; }
+  if(doc.getElementsByTagName('parsererror').length) return [];
+  var out = [];
+  var trks = doc.getElementsByTagName('trk');
+  for(var i=0;i<trks.length;i++){
+    var trk = trks[i];
+    var nameEl = trk.getElementsByTagName('name')[0];
+    var name = nameEl ? nameEl.textContent.trim() : (filename.replace(/\.gpx$/i,'') + (trks.length>1?' '+(i+1):''));
+    var segsEls = trk.getElementsByTagName('trkseg');
+    var segments = [];
+    if(segsEls.length===0){
+      var ptsAll = trk.getElementsByTagName('trkpt');
+      if(ptsAll.length) segments.push(parsePts(ptsAll));
+    } else {
+      for(var s=0;s<segsEls.length;s++){
+        var arr = parsePts(segsEls[s].getElementsByTagName('trkpt'));
+        if(arr.length) segments.push(arr);
+      }
+    }
+    if(segments.length) out.push({id: uid(), type:'track', name:name, segments:segments, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+  }
+  var rtes = doc.getElementsByTagName('rte');
+  for(var r=0;r<rtes.length;r++){
+    var rte = rtes[r];
+    var rnameEl = rte.getElementsByTagName('name')[0];
+    var rname = rnameEl ? rnameEl.textContent.trim() : (filename.replace(/\.gpx$/i,'') + ' route');
+    var rarr = parsePts(rte.getElementsByTagName('rtept'));
+    if(rarr.length) out.push({id: uid(), type:'route', name:rname, segments:[rarr], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+  }
+  return out;
+}
+function parsePts(nodeList){
+  var arr=[];
+  for(var i=0;i<nodeList.length;i++){
+    var n = nodeList[i];
+    var lat = parseFloat(n.getAttribute('lat')), lon = parseFloat(n.getAttribute('lon'));
+    if(isNaN(lat)||isNaN(lon)) continue;
+    var eleEl = n.getElementsByTagName('ele')[0];
+    var timeEl = n.getElementsByTagName('time')[0];
+    var p = {lat:lat, lon:lon};
+    if(eleEl) p.ele = parseFloat(eleEl.textContent);
+    if(timeEl) p.time = timeEl.textContent.trim();
+    arr.push(p);
+  }
+  return arr;
+}
+function buildGpx(item){
+  var lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push('<gpx version="1.1" creator="Switchback Map" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
+  if(item.type==='route'){
+    lines.push('  <rte>');
+    lines.push('    <name>'+esc(item.name)+'</name>');
+    (item.segments[0]||[]).forEach(function(p){
+      lines.push('    <rtept lat="'+p.lat+'" lon="'+p.lon+'">');
+      if(p.ele!=null) lines.push('      <ele>'+p.ele+'</ele>');
+      lines.push('    </rtept>');
+    });
+    lines.push('  </rte>');
+  } else {
+    lines.push('  <trk>');
+    lines.push('    <name>'+esc(item.name)+'</name>');
+    item.segments.forEach(function(seg){
+      lines.push('    <trkseg>');
+      seg.forEach(function(p){
+        lines.push('      <trkpt lat="'+p.lat+'" lon="'+p.lon+'">');
+        if(p.ele!=null) lines.push('        <ele>'+p.ele+'</ele>');
+        if(p.time) lines.push('        <time>'+esc(p.time)+'</time>');
+        lines.push('      </trkpt>');
+      });
+      lines.push('    </trkseg>');
+    });
+    lines.push('  </trk>');
+  }
+  lines.push('</gpx>');
+  return lines.join('\n');
+}
+
+// ---------- Leaflet map ----------
+var map = L.map('mapDiv', {zoomControl:true}).setView([45,-100], 4);
+// Note: raw tile.openstreetmap.org blocks requests from local (file://) pages because
+// they arrive with no/"null" referrer, which OSM's usage policy treats as unidentified
+// bulk traffic. Esri's public World basemaps are built for exactly this kind of open
+// embedding and don't enforce that check, so we use those instead (no API key needed).
+var streetsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, attribution: 'Tiles &copy; Esri &mdash; Source: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), (c) OpenStreetMap contributors'
+});
+var terrainLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, HERE, Garmin, USGS, NGA, EPA, NPS'
+});
+streetsLayer.addTo(map);
+L.control.scale({metric:true, imperial:true}).addTo(map);
+
+els.layerStreetsBtn.onclick = function(){
+  map.removeLayer(terrainLayer); streetsLayer.addTo(map);
+  els.layerStreetsBtn.classList.add('on'); els.layerTerrainBtn.classList.remove('on');
+};
+els.layerTerrainBtn.onclick = function(){
+  map.removeLayer(streetsLayer); terrainLayer.addTo(map);
+  els.layerTerrainBtn.classList.add('on'); els.layerStreetsBtn.classList.remove('on');
+};
+
+var trackLayerGroup = L.layerGroup().addTo(map);
+
+map.on('click', function(ev){
+  if(state.mode==='draw' && state.current){
+    var segs = state.current.segments;
+    segs[segs.length-1].push({lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)});
+    pushHistory();
+    render();
+  } else {
+    state.selection = null;
+    render();
+  }
+});
+
+// ---------- history ----------
+function pushHistory(){
+  if(!state.current) return;
+  state.history.push(JSON.stringify(state.current.segments));
+  if(state.history.length>60) state.history.shift();
+  state.future = [];
+  refreshToolbar();
+}
+function undo(){
+  if(!state.current || !state.history.length) return;
+  state.future.push(JSON.stringify(state.current.segments));
+  state.current.segments = JSON.parse(state.history.pop());
+  state.selection = null; render();
+}
+function redo(){
+  if(!state.current || !state.future.length) return;
+  state.history.push(JSON.stringify(state.current.segments));
+  state.current.segments = JSON.parse(state.future.pop());
+  state.selection = null; render();
+}
+
+// ---------- library UI ----------
+function renderLibrary(){
+  var wrap = els.trackList;
+  wrap.innerHTML = '';
+  if(!state.library.length){
+    wrap.innerHTML = '<div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div>';
+    return;
+  }
+  state.library.slice().sort(function(a,b){ return (b.updatedAt||'').localeCompare(a.updatedAt||''); }).forEach(function(item){
+    var st = item.stats || computeStats(item);
+    var d = document.createElement('div');
+    d.className = 'track-item' + (item.id===state.currentId ? ' active':'');
+    d.innerHTML = '<div class="row1"><span class="type-dot '+(item.type==='route'?'route':'track')+'"></span>'+
+      '<span class="ti-name">'+esc(item.name)+'</span></div>'+
+      '<div class="ti-meta">'+fmtKm(st.distanceMeters||0)+' &middot; '+(st.points||0)+' pts &middot; '+fmtDate(item.updatedAt)+'</div>';
+    d.addEventListener('click', function(){ loadItem(item.id); closeDrawerMobile(); });
+    wrap.appendChild(d);
+  });
+}
+function loadItem(id){
+  var item = state.library.find(function(t){ return t.id===id; });
+  if(!item) return;
+  state.current = deepClone(item);
+  state.currentId = id;
+  state.selection = null; state.history=[]; state.future=[];
+  state.mode='view'; updateModeBanner();
+  render();
+  fitToTrack();
+  renderLibrary();
+}
+function startNewRoute(){
+  var center = map.getCenter();
+  state.current = {id:uid(), type:'route', name:'New route', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
+  state.currentId = null; state.selection = null; state.history=[]; state.future=[];
+  state.mode='draw'; updateModeBanner();
+  render();
+  renderLibrary();
+}
+function updateModeBanner(){ els.modeBanner.classList.toggle('hidden', state.mode!=='draw'); }
+
+function fitToTrack(){
+  var latlngs = [];
+  if(!state.current) return;
+  state.current.segments.forEach(function(seg){ seg.forEach(function(p){ latlngs.push([p.lat,p.lon]); }); });
+  if(latlngs.length===1) map.setView(latlngs[0], 13);
+  else if(latlngs.length>1) map.fitBounds(latlngs, {padding:[30,30]});
+}
+
+// ---------- rendering track on map ----------
+function render(){
+  trackLayerGroup.clearLayers();
+  if(state.current){
+    var lineColor = state.current.type==='route' ? getCss('--warn') : getCss('--line-track');
+    state.current.segments.forEach(function(seg, si){
+      if(seg.length>1){
+        var latlngs = seg.map(function(p){ return [p.lat,p.lon]; });
+        L.polyline(latlngs, {color:lineColor, weight:4, opacity:.85}).addTo(trackLayerGroup);
+      }
+      var stride = seg.length>1200 ? Math.ceil(seg.length/1200) : 1;
+      for(var i=0;i<seg.length;i+=stride){
+        var p = seg[i];
+        var isSel = state.selection && state.selection.seg===si && state.selection.pt===i;
+        var isEnd = (i===0 || i===seg.length-1);
+        var r = isSel?8:(isEnd?6:4);
+        var fill = isSel ? getCss('--line-selected') : lineColor;
+        (function(si,i){
+          var m = L.circleMarker([p.lat,p.lon], {radius:r, color:'#fff', weight:1, fillColor:fill, fillOpacity:1}).addTo(trackLayerGroup);
+          m.on('click', function(ev){
+            L.DomEvent.stopPropagation(ev);
+            selectPoint(si,i);
+          });
+        })(si,i);
+      }
+    });
+  }
+  refreshDock();
+}
+function getCss(varName){
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#2563a8';
+}
+function selectPoint(seg,pt){ state.selection = {seg:seg, pt:pt}; render(); }
+
+// ---------- editing operations ----------
+function segAt(i){ return state.current.segments[i]; }
+function splitAfter(){
+  if(!state.current||!state.selection) return;
+  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  if(pi>=seg.length-1) return;
+  state.current.segments.splice(si,1, seg.slice(0,pi+1), seg.slice(pi+1));
+  state.selection={seg:si, pt:pi};
+  pushHistory(); render();
+}
+function splitBefore(){
+  if(!state.current||!state.selection) return;
+  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  if(pi<=0) return;
+  state.current.segments.splice(si,1, seg.slice(0,pi), seg.slice(pi));
+  state.selection={seg:si+1, pt:0};
+  pushHistory(); render();
+}
+function joinNext(){
+  if(!state.current||!state.selection) return;
+  var si=state.selection.seg;
+  if(si>=state.current.segments.length-1) return;
+  var merged = segAt(si).concat(segAt(si+1));
+  state.current.segments.splice(si,2,merged);
+  state.selection={seg:si, pt:segAt(si).length-1};
+  pushHistory(); render();
+}
+function deletePoint(){
+  if(!state.current||!state.selection) return;
+  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  seg.splice(pi,1);
+  if(seg.length===0) state.current.segments.splice(si,1);
+  state.selection=null;
+  pushHistory(); render();
+}
+function deleteSegment(){
+  if(!state.current||!state.selection) return;
+  state.current.segments.splice(state.selection.seg,1);
+  if(state.current.segments.length===0) state.current.segments.push([]);
+  state.selection=null;
+  pushHistory(); render();
+}
+function reverseTrack(){
+  if(!state.current) return;
+  state.current.segments = state.current.segments.slice().reverse().map(function(s){ return s.slice().reverse(); });
+  state.selection=null;
+  pushHistory(); render();
+}
+
+// ---------- toolbar/dock ----------
+var confirmTimers={};
+function armConfirm(btn, action){
+  if(btn.classList.contains('confirming')){
+    clearTimeout(confirmTimers[btn.id]);
+    btn.classList.remove('confirming'); btn.textContent = btn.dataset.label; action(); return;
+  }
+  btn.dataset.label = btn.dataset.label || btn.textContent;
+  btn.classList.add('confirming'); btn.textContent='Confirm?';
+  confirmTimers[btn.id] = setTimeout(function(){ btn.classList.remove('confirming'); btn.textContent=btn.dataset.label; },2600);
+}
+function refreshToolbar(){
+  var hasTrack=!!state.current, sel=state.selection;
+  var seg = (sel && state.current) ? segAt(sel.seg) : null;
+  els.splitAfterBtn.disabled = !sel || !seg || sel.pt>=seg.length-1;
+  els.splitBeforeBtn.disabled = !sel || !seg || sel.pt<=0;
+  els.joinNextBtn.disabled = !sel || !state.current || sel.seg>=state.current.segments.length-1;
+  els.deletePointBtn.disabled = !sel;
+  els.deleteSegBtn.disabled = !sel;
+  els.reverseBtn.disabled = !hasTrack;
+  els.undoBtn.disabled = !state.history.length;
+  els.redoBtn.disabled = !state.future.length;
+  els.exportBtn.disabled = !hasTrack;\n  els.mobileExportBtn.disabled = !hasTrack;
+  els.deleteTrackBtn.disabled = !state.currentId;
+  els.saveBtn.disabled = !hasTrack;
+}
+function refreshDock(){
+  refreshToolbar();
+  if(!state.current){
+    els.statName.textContent='—'; els.statDist.textContent='0.0 km';
+    els.statPoints.textContent='0'; els.statSegs.textContent='0';
+    els.statElev.textContent='—'; els.statSel.textContent='—';
+    renderPointsTable(); return;
+  }
+  var st = computeStats(state.current);
+  els.statName.textContent = state.current.name;
+  els.statDist.textContent = fmtKm(st.distanceMeters);
+  els.statPoints.textContent = st.points;
+  els.statSegs.textContent = st.segments;
+  els.statElev.textContent = st.ascent!=null ? Math.round(st.ascent)+' m' : '—';
+  if(state.selection){
+    var segArr = segAt(state.selection.seg);
+    var p = segArr && segArr[state.selection.pt];
+    els.statSel.textContent = p ? (p.lat.toFixed(4)+', '+p.lon.toFixed(4)) : '—';
+  } else els.statSel.textContent = '—';
+  renderPointsTable();
+}
+function renderPointsTable(){
+  if(els.pointsWrap.classList.contains('hidden')) return;
+  var body = els.pointsBody; body.innerHTML='';
+  if(!state.current) return;
+  var running=0, idx=0;
+  state.current.segments.forEach(function(seg,si){
+    seg.forEach(function(p,pi){
+      if(pi>0) running += haversine(seg[pi-1],p);
+      var tr = document.createElement('tr');
+      if(state.selection && state.selection.seg===si && state.selection.pt===pi) tr.className='sel';
+      tr.innerHTML = '<td>'+(idx+1)+'</td><td>'+si+'</td><td>'+p.lat.toFixed(5)+'</td><td>'+p.lon.toFixed(5)+'</td><td>'+(p.ele!=null?Math.round(p.ele):'')+'</td><td>'+(running/1000).toFixed(2)+'</td>';
+      tr.addEventListener('click', function(){ selectPoint(si,pi); });
+      body.appendChild(tr);
+      idx++;
+    });
+  });
+}
+
+// ---------- name dialog ----------
+function openNameDialog(opts){
+  els.nameDialogTitle.textContent = opts.title;
+  els.nameInput.value = opts.value||'';
+  els.nameHelp.textContent = opts.help||'';
+  els.nameOverlay.classList.remove('hidden');
+  els.nameInput.focus();
+  els.nameOverlay.dataset.mode = opts.mode;
+}
+function closeNameDialog(){ els.nameOverlay.classList.add('hidden'); }
+els.nameCancelBtn.onclick = closeNameDialog;
+els.nameSaveBtn.onclick = function(){
+  var val = els.nameInput.value.trim();
+  if(!val) return;
+  closeNameDialog();
+  state.current.name = val;
+  state.currentId = state.current.id;
+  state.current.updatedAt = new Date().toISOString();
+  state.current.stats = computeStats(state.current);
+  upsertLocal(deepClone(state.current));
+  refreshDock();
+};
+function upsertLocal(item){
+  var idx = state.library.findIndex(function(t){ return t.id===item.id; });
+  if(idx>=0) state.library[idx]=item; else state.library.unshift(item);
+  persistLibrary();
+  renderLibrary();
+}
+
+// ---------- import ----------
+els.importBtn.onclick = function(){ els.fileInput.click(); };\nels.mobileImportBtn.onclick = function(){ els.fileInput.click(); };
+els.fileInput.onchange = function(ev){
+  var files = Array.prototype.slice.call(ev.target.files||[]);
+  if(!files.length) return;
+  var found=[], remaining=files.length;
+  files.forEach(function(f){
+    var reader = new FileReader();
+    reader.onload = function(){
+      found = found.concat(parseGpxFile(String(reader.result), f.name));
+      remaining--; if(remaining===0) showImportDialog(found);
+    };
+    reader.onerror = function(){ remaining--; if(remaining===0) showImportDialog(found); };
+    reader.readAsText(f);
+  });
+  ev.target.value='';
+};
+function showImportDialog(items){
+  if(!items.length){
+    els.importList.innerHTML = '<div class="empty-note">No tracks or routes found in that file.</div>';
+    els.importConfirmBtn.classList.add('hidden');
+    els.importOverlay.classList.remove('hidden');
+    return;
+  }
+  els.importConfirmBtn.classList.remove('hidden');
+  state.pendingImport = items;
+  var list = els.importList; list.innerHTML='';
+  items.forEach(function(item,i){
+    var st = computeStats(item);
+    var row = document.createElement('label');
+    row.className='import-row';
+    row.innerHTML = '<input type="checkbox" checked data-i="'+i+'"> <span class="im-name">'+esc(item.name)+'</span><span class="tiny mono">'+fmtKm(st.distanceMeters)+'</span>';
+    list.appendChild(row);
+  });
+  els.importOverlay.classList.remove('hidden');
+}
+els.importCancelBtn.onclick = function(){ els.importOverlay.classList.add('hidden'); };
+els.importConfirmBtn.onclick = function(){
+  var checks = els.importList.querySelectorAll('input[type=checkbox]:checked');
+  var toAdd=[];
+  checks.forEach(function(c){ toAdd.push(state.pendingImport[parseInt(c.dataset.i,10)]); });
+  els.importOverlay.classList.add('hidden');
+  toAdd.forEach(function(item){ item.stats = computeStats(item); upsertLocal(item); });
+  if(toAdd.length) loadItem(toAdd[0].id);
+};
+
+// ---------- export ----------
+els.exportBtn.onclick = function(){
+  if(!state.current) return;
+  var xml = buildGpx(state.current);
+  var blob = new Blob([xml], {type:'application/gpx+xml'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = (state.current.name||'track').replace(/[^a-z0-9\-_]+/gi,'_') + '.gpx';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+};
+
+// ---------- top buttons ----------
+els.saveBtn.onclick = function(){
+  if(!state.current) return;
+  if(state.currentId){
+    state.current.updatedAt = new Date().toISOString();
+    state.current.stats = computeStats(state.current);
+    upsertLocal(deepClone(state.current));
+  } else {
+    openNameDialog({title:'Save to library', value:state.current.name, help:'Saved in this browser on this device.', mode:'save'});
+  }
+};
+els.newRouteBtn.onclick = startNewRoute;\nels.mobileNewRouteBtn.onclick = startNewRoute;\nels.mobileExportBtn.onclick = function(){ els.exportBtn.click(); };
+els.finishDrawBtn.onclick = function(){
+  state.mode='view'; updateModeBanner();
+  if(!state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
+};
+els.deleteTrackBtn.onclick = function(){
+  armConfirm(els.deleteTrackBtn, function(){
+    var id = state.currentId;
+    state.library = state.library.filter(function(t){ return t.id!==id; });
+    persistLibrary();
+    state.current=null; state.currentId=null; state.selection=null;
+    render(); renderLibrary();
+  });
+};
+els.deleteSegBtn.onclick = function(){ armConfirm(els.deleteSegBtn, deleteSegment); };
+els.deletePointBtn.onclick = function(){ armConfirm(els.deletePointBtn, deletePoint); };
+els.splitAfterBtn.onclick = splitAfter;
+els.splitBeforeBtn.onclick = splitBefore;
+els.joinNextBtn.onclick = joinNext;
+els.reverseBtn.onclick = reverseTrack;
+els.undoBtn.onclick = undo;
+els.redoBtn.onclick = redo;
+els.pointsToggle.onclick = function(){
+  var hidden = els.pointsWrap.classList.toggle('hidden');
+  els.pointsToggle.textContent = hidden ? 'Show point list' : 'Hide point list';
+  if(!hidden) renderPointsTable();
+};
+
+// ---------- drawer ----------
+function openDrawer(){ els.drawer.classList.add('open'); els.drawerBackdrop.classList.remove('hidden'); }
+function closeDrawer(){ els.drawer.classList.remove('open'); els.drawerBackdrop.classList.add('hidden'); }
+function closeDrawerMobile(){ if(window.innerWidth<900) closeDrawer(); }
+els.hamburgerBtn.onclick = openDrawer;
+els.drawerCloseBtn.onclick = closeDrawer;
+els.drawerBackdrop.onclick = closeDrawer;
+
+setTimeout(function(){ map.invalidateSize(); }, 50);
+window.addEventListener('resize', function(){ map.invalidateSize(); });
+
+// ---------- boot ----------
+loadLibrary();
+renderLibrary();
+refreshDock();
+})();
+</script>
+</body>
+</html>
