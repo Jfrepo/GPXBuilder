@@ -42,15 +42,16 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .icon-btn{display:inline-flex; align-items:center; justify-content:center; gap:.35rem; border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:3px; padding:.5rem .65rem; min-height:38px; font-size:.85rem;}
 .icon-btn:hover{border-color:var(--accent);}
 .icon-btn.primary{background:var(--accent); color:var(--accent-contrast); border-color:var(--accent); font-weight:600;}
-.icon-btn.danger{background:transparent; color:var(--danger); border-color:var(--danger);}
-.icon-btn.danger.confirming{background:var(--danger); color:#fff;}
-.icon-btn:disabled{opacity:.4; cursor:not-allowed;}
+.icon-btn.danger{background:rgba(193,68,45,.10);color:var(--danger);border-color:var(--danger);font-weight:600;}
+.icon-btn.danger.confirming{background:var(--danger);color:#fff;}
+.icon-btn:disabled{opacity:1;cursor:not-allowed;background:var(--surface-2);color:var(--text-muted);border-color:var(--border);}
+.icon-btn.danger:disabled{background:var(--surface-2);color:var(--text-muted);border-color:var(--border);}
 .local-chip{display:flex; align-items:center; gap:.35rem; font-size:.72rem; padding:.3rem .55rem; border-radius:20px; background:var(--surface-2); color:var(--text-muted);}
 .layout{display:flex; flex:1; min-height:0; position:relative;}
 .drawer{width:280px; flex:none; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0;}
 .drawer-head{padding:.8rem .9rem .5rem; display:flex; align-items:center; justify-content:space-between;}
-.track-list{overflow-y:auto; flex:1; padding:.3rem;}
-.track-item{display:flex; flex-direction:column; gap:.15rem; padding:.55rem .7rem; border-radius:4px; border:1px solid transparent; margin-bottom:.25rem;}
+.track-list{overflow-y:auto;flex:1;padding:.18rem .3rem;}
+.track-item{display:flex;flex-direction:column;gap:.05rem;padding:.28rem .45rem;border-radius:4px;border:1px solid transparent;margin-bottom:.06rem;}
 .track-item:hover{background:var(--surface-2);}
 .track-item.active{border-color:var(--accent); background:var(--surface-2);}
 .track-item .row1{display:flex; align-items:center; gap:.4rem;}
@@ -58,7 +59,7 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .type-dot.track{background:var(--line-track);}
 .type-dot.route{background:var(--warn);}
 .track-item .ti-name{font-weight:600; font-size:.92rem; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.track-item .ti-meta{font-size:.72rem; color:var(--text-muted); padding-left:1.05rem;}
+.track-item .ti-meta{font-size:.68rem;color:var(--text-muted);padding-left:2.05rem;line-height:1.05rem;}.track-row{display:flex;align-items:center;gap:.38rem;min-height:30px}.track-show{width:18px;height:18px;flex:none;margin:0}.track-swatch{width:14px;height:14px;min-height:14px;flex:none;border:1px solid rgba(0,0,0,.35);border-radius:2px;padding:0}.track-more{margin-left:auto;width:26px;height:26px;min-height:26px;padding:0;border:0;background:transparent;color:var(--text);font-size:1.25rem;font-weight:700}.track-menu{display:flex;flex-wrap:wrap;gap:.28rem;padding:.4rem 0 0 2rem}.track-menu button{min-height:30px;padding:.25rem .48rem;font-size:.72rem;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:3px}.track-menu button.danger{color:var(--danger);border-color:var(--danger)}.track-palette{display:flex;gap:.38rem;padding:.38rem 0 0 2rem}.track-palette button{width:24px;height:24px;min-height:24px;border:2px solid rgba(0,0,0,.22);border-radius:3px;padding:0}.track-palette button.on{outline:2px solid var(--text);outline-offset:1px}
 .empty-note{padding:1rem; font-size:.85rem; color:var(--text-muted);}
 .main{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
 .map-wrap{flex:1; position:relative; min-height:0;}
@@ -68,10 +69,10 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .layer-toggle{position:absolute; right:.7rem; top:.8rem; z-index:750; background:var(--surface); border:1px solid var(--border); border-radius:4px; overflow:hidden; display:flex;}
 .layer-toggle button{border:none; background:var(--surface); padding:.4rem .7rem; font-size:.78rem; color:var(--text);}
 .layer-toggle button.on{background:var(--accent); color:var(--accent-contrast);}
-.overlay-panel{position:absolute;left:4.2rem;top:.8rem;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.45rem .55rem;display:flex;align-items:center;gap:.45rem;font-size:.76rem;box-shadow:0 1px 5px rgba(0,0,0,.12)}
-.overlay-panel input[type=range]{width:140px}.slope-swipe{position:absolute;top:0;bottom:0;width:4px;background:#fff;border-left:1px solid #222;border-right:1px solid #222;z-index:740;pointer-events:none;box-shadow:0 0 5px rgba(0,0,0,.6)}.slope-swipe:after{content:'↔';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:var(--surface);color:var(--text);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
-.slope-ramp{width:150px;height:10px;margin:.2rem 0;background:linear-gradient(90deg,#888 0%,#ddd35a 20%,#eea044 45%,#d45b32 70%,#7b2d20 100%)}.contour-elev-label{background:transparent!important;border:0!important}.contour-elev-label span{display:inline-block;background:rgba(255,250,235,.88);color:#6b431f;border-radius:2px;padding:0 2px;font:600 10px/13px 'IBM Plex Mono',monospace;white-space:nowrap}
-@media(max-width:700px){.overlay-panel{left:4.2rem;top:.8rem}.overlay-panel input{width:90px}.slope-legend{font-size:.62rem}.slope-ramp{width:120px}}
+.overlay-panel{position:absolute;left:4.35rem;top:.8rem;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.45rem .55rem;display:flex;align-items:center;gap:.45rem;font-size:.76rem;box-shadow:0 1px 5px rgba(0,0,0,.12)}
+.overlay-panel input[type=range]{width:140px}.overlay-panel.hidden{display:none}.overlay-control-btn{background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:4px;width:34px;height:34px;line-height:30px;text-align:center;font:700 18px/30px 'Source Sans 3',sans-serif;color:#333;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.25)}.overlay-control-btn.on{background:var(--accent);color:var(--accent-contrast)}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
+.slope-ramp{width:150px;height:10px;margin:.2rem 0;background:linear-gradient(90deg,#888 0%,#ddd35a 20%,#eea044 45%,#d45b32 70%,#7b2d20 100%)}.contour-elev-label{background:transparent!important;border:0!important}.contour-elev-label span{display:inline-block;background:rgba(255,250,235,.9);color:#5b3518;border:1px solid rgba(91,53,24,.25);border-radius:2px;padding:0 2px;font:700 10px/13px 'IBM Plex Mono',monospace;white-space:nowrap}
+@media(max-width:700px){.overlay-panel{left:4.35rem;top:.8rem}.overlay-panel input{width:90px}.slope-legend{font-size:.62rem}.slope-ramp{width:120px}}
 .dock{background:var(--surface); border-top:1px solid var(--border); padding:.7rem .8rem;}
 .stats-row{display:flex; flex-wrap:wrap; gap:1.1rem; margin-bottom:.6rem;}
 .stat{display:flex; flex-direction:column; gap:.05rem; min-width:64px;}
@@ -105,6 +106,32 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 @media (min-width: 900px){ .drawer-close, .hamburger{display:none;} }
 .tiny{font-size:.7rem;}
 .leaflet-marker-sel{filter:drop-shadow(0 0 2px var(--line-selected));}
+/* ---------- Mobile UI v1.1: 80% map / compact controls ---------- */
+@media (max-width:767px){
+ .topbar{min-height:48px;height:48px;padding:max(.2rem,env(safe-area-inset-top)) .45rem .2rem}
+ .brand .name{font-size:1.18rem}.hamburger{width:38px;min-width:38px;height:38px}
+ .main{display:flex;flex-direction:column;height:calc(100dvh - 48px)}
+ .map-wrap{flex:0 0 80%;height:80%;min-height:0}
+ .dock{flex:0 0 20%;height:20%;max-height:20%;box-sizing:border-box;padding:.25rem .4rem calc(.25rem + env(safe-area-inset-bottom));overflow-y:auto}
+ .stats-row{grid-template-columns:1.7fr repeat(3,1fr);gap:.12rem .35rem;margin:0 0 .18rem}
+ .stat:first-child{grid-column:auto}.stat .k{font-size:.52rem;line-height:1}.stat .v{font-size:.78rem;line-height:1.05}.stat:first-child .v{font-size:.82rem}
+ .mobile-actions{grid-template-columns:repeat(3,1fr);gap:.25rem;margin:0}
+ .mobile-actions .icon-btn{min-height:34px;height:34px;padding:.15rem .2rem;font-size:.76rem}
+ .toolbar{grid-template-columns:repeat(4,1fr);gap:.2rem;margin-top:.2rem}
+ .toolbar .icon-btn{min-height:38px;height:38px;padding:.18rem .35rem;font-size:.76rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-width:1.5px}
+ .points-toggle{min-height:28px;height:28px;margin-top:.18rem;padding:.1rem .3rem;font-size:.7rem}
+ .points-table-wrap{max-height:22dvh}
+}
+
+/* Track library compact override */
+.track-colours{display:none!important}
+.track-list{padding:0!important}
+.track-item{padding:.18rem .45rem!important;margin:0!important;gap:0!important;border-radius:0!important;min-height:0!important}
+.track-row{min-height:28px!important;height:28px!important}
+.track-item .ti-meta{line-height:14px!important;margin:0!important;padding:0 0 .12rem 2.05rem!important}
+.track-more{height:26px!important;min-height:26px!important}
+.track-item:not(.active){border-color:transparent!important}
+
 </style>
 </head>
 <body>
@@ -128,9 +155,11 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
         <span class="label-caps">Library</span>
         <div style="display:flex; gap:.3rem;">
           <button class="icon-btn" id="newRouteBtn">+ Route</button>
+          <button class="icon-btn" id="exportSelectedBtn" title="Export all tracks ticked Show">Export Selected</button>
           <button class="icon-btn drawer-close" id="drawerCloseBtn">&times;</button>
         </div>
       </div>
+      <label id="selectAllWrap" style="display:flex;align-items:center;gap:.45rem;padding:.45rem .6rem;border-bottom:1px solid var(--border);font-size:.78rem;font-weight:600;"><input type="checkbox" id="selectAllTracks"> <span>Select / Deselect all tracks</span></label>
       <div class="track-list" id="trackList"><div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div></div>
     </div>
 
@@ -144,11 +173,10 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <button id="layerStreetsBtn" class="on">Streets</button>
           <button id="layerTerrainBtn">Terrain</button>
         </div>
-        <div class="overlay-panel">
+        <div class="overlay-panel hidden" id="overlayPanel">
           <label><input type="checkbox" id="slopeOverlayToggle"> Contours</label>
           <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Reveal NSW contour overlay left to right">
         </div>
-        <div class="slope-swipe hidden" id="slopeSwipe"></div>
         <div class="slope-legend hidden" id="slopeLegend"><strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span></div>
         <div id="mapDiv"></div>
       </div>
@@ -242,13 +270,16 @@ var state = {
   mode: 'view',
   history: [], future: [],
   pendingImport: null,
-  extend: null
+  extend: null,
+  trackMenuId: null,
+  paletteId: null,
+  clipboardTrack: null
 };
 
 var els = {};
-["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn",
+["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
- "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","slopeOverlayToggle","slopeReveal","slopeSwipe","slopeLegend",
+ "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
  "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
@@ -430,6 +461,26 @@ var terrainLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/serv
 streetsLayer.addTo(map);
 L.control.scale({metric:true, imperial:true}).addTo(map);
 
+var OverlayToggleControl=L.Control.extend({
+  options:{position:'topleft'},
+  onAdd:function(){
+    var btn=L.DomUtil.create('button','overlay-control-btn');
+    btn.type='button'; btn.title='Show / hide map overlays'; btn.setAttribute('aria-label','Show or hide map overlays'); btn.innerHTML='&#9776;';
+    L.DomEvent.disableClickPropagation(btn);
+    L.DomEvent.on(btn,'click',function(){
+      var hidden=els.overlayPanel.classList.toggle('hidden');
+      btn.classList.toggle('on',!hidden);
+    });
+    return btn;
+  }
+});
+var overlayToggleControl=new OverlayToggleControl();
+map.addControl(overlayToggleControl);
+setTimeout(function(){
+  var el=overlayToggleControl.getContainer();
+  if(el){el.style.marginTop='0';el.style.clear='both';}
+},0);
+
 els.layerStreetsBtn.onclick = function(){
   map.removeLayer(terrainLayer); streetsLayer.addTo(map);
   els.layerStreetsBtn.classList.add('on'); els.layerTerrainBtn.classList.remove('on');
@@ -443,38 +494,62 @@ els.layerTerrainBtn.onclick = function(){
 var slopePane = map.createPane('slopePane');
 slopePane.style.zIndex = 350;
 slopePane.style.pointerEvents = 'none';
-var slopeLayer=null, slopeOn=false, slopeRefreshTimer=null;
-var contourMapService='https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Elevation_and_Depth_Theme/MapServer';
+var contourLabelPane = map.createPane('contourLabelPane');
+contourLabelPane.style.zIndex = 351;
+contourLabelPane.style.pointerEvents = 'none';
+var slopeLayer=L.layerGroup().addTo(map), slopeOn=false, slopeRefreshTimer=null, contourRequest=0;
+var contourQuery='https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Elevation_and_Depth_Theme/MapServer/2/query';
 
-function contourExportUrl(){
-  var b=map.getBounds(), size=map.getSize();
-  var sw=L.CRS.EPSG3857.project(b.getSouthWest()), ne=L.CRS.EPSG3857.project(b.getNorthEast());
-  return contourMapService+'/export?bbox='+[sw.x,sw.y,ne.x,ne.y].join(',')+
-    '&bboxSR=3857&imageSR=3857&size='+Math.max(1,Math.round(size.x))+','+Math.max(1,Math.round(size.y))+
-    '&layers=show:2&format=png32&transparent=true&dpi=144&f=image';
+function setContourOpacity(){
+  var opacity=Math.max(0,Math.min(1,(+els.slopeReveal.value)/100));
+  slopePane.style.opacity=opacity;
+  contourLabelPane.style.opacity=opacity;
 }
-function updateSlopeClip(){
-  if(!slopeOn) return;
-  var pct=+els.slopeReveal.value;
-  slopePane.style.clipPath='inset(0 '+(100-pct)+'% 0 0)';
-  els.slopeSwipe.style.left='calc('+pct+'% - 2px)';
+function clearContours(){ slopeLayer.clearLayers(); }
+function addContourLabel(latlng,elevation){
+  return L.marker(latlng,{pane:'contourLabelPane',interactive:false,icon:L.divIcon({
+    className:'contour-elev-label',html:'<span>'+Math.round(elevation)+' m</span>',iconSize:null
+  })}).addTo(slopeLayer);
 }
 function refreshSlopeImage(){
   if(!slopeOn) return;
+  clearContours();
   if(map.getZoom()<12){
-    if(slopeLayer){map.removeLayer(slopeLayer);slopeLayer=null;}
-    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Zoom in to level 12+ to display contour lines</span>';
+    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Zoom in to level 12+ for contour lines and metre labels</span>';
     return;
   }
-  els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Contour lines show elevation shape<br>Closer spacing = steeper terrain</span>';
-  var bounds=map.getBounds(), url=contourExportUrl();
-  if(slopeLayer) map.removeLayer(slopeLayer);
-  slopeLayer=L.imageOverlay(url,bounds,{pane:'slopePane',opacity:1,interactive:false,errorOverlayUrl:''}).addTo(map);
-  slopeLayer.once('load',function(){updateSlopeClip();});
-  slopeLayer.once('error',function(){
-    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Overlay failed to load — pan or zoom to retry</span>';
+  els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Loading contour lines and metre labels…</span>';
+  var id=++contourRequest,b=map.getBounds();
+  var env=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(',');
+  var url=contourQuery+'?where=1%3D1&geometry='+encodeURIComponent(env)+
+    '&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects'+
+    '&outFields=elevation%2Cclasssubtype&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000';
+  fetch(url).then(function(r){if(!r.ok) throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
+    if(id!==contourRequest||!slopeOn) return;
+    var features=data.features||[], labelCount=0;
+    features.forEach(function(ft){
+      var elev=Number(ft.properties&&ft.properties.elevation);
+      if(!isFinite(elev)||!ft.geometry) return;
+      var parts=ft.geometry.type==='LineString'?[ft.geometry.coordinates]:(ft.geometry.type==='MultiLineString'?ft.geometry.coordinates:[]);
+      parts.forEach(function(line){
+        if(!line||line.length<2) return;
+        var latlngs=line.map(function(p){return [p[1],p[0]];});
+        var major=Math.abs(Math.round(elev))%100===0;
+        L.polyline(latlngs,{pane:'slopePane',color:major?'#5b3518':'#8a5a2b',weight:major?2.2:1.2,opacity:.95,interactive:false}).addTo(slopeLayer);
+        if(labelCount<120 && (major || line.length>12)){
+          addContourLabel(latlngs[Math.floor(latlngs.length/2)],elev); labelCount++;
+        }
+      });
+    });
+    els.slopeLegend.innerHTML=features.length?
+      '<strong>NSW topographic contours</strong><br><span>Numbers = elevation metres<br>Closer lines = steeper terrain</span>':
+      '<strong>NSW topographic contours</strong><br><span>No contours returned here — pan within NSW or zoom in</span>';
+    setContourOpacity();
+  }).catch(function(err){
+    if(id!==contourRequest) return;
+    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Contour data failed to load</span>';
+    console.warn('Contour query failed',err);
   });
-  updateSlopeClip();
 }
 function queueSlopeRefresh(){
   if(!slopeOn) return;
@@ -484,14 +559,10 @@ function queueSlopeRefresh(){
 els.slopeOverlayToggle.onchange=function(){
   slopeOn=this.checked;
   els.slopeLegend.classList.toggle('hidden',!slopeOn);
-  els.slopeSwipe.classList.toggle('hidden',!slopeOn);
-  if(slopeOn) refreshSlopeImage();
-  else {
-    if(slopeLayer){map.removeLayer(slopeLayer);slopeLayer=null;}
-    slopePane.style.clipPath='';
-  }
+  if(slopeOn){ setContourOpacity(); refreshSlopeImage(); }
+  else { contourRequest++; clearContours(); }
 };
-els.slopeReveal.oninput=updateSlopeClip;
+els.slopeReveal.oninput=setContourOpacity;
 map.on('moveend zoomend resize',queueSlopeRefresh);
 
 var trackLayerGroup = L.layerGroup().addTo(map);
@@ -544,21 +615,96 @@ function redo(){
 }
 
 // ---------- library UI ----------
+var TRACK_COLOURS=[{name:'Blue',value:'#2563a8'},{name:'Red',value:'#d43f3a'},{name:'Purple',value:'#7c3aed'},{name:'Yellow',value:'#e0a800'}];
+function defaultTrackColour(item){return item.color||(item.type==='route'?getCss('--warn'):getCss('--line-track'));}
+function setTrackColour(id,colour){
+  var item=state.library.find(function(t){return t.id===id;}); if(!item)return;
+  item.color=colour; item.updatedAt=new Date().toISOString(); persistLibrary();
+  if(state.currentId===id&&state.current)state.current.color=colour;
+  state.paletteId=null; renderLibrary(); render();
+}
+function setTrackVisible(id,visible){
+  var item=state.library.find(function(t){return t.id===id;}); if(!item)return;
+  item.visible=visible; persistLibrary(); renderLibrary(); render();
+}
+function duplicateTrack(id){
+  var src=state.library.find(function(t){return t.id===id;}); if(!src)return;
+  var copy=deepClone(src); copy.id=uid(); copy.name=src.name+' copy'; copy.createdAt=copy.updatedAt=new Date().toISOString(); copy.visible=true; copy.stats=computeStats(copy);
+  state.library.unshift(copy); persistLibrary(); state.trackMenuId=null; renderLibrary(); render();
+}
+function copyTrack(id){var src=state.library.find(function(t){return t.id===id;});if(src)state.clipboardTrack=deepClone(src);state.trackMenuId=null;renderLibrary();}
+function pasteTrack(){
+  if(!state.clipboardTrack)return;
+  var copy=deepClone(state.clipboardTrack); copy.id=uid(); copy.name=copy.name+' copy'; copy.createdAt=copy.updatedAt=new Date().toISOString(); copy.visible=true; copy.stats=computeStats(copy);
+  state.library.unshift(copy); persistLibrary(); state.trackMenuId=null; renderLibrary(); render();
+}
+function exportTrackItem(item){
+  if(!item)return;
+  var xml=buildGpx(item),blob=new Blob([xml],{type:'application/gpx+xml'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=(item.name||'track').replace(/[^a-z0-9\-_]+/gi,'_')+'.gpx';document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},2000);
+}
+function exportSelectedTracks(){
+  var selected=state.library.filter(function(item){return item.visible!==false;});
+  if(!selected.length){window.alert('Tick Show on one or more tracks to export.');return;}
+  selected.forEach(function(item,i){setTimeout(function(){exportTrackItem(item);},i*180);});
+}
+function renameTrack(id){
+  var item=state.library.find(function(t){return t.id===id;});if(!item)return;
+  var name=window.prompt('Rename track',item.name); if(!name||!name.trim())return;
+  item.name=name.trim();item.updatedAt=new Date().toISOString();persistLibrary();
+  if(state.currentId===id&&state.current)state.current.name=item.name;
+  state.trackMenuId=null;renderLibrary();refreshDock();
+}
+function deleteLibraryTrack(id){
+  if(!window.confirm('Delete this track from the library?'))return;
+  state.library=state.library.filter(function(t){return t.id!==id;});persistLibrary();
+  if(state.currentId===id){state.current=null;state.currentId=null;state.selection=null;}
+  state.trackMenuId=null;renderLibrary();render();
+}
+function updateSelectAll(){
+  if(!els.selectAllTracks)return;
+  var total=state.library.length,shown=state.library.filter(function(item){return item.visible!==false;}).length;
+  els.selectAllTracks.checked=total>0&&shown===total;
+  els.selectAllTracks.indeterminate=shown>0&&shown<total;
+  els.selectAllTracks.disabled=total===0;
+}
+els.selectAllTracks.onchange=function(){
+  var visible=els.selectAllTracks.checked;
+  state.library.forEach(function(item){item.visible=visible;});
+  if(state.current)state.current.visible=visible;
+  persistLibrary();renderLibrary();render();
+};
 function renderLibrary(){
-  var wrap = els.trackList;
-  wrap.innerHTML = '';
-  if(!state.library.length){
-    wrap.innerHTML = '<div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div>';
-    return;
-  }
-  state.library.slice().sort(function(a,b){ return (b.updatedAt||'').localeCompare(a.updatedAt||''); }).forEach(function(item){
-    var st = item.stats || computeStats(item);
-    var d = document.createElement('div');
-    d.className = 'track-item' + (item.id===state.currentId ? ' active':'');
-    d.innerHTML = '<div class="row1"><span class="type-dot '+(item.type==='route'?'route':'track')+'"></span>'+
-      '<span class="ti-name">'+esc(item.name)+'</span></div>'+
-      '<div class="ti-meta">'+fmtKm(st.distanceMeters||0)+' &middot; '+(st.points||0)+' pts &middot; '+fmtDate(item.updatedAt)+'</div>';
-    d.addEventListener('click', function(){ loadItem(item.id); closeDrawerMobile(); });
+  var wrap=els.trackList;wrap.innerHTML='';
+  updateSelectAll();
+  if(!state.library.length){wrap.innerHTML='<div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div>';return;}
+  state.library.slice().sort(function(a,b){return(b.updatedAt||'').localeCompare(a.updatedAt||'');}).forEach(function(item){
+    if(item.visible==null)item.visible=true;
+    var st=item.stats||computeStats(item),d=document.createElement('div');
+    d.className='track-item'+(item.id===state.currentId?' active':'');
+    var row=document.createElement('div');row.className='track-row';
+    var show=document.createElement('input');show.type='checkbox';show.className='track-show';show.checked=item.visible!==false;show.title='Show on map';
+    show.addEventListener('click',function(ev){ev.stopPropagation();setTrackVisible(item.id,show.checked);});
+    var sw=document.createElement('button');sw.type='button';sw.className='track-swatch';sw.style.background=defaultTrackColour(item);sw.title='Change track colour';
+    sw.addEventListener('click',function(ev){ev.stopPropagation();state.paletteId=state.paletteId===item.id?null:item.id;state.trackMenuId=null;renderLibrary();});
+    var name=document.createElement('span');name.className='ti-name';name.textContent=item.name;
+    var more=document.createElement('button');more.type='button';more.className='track-more';more.innerHTML='&#8942;';more.title='Track options';
+    more.addEventListener('click',function(ev){ev.stopPropagation();state.trackMenuId=state.trackMenuId===item.id?null:item.id;state.paletteId=null;renderLibrary();});
+    row.appendChild(show);row.appendChild(sw);row.appendChild(name);row.appendChild(more);d.appendChild(row);
+    var meta=document.createElement('div');meta.className='ti-meta';meta.textContent=fmtKm(st.distanceMeters||0)+' · '+(st.points||0)+' pts · '+fmtDate(item.updatedAt);d.appendChild(meta);
+    if(state.paletteId===item.id){
+      var pal=document.createElement('div');pal.className='track-palette';
+      TRACK_COLOURS.forEach(function(opt){var b=document.createElement('button');b.type='button';b.style.background=opt.value;b.title=opt.name;b.className=item.color===opt.value?'on':'';b.onclick=function(ev){ev.stopPropagation();setTrackColour(item.id,opt.value);};pal.appendChild(b);});d.appendChild(pal);
+    }
+    if(state.trackMenuId===item.id){
+      var menu=document.createElement('div');menu.className='track-menu';
+      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack],['Export',function(){exportTrackItem(item)}],['Delete',function(){deleteLibraryTrack(item.id)}]].forEach(function(x){
+        var b=document.createElement('button');b.type='button';b.textContent=x[0];if(x[0]==='Delete')b.className='danger';if(x[0]==='Paste'&&!state.clipboardTrack)b.disabled=true;
+        b.onclick=function(ev){ev.stopPropagation();x[1]();};menu.appendChild(b);
+      });d.appendChild(menu);
+    }
+    d.addEventListener('click',function(){loadItem(item.id);});
     wrap.appendChild(d);
   });
 }
@@ -575,7 +721,7 @@ function loadItem(id){
 }
 function startNewRoute(){
   var center = map.getCenter();
-  state.current = {id:uid(), type:'route', name:'New route', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
+  state.current = {id:uid(), type:'route', name:'New route', color:'#2563a8', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
   state.currentId = null; state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='draw'; updateModeBanner();
   render();
@@ -603,27 +749,19 @@ function fitToTrack(){
 // ---------- rendering track on map ----------
 function render(){
   trackLayerGroup.clearLayers();
-  if(state.current){
-    var lineColor = state.current.type==='route' ? getCss('--warn') : getCss('--line-track');
-    state.current.segments.forEach(function(seg, si){
-      if(seg.length>1){
-        var latlngs = seg.map(function(p){ return [p.lat,p.lon]; });
-        L.polyline(latlngs, {color:lineColor, weight:4, opacity:.85}).addTo(trackLayerGroup);
-      }
-      var stride = seg.length>1200 ? Math.ceil(seg.length/1200) : 1;
+  state.library.forEach(function(item){
+    if(item.visible===false||item.id===state.currentId)return;
+    var colour=defaultTrackColour(item);
+    (item.segments||[]).forEach(function(seg){if(seg.length>1)L.polyline(seg.map(function(p){return[p.lat,p.lon];}),{color:colour,weight:4,opacity:.72,interactive:false}).addTo(trackLayerGroup);});
+  });
+  if(state.current && state.current.visible!==false){
+    var lineColor=defaultTrackColour(state.current);
+    state.current.segments.forEach(function(seg,si){
+      if(seg.length>1)L.polyline(seg.map(function(p){return[p.lat,p.lon];}),{color:lineColor,weight:5,opacity:.92}).addTo(trackLayerGroup);
+      var stride=seg.length>1200?Math.ceil(seg.length/1200):1;
       for(var i=0;i<seg.length;i+=stride){
-        var p = seg[i];
-        var isSel = state.selection && state.selection.seg===si && state.selection.pt===i;
-        var isEnd = (i===0 || i===seg.length-1);
-        var r = isSel?8:(isEnd?6:4);
-        var fill = isSel ? getCss('--line-selected') : lineColor;
-        (function(si,i){
-          var m = L.circleMarker([p.lat,p.lon], {radius:r, color:'#fff', weight:1, fillColor:fill, fillOpacity:1}).addTo(trackLayerGroup);
-          m.on('click', function(ev){
-            L.DomEvent.stopPropagation(ev);
-            selectPoint(si,i);
-          });
-        })(si,i);
+        var p=seg[i],isSel=state.selection&&state.selection.seg===si&&state.selection.pt===i,isEnd=(i===0||i===seg.length-1),r=isSel?8:(isEnd?6:4),fill=isSel?getCss('--line-selected'):lineColor;
+        (function(si,i,p,r,fill){var m=L.circleMarker([p.lat,p.lon],{radius:r,color:'#fff',weight:1,fillColor:fill,fillOpacity:1}).addTo(trackLayerGroup);m.on('click',function(ev){L.DomEvent.stopPropagation(ev);selectPoint(si,i);});})(si,i,p,r,fill);
       }
     });
   }
@@ -838,17 +976,8 @@ els.importConfirmBtn.onclick = function(){
 };
 
 // ---------- export ----------
-els.exportBtn.onclick = function(){
-  if(!state.current) return;
-  var xml = buildGpx(state.current);
-  var blob = new Blob([xml], {type:'application/gpx+xml'});
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = (state.current.name||'track').replace(/[^a-z0-9\-_]+/gi,'_') + '.gpx';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
-};
+els.exportBtn.onclick = function(){ if(state.current) exportTrackItem(state.current); };
+els.exportSelectedBtn.onclick = exportSelectedTracks;
 
 // ---------- top buttons ----------
 els.saveBtn.onclick = function(){
