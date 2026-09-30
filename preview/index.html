@@ -70,7 +70,7 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .layer-toggle button{border:none; background:var(--surface); padding:.4rem .7rem; font-size:.78rem; color:var(--text);}
 .layer-toggle button.on{background:var(--accent); color:var(--accent-contrast);}
 .overlay-panel{position:absolute;left:4.35rem;top:.8rem;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.45rem .55rem;display:flex;align-items:center;gap:.45rem;font-size:.76rem;box-shadow:0 1px 5px rgba(0,0,0,.12)}
-.overlay-panel{flex-direction:column;align-items:stretch}.overlay-row{display:grid;grid-template-columns:92px 140px;align-items:center;gap:.45rem}.overlay-row label{white-space:nowrap}.overlay-panel input[type=range]{width:140px}.radar-credit{font-size:.62rem;color:var(--text-muted);line-height:1.15}.radar-credit a{color:var(--accent)}.overlay-panel.hidden{display:none}.overlay-control-btn{background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:4px;width:34px;height:34px;line-height:30px;text-align:center;font:700 18px/30px 'Source Sans 3',sans-serif;color:#333;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.25)}.overlay-control-btn.on{background:var(--accent);color:var(--accent-contrast)}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
+.overlay-panel{flex-direction:column;align-items:stretch}.overlay-row{display:grid;grid-template-columns:92px 140px;align-items:center;gap:.45rem}.overlay-row label{white-space:nowrap}.overlay-panel input[type=range]{width:140px}.radar-credit{font-size:.62rem;color:var(--text-muted);line-height:1.15}.radar-credit a{color:var(--accent)}.radar-controls{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}.radar-controls.hidden{display:none}.radar-controls select{font:600 .68rem 'Source Sans 3',sans-serif;max-width:170px;padding:.2rem}.radar-controls .icon-btn{min-height:25px;padding:.18rem .4rem;font-size:.68rem}.radar-controls #radarTime{font:600 .66rem 'IBM Plex Mono',monospace;color:var(--text-muted);min-width:58px}.overlay-panel.hidden{display:none}.overlay-control-btn{background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:4px;width:34px;height:34px;line-height:30px;text-align:center;font:700 18px/30px 'Source Sans 3',sans-serif;color:#333;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.25)}.overlay-control-btn.on{background:var(--accent);color:var(--accent-contrast)}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
 .slope-ramp{width:150px;height:10px;margin:.2rem 0;background:linear-gradient(90deg,#888 0%,#ddd35a 20%,#eea044 45%,#d45b32 70%,#7b2d20 100%)}.contour-elev-label{background:transparent!important;border:0!important}.contour-elev-label span{display:inline-block;background:rgba(255,250,235,.9);color:#5b3518;border:1px solid rgba(91,53,24,.25);border-radius:2px;padding:0 2px;font:700 10px/13px 'IBM Plex Mono',monospace;white-space:nowrap}
 @media(max-width:700px){.overlay-panel{left:4.35rem;top:.8rem}.overlay-row{grid-template-columns:88px 90px}.overlay-panel input[type=range]{width:90px}.slope-legend{font-size:.62rem}.slope-ramp{width:120px}}
 .dock{background:var(--surface); border-top:1px solid var(--border); padding:.7rem .8rem;}
@@ -179,10 +179,21 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
             <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Contour opacity">
           </div>
           <div class="overlay-row">
-            <label><input type="checkbox" id="radarOverlayToggle"> Rain Radar</label>
+            <label><input type="checkbox" id="radarOverlayToggle"> BOM Rain</label>
             <input type="range" id="radarOpacity" min="0" max="100" value="65" title="Rain radar opacity">
           </div>
-          <div class="radar-credit hidden" id="radarCredit">Weather data by <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · latest radar</div>
+          <div class="radar-credit hidden" id="radarCredit">Weather data © Bureau of Meteorology</div>
+          <div class="radar-controls hidden" id="radarControls">
+            <select id="radarMode" title="BOM rain layer">
+              <option value="observed">Observed radar</option>
+              <option value="forecast">Forecast rain 50% · 3hr</option>
+              <option value="chance">Chance of rain · 3hr</option>
+            </select>
+            <button class="icon-btn" id="radarPrevBtn" type="button" title="Previous frame">◀</button>
+            <button class="icon-btn" id="radarPlayBtn" type="button" title="Play / pause">Play</button>
+            <button class="icon-btn" id="radarNextBtn" type="button" title="Next frame">▶</button>
+            <span id="radarTime">—</span>
+          </div>
         </div>
         <div class="slope-legend hidden" id="slopeLegend"><strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span></div>
         <div id="mapDiv"></div>
@@ -286,7 +297,7 @@ var state = {
 var els = {};
 ["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
- "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit",
+ "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
  "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
@@ -501,50 +512,127 @@ els.layerTerrainBtn.onclick = function(){
 var radarPane = map.createPane('radarPane');
 radarPane.style.zIndex = 340;
 radarPane.style.pointerEvents = 'none';
-var radarLayer=null, radarOn=false, radarRequest=0;
 
-function setRadarOpacity(){
-  if(radarLayer) radarLayer.setOpacity(Math.max(0,Math.min(1,(+els.radarOpacity.value)/100)));
+var BOM_WMTS_BASE='https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts';
+var BOM_CAPABILITIES=BOM_WMTS_BASE+'?SERVICE=WMTS&REQUEST=GetCapabilities&VERSION=1.0.0';
+var BOM_WEATHER={
+  observed:{id:'atm_surf_air_precip_rate_1hr_total_mm_h',matrix:'GoogleMapsCompatible_BoM',name:'Observed rain rate',mode:'past',step:5,lag:5},
+  forecast:{id:'atm_surf_air_precip_exceeding_50percentchance_total_mm_3hourly',matrix:'GoogleMapsCompatible_BoM_ADFD',name:'Forecast rain 50% · 3hr',mode:'forecast',step:180,lag:0},
+  chance:{id:'atm_surf_air_precip_any_probability_percent_3hourly',matrix:'GoogleMapsCompatible_BoM_ADFD',name:'Chance of rain · 3hr',mode:'forecast',step:180,lag:0}
+};
+var BOM_MATRIX={
+  GoogleMapsCompatible_BoM:[
+    {z:0,tlx:11584952,tly:34168990.685578,w:1,h:1},{z:1,tlx:11584952,tly:14131482.342789,w:1,h:1},
+    {z:2,tlx:11584952,tly:4112728.171395,w:1,h:1},{z:3,tlx:11584952,tly:4112728.171395,w:2,h:2},
+    {z:4,tlx:11584952,tly:1608039.628546,w:3,h:3},{z:5,tlx:11584952,tly:355695.357122,w:6,h:5},
+    {z:6,tlx:11584952,tly:-270476.778591,w:11,h:9},{z:7,tlx:11584952,tly:-583562.846447,w:22,h:17},
+    {z:8,tlx:11584952,tly:-740105.880375,w:43,h:33}
+  ],
+  GoogleMapsCompatible_BoM_ADFD:[
+    {z:0,tlx:12462758.1832,tly:34449560.527478,w:1,h:1},{z:1,tlx:12462758.1832,tly:14412052.184689,w:1,h:1},
+    {z:2,tlx:12462758.1832,tly:4393298.013295,w:1,h:1},{z:3,tlx:12462758.1832,tly:-616079.072403,w:1,h:1},
+    {z:4,tlx:12462758.1832,tly:-616079.072403,w:2,h:2},{z:5,tlx:12462758.1832,tly:-616079.072403,w:4,h:4},
+    {z:6,tlx:12462758.1832,tly:-616079.072403,w:8,h:8},{z:7,tlx:12462758.1832,tly:-616079.072403,w:16,h:16},
+    {z:8,tlx:12462758.1832,tly:-772622.106331,w:31,h:31}
+  ]
+};
+var radarLayer=null,radarOn=false,radarFrames=[],radarFrame=0,radarTimer=null,bomCapabilities=null;
+var BOM_HALF=20037508.342789244,BOM_WORLD=BOM_HALF*2;
+var transparentPixel='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+function setRadarOpacity(){if(radarLayer)radarLayer.setOpacity(Math.max(0,Math.min(1,(+els.radarOpacity.value)/100)));}
+function clearRadar(){if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}}
+function bomOffset(matrix,z){
+  var info=(BOM_MATRIX[matrix]||[])[z]; if(!info)return null;
+  var span=BOM_WORLD/Math.pow(2,z);
+  return {x:Math.round((info.tlx+BOM_HALF)/span),y:Math.round((BOM_HALF-info.tly)/span),w:info.w,h:info.h};
 }
-function clearRadar(){
-  if(radarLayer){ map.removeLayer(radarLayer); radarLayer=null; }
+function bomTileUrl(cfg,coords,time){
+  var z=Math.min(coords.z,8),scale=Math.pow(2,coords.z-z);
+  var gx=Math.floor(coords.x/scale),gy=Math.floor(coords.y/scale),o=bomOffset(cfg.matrix,z);
+  if(!o)return '';
+  var col=gx-o.x,row=gy-o.y;
+  if(col<0||row<0||col>=o.w||row>=o.h)return '';
+  return BOM_WMTS_BASE+'?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER='+encodeURIComponent(cfg.id)+
+    '&STYLE=default&FORMAT=image/png&TILEMATRIXSET='+encodeURIComponent(cfg.matrix)+'&TILEMATRIX='+z+
+    '&TILEROW='+row+'&TILECOL='+col+'&time='+encodeURIComponent(time);
 }
-function loadLatestRadar(){
-  if(!radarOn) return;
-  var id=++radarRequest;
-  els.radarCredit.textContent='Loading latest rain radar…';
-  els.radarCredit.classList.remove('hidden');
-  fetch('https://api.rainviewer.com/public/weather-maps.json').then(function(r){
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    return r.json();
-  }).then(function(data){
-    if(id!==radarRequest||!radarOn) return;
-    var frames=data&&data.radar&&data.radar.past||[];
-    if(!frames.length) throw new Error('No radar frames available');
-    var frame=frames[frames.length-1];
-    clearRadar();
-    radarLayer=L.tileLayer(data.host+frame.path+'/256/{z}/{x}/{y}/2/1_1.png',{
-      pane:'radarPane',
-      opacity:Math.max(0,Math.min(1,(+els.radarOpacity.value)/100)),
-      maxNativeZoom:7,
-      maxZoom:19,
-      tileSize:256,
-      attribution:'Weather data by RainViewer'
-    }).addTo(map);
-    els.radarCredit.innerHTML='Weather data by <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · latest radar';
-  }).catch(function(err){
-    if(id!==radarRequest||!radarOn) return;
-    clearRadar();
-    els.radarCredit.textContent='Rain radar failed to load';
-    console.warn('Rain radar failed',err);
+function createBomLayer(cfg,time){
+  var Bom=L.TileLayer.extend({
+    getTileUrl:function(coords){return bomTileUrl(cfg,coords,time);},
+    createTile:function(coords,done){
+      var img=document.createElement('img');img.alt='';var u=this.getTileUrl(coords);
+      if(!u){img.src=transparentPixel;setTimeout(function(){done(null,img)},0);return img;}
+      img.onload=function(){done(null,img)};img.onerror=function(){img.src=transparentPixel;done(null,img)};img.src=u;return img;
+    }
   });
+  return new Bom('',{pane:'radarPane',opacity:(+els.radarOpacity.value)/100,maxNativeZoom:8,maxZoom:19,tileSize:256,attribution:'Weather data © Bureau of Meteorology'});
+}
+function bomFallback(cfg,count){
+  var now=new Date(),step=cfg.step,ms=step*60000,t;
+  if(cfg.mode==='past'){
+    t=new Date(Math.floor(now.getTime()/ms)*ms-cfg.lag*60000);
+    var a=[];for(var i=count-1;i>=0;i--)a.push(new Date(t.getTime()-i*ms).toISOString().replace(/\.\d{3}Z$/,'Z'));return a;
+  }
+  t=new Date(Math.ceil(now.getTime()/ms)*ms);
+  var b=[];for(var j=0;j<count;j++)b.push(new Date(t.getTime()+j*ms).toISOString().replace(/\.\d{3}Z$/,'Z'));return b;
+}
+function extractBomTimes(xml,id){
+  var layers=Array.from(xml.getElementsByTagNameNS('*','Layer'));
+  var layer=layers.find(function(n){var x=Array.from(n.children).find(function(q){return q.localName==='Identifier'});return x&&x.textContent.trim()===id});
+  if(!layer)return [];
+  var dims=Array.from(layer.children).filter(function(q){return q.localName==='Dimension'});
+  var d=dims.find(function(n){var x=Array.from(n.children).find(function(q){return q.localName==='Identifier'});return x&&x.textContent.trim()==='time'});
+  if(!d)return [];
+  return Array.from(d.children).filter(function(q){return q.localName==='Value'}).map(function(q){return q.textContent.trim()}).filter(Boolean).sort();
+}
+function getBomFrames(cfg){
+  var p=bomCapabilities?Promise.resolve(bomCapabilities):fetch(BOM_CAPABILITIES).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(function(t){bomCapabilities=new DOMParser().parseFromString(t,'application/xml');return bomCapabilities});
+  return p.then(function(xml){
+    var times=extractBomTimes(xml,cfg.id),now=Date.now();
+    if(cfg.mode==='forecast')times=times.filter(function(x){return Date.parse(x)>=now-3600000}).slice(0,9);
+    else times=times.slice(-9);
+    return times.length?times:bomFallback(cfg,9);
+  }).catch(function(){return bomFallback(cfg,9)});
+}
+function formatBomTime(iso){
+  var d=new Date(iso);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
+function showBomFrame(index){
+  if(!radarOn||!radarFrames.length)return;
+  radarFrame=(index+radarFrames.length)%radarFrames.length;
+  clearRadar();
+  var cfg=BOM_WEATHER[els.radarMode.value],time=radarFrames[radarFrame];
+  radarLayer=createBomLayer(cfg,time).addTo(map);setRadarOpacity();
+  els.radarTime.textContent=formatBomTime(time);
+  els.radarCredit.textContent=cfg.name+' · BOM · '+formatBomTime(time);
+}
+function loadBomWeather(){
+  if(!radarOn)return;
+  stopBomPlayback();clearRadar();els.radarTime.textContent='Loading…';
+  var cfg=BOM_WEATHER[els.radarMode.value];
+  getBomFrames(cfg).then(function(frames){
+    if(!radarOn)return;radarFrames=frames;radarFrame=cfg.mode==='past'?frames.length-1:0;showBomFrame(radarFrame);
+  });
+}
+function stopBomPlayback(){if(radarTimer){clearInterval(radarTimer);radarTimer=null}els.radarPlayBtn.textContent='Play';}
+function toggleBomPlayback(){
+  if(radarTimer){stopBomPlayback();return}
+  if(!radarFrames.length)return;
+  els.radarPlayBtn.textContent='Pause';
+  radarTimer=setInterval(function(){showBomFrame(radarFrame+1)},650);
 }
 els.radarOverlayToggle.onchange=function(){
   radarOn=this.checked;
-  if(radarOn) loadLatestRadar();
-  else { radarRequest++; clearRadar(); els.radarCredit.classList.add('hidden'); }
+  els.radarCredit.classList.toggle('hidden',!radarOn);
+  els.radarControls.classList.toggle('hidden',!radarOn);
+  if(radarOn)loadBomWeather();else{stopBomPlayback();clearRadar();radarFrames=[];}
 };
 els.radarOpacity.oninput=setRadarOpacity;
+els.radarMode.onchange=loadBomWeather;
+els.radarPrevBtn.onclick=function(){stopBomPlayback();showBomFrame(radarFrame-1)};
+els.radarNextBtn.onclick=function(){stopBomPlayback();showBomFrame(radarFrame+1)};
+els.radarPlayBtn.onclick=toggleBomPlayback;
 
 var slopePane = map.createPane('slopePane');
 slopePane.style.zIndex = 350;
