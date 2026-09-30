@@ -157,6 +157,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
             <button class="icon-btn" id="joinNextBtn" disabled title="Rejoin with the next segment">Join next</button>
             <button class="icon-btn" id="movePointBtn" disabled title="Move the selected point to a new map location">Move point</button>
             <button class="icon-btn" id="extendTrackBtn" disabled title="Extend the track from the selected endpoint">Extend Track</button>
+            <button class="icon-btn primary hidden" id="completeChangeBtn" title="Finish the current map edit">Complete Change</button>
           </div>
           <div class="grp">
             <button class="icon-btn danger" id="deletePointBtn" disabled title="Delete just this point">Delete point</button>
@@ -238,7 +239,7 @@ var els = {};
  "fileInput","importBtn","saveBtn",
  "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
- "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","deletePointBtn","deleteSegBtn",
+ "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
  "pointsToggle","pointsWrap","pointsBody",
  "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
@@ -514,6 +515,7 @@ function updateModeBanner(){
   else if(state.mode==='extend') msg.textContent='Extend Track: tap map to add connected points';
   else msg.textContent='Drawing mode — click the map to add points';
   els.finishDrawBtn.textContent = state.mode==='move' ? 'Cancel' : 'Complete Change';
+  els.completeChangeBtn.classList.toggle('hidden', !(state.mode==='draw' || state.mode==='extend'));
 }
 
 function fitToTrack(){
@@ -807,6 +809,7 @@ els.splitAfterBtn.onclick = splitAfter;
 els.joinNextBtn.onclick = joinNext;
 els.movePointBtn.onclick = movePoint;
 els.extendTrackBtn.onclick = extendTrack;
+els.completeChangeBtn.onclick = function(){ els.finishDrawBtn.click(); };
 els.reverseBtn.onclick = reverseTrack;
 els.undoBtn.onclick = undo;
 els.redoBtn.onclick = redo;
