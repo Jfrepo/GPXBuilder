@@ -70,9 +70,9 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .layer-toggle button{border:none; background:var(--surface); padding:.4rem .7rem; font-size:.78rem; color:var(--text);}
 .layer-toggle button.on{background:var(--accent); color:var(--accent-contrast);}
 .overlay-panel{position:absolute;left:4.35rem;top:.8rem;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.45rem .55rem;display:flex;align-items:center;gap:.45rem;font-size:.76rem;box-shadow:0 1px 5px rgba(0,0,0,.12)}
-.overlay-panel input[type=range]{width:140px}.overlay-panel.hidden{display:none}.overlay-control-btn{background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:4px;width:34px;height:34px;line-height:30px;text-align:center;font:700 18px/30px 'Source Sans 3',sans-serif;color:#333;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.25)}.overlay-control-btn.on{background:var(--accent);color:var(--accent-contrast)}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
+.overlay-panel{flex-direction:column;align-items:stretch}.overlay-row{display:grid;grid-template-columns:92px 140px;align-items:center;gap:.45rem}.overlay-row label{white-space:nowrap}.overlay-panel input[type=range]{width:140px}.radar-credit{font-size:.62rem;color:var(--text-muted);line-height:1.15}.radar-credit a{color:var(--accent)}.overlay-panel.hidden{display:none}.overlay-control-btn{background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:4px;width:34px;height:34px;line-height:30px;text-align:center;font:700 18px/30px 'Source Sans 3',sans-serif;color:#333;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.25)}.overlay-control-btn.on{background:var(--accent);color:var(--accent-contrast)}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
 .slope-ramp{width:150px;height:10px;margin:.2rem 0;background:linear-gradient(90deg,#888 0%,#ddd35a 20%,#eea044 45%,#d45b32 70%,#7b2d20 100%)}.contour-elev-label{background:transparent!important;border:0!important}.contour-elev-label span{display:inline-block;background:rgba(255,250,235,.9);color:#5b3518;border:1px solid rgba(91,53,24,.25);border-radius:2px;padding:0 2px;font:700 10px/13px 'IBM Plex Mono',monospace;white-space:nowrap}
-@media(max-width:700px){.overlay-panel{left:4.35rem;top:.8rem}.overlay-panel input{width:90px}.slope-legend{font-size:.62rem}.slope-ramp{width:120px}}
+@media(max-width:700px){.overlay-panel{left:4.35rem;top:.8rem}.overlay-row{grid-template-columns:88px 90px}.overlay-panel input[type=range]{width:90px}.slope-legend{font-size:.62rem}.slope-ramp{width:120px}}
 .dock{background:var(--surface); border-top:1px solid var(--border); padding:.7rem .8rem;}
 .stats-row{display:flex; flex-wrap:wrap; gap:1.1rem; margin-bottom:.6rem;}
 .stat{display:flex; flex-direction:column; gap:.05rem; min-width:64px;}
@@ -174,8 +174,15 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <button id="layerTerrainBtn">Terrain</button>
         </div>
         <div class="overlay-panel hidden" id="overlayPanel">
-          <label><input type="checkbox" id="slopeOverlayToggle"> Contours</label>
-          <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Reveal NSW contour overlay left to right">
+          <div class="overlay-row">
+            <label><input type="checkbox" id="slopeOverlayToggle"> Contours</label>
+            <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Contour opacity">
+          </div>
+          <div class="overlay-row">
+            <label><input type="checkbox" id="radarOverlayToggle"> Rain Radar</label>
+            <input type="range" id="radarOpacity" min="0" max="100" value="65" title="Rain radar opacity">
+          </div>
+          <div class="radar-credit hidden" id="radarCredit">Weather data by <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · latest radar</div>
         </div>
         <div class="slope-legend hidden" id="slopeLegend"><strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span></div>
         <div id="mapDiv"></div>
@@ -279,7 +286,7 @@ var state = {
 var els = {};
 ["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
- "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend",
+ "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
  "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
@@ -490,6 +497,54 @@ els.layerTerrainBtn.onclick = function(){
   els.layerTerrainBtn.classList.add('on'); els.layerStreetsBtn.classList.remove('on');
 };
 
+
+var radarPane = map.createPane('radarPane');
+radarPane.style.zIndex = 340;
+radarPane.style.pointerEvents = 'none';
+var radarLayer=null, radarOn=false, radarRequest=0;
+
+function setRadarOpacity(){
+  if(radarLayer) radarLayer.setOpacity(Math.max(0,Math.min(1,(+els.radarOpacity.value)/100)));
+}
+function clearRadar(){
+  if(radarLayer){ map.removeLayer(radarLayer); radarLayer=null; }
+}
+function loadLatestRadar(){
+  if(!radarOn) return;
+  var id=++radarRequest;
+  els.radarCredit.textContent='Loading latest rain radar…';
+  els.radarCredit.classList.remove('hidden');
+  fetch('https://api.rainviewer.com/public/weather-maps.json').then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(data){
+    if(id!==radarRequest||!radarOn) return;
+    var frames=data&&data.radar&&data.radar.past||[];
+    if(!frames.length) throw new Error('No radar frames available');
+    var frame=frames[frames.length-1];
+    clearRadar();
+    radarLayer=L.tileLayer(data.host+frame.path+'/256/{z}/{x}/{y}/2/1_1.png',{
+      pane:'radarPane',
+      opacity:Math.max(0,Math.min(1,(+els.radarOpacity.value)/100)),
+      maxNativeZoom:7,
+      maxZoom:19,
+      tileSize:256,
+      attribution:'Weather data by RainViewer'
+    }).addTo(map);
+    els.radarCredit.innerHTML='Weather data by <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · latest radar';
+  }).catch(function(err){
+    if(id!==radarRequest||!radarOn) return;
+    clearRadar();
+    els.radarCredit.textContent='Rain radar failed to load';
+    console.warn('Rain radar failed',err);
+  });
+}
+els.radarOverlayToggle.onchange=function(){
+  radarOn=this.checked;
+  if(radarOn) loadLatestRadar();
+  else { radarRequest++; clearRadar(); els.radarCredit.classList.add('hidden'); }
+};
+els.radarOpacity.oninput=setRadarOpacity;
 
 var slopePane = map.createPane('slopePane');
 slopePane.style.zIndex = 350;
