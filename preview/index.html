@@ -149,6 +149,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <button class="icon-btn drawer-close" id="drawerCloseBtn">&times;</button>
         </div>
       </div>
+      <label id="selectAllWrap" style="display:flex;align-items:center;gap:.45rem;padding:.45rem .6rem;border-bottom:1px solid var(--border);font-size:.78rem;font-weight:600;"><input type="checkbox" id="selectAllTracks"> <span>Select / Deselect all tracks</span></label>
       <div class="track-list" id="trackList"><div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div></div>
     </div>
 
@@ -266,7 +267,7 @@ var state = {
 };
 
 var els = {};
-["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn",
+["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
  "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
@@ -651,8 +652,22 @@ function deleteLibraryTrack(id){
   if(state.currentId===id){state.current=null;state.currentId=null;state.selection=null;}
   state.trackMenuId=null;renderLibrary();render();
 }
+function updateSelectAll(){
+  if(!els.selectAllTracks)return;
+  var total=state.library.length,shown=state.library.filter(function(item){return item.visible!==false;}).length;
+  els.selectAllTracks.checked=total>0&&shown===total;
+  els.selectAllTracks.indeterminate=shown>0&&shown<total;
+  els.selectAllTracks.disabled=total===0;
+}
+els.selectAllTracks.onchange=function(){
+  var visible=els.selectAllTracks.checked;
+  state.library.forEach(function(item){item.visible=visible;});
+  if(state.current)state.current.visible=visible;
+  persistLibrary();renderLibrary();render();
+};
 function renderLibrary(){
   var wrap=els.trackList;wrap.innerHTML='';
+  updateSelectAll();
   if(!state.library.length){wrap.innerHTML='<div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div>';return;}
   state.library.slice().sort(function(a,b){return(b.updatedAt||'').localeCompare(a.updatedAt||'');}).forEach(function(item){
     if(item.visible==null)item.visible=true;
