@@ -164,6 +164,12 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 .track-note{padding:.28rem .4rem .35rem 2.05rem}
 .track-note textarea{width:100%;min-height:48px;resize:vertical;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--text);padding:.35rem .45rem;font:500 .76rem 'Source Sans 3',sans-serif}
 .track-note-meta{font-size:.62rem;color:var(--text-muted);text-align:right;margin-top:.1rem}
+
+.fuel-control-btn{display:block;width:34px;height:34px;border:0;border-radius:3px;background:#fff;color:#333;box-shadow:0 1px 5px rgba(0,0,0,.35);font:700 10px/34px 'Source Sans 3',sans-serif;text-align:center;cursor:pointer}
+.fuel-control-btn.on{background:#b91c1c;color:#fff}
+.fuel-control-btn.loading{opacity:.65}
+.fuel-marker{background:#b91c1c;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45);width:14px;height:14px}
+.fuel-popup{font:500 12px/1.35 'Source Sans 3',sans-serif;min-width:180px}.fuel-popup strong{font-size:13px}.fuel-popup .muted{color:#68737d;font-size:11px}
 </style>
 </head>
 <body>
@@ -547,6 +553,64 @@ setTimeout(function(){
   var el=overlayToggleControl.getContainer();
   if(el){el.style.marginTop='0';el.style.clear='both';}
 },0);
+
+var fuelLayer=L.layerGroup().addTo(map),fuelOn=false,fuelRequest=0,fuelRefreshTimer=null;
+var fuelIcon=L.divIcon({className:'',html:'<div class="fuel-marker"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+var FuelControl=L.Control.extend({
+  options:{position:'topleft'},
+  onAdd:function(){
+    var btn=L.DomUtil.create('button','fuel-control-btn');btn.type='button';btn.textContent='Fuel';btn.title='Show active mapped fuel stations';btn.setAttribute('aria-label','Show or hide fuel stations');
+    L.DomEvent.disableClickPropagation(btn);L.DomEvent.disableScrollPropagation(btn);
+    L.DomEvent.on(btn,'click',function(){
+      fuelOn=!fuelOn;btn.classList.toggle('on',fuelOn);
+      if(fuelOn)refreshFuelStations();else{fuelRequest++;fuelLayer.clearLayers();btn.classList.remove('loading');}
+    });
+    this._button=btn;return btn;
+  }
+});
+var fuelControl=new FuelControl();map.addControl(fuelControl);
+setTimeout(function(){var el=fuelControl.getContainer();if(el){el.style.marginTop='4px';el.style.clear='both';}},0);
+
+function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
+function fuelIsActive(t){
+  t=t||{};var bad=function(v){return /^(yes|true|1)$/i.test(String(v||''));};
+  return t.amenity==='fuel'&&!bad(t.disused)&&!bad(t.abandoned)&&!bad(t.demolished)&&!bad(t.closed)&&!bad(t.construction)&&
+    !t['disused:amenity']&&!t['abandoned:amenity']&&!t['demolished:amenity']&&!t['construction:amenity']&&
+    !/^(no|private)$/i.test(String(t.access||''));
+}
+function fuelPopup(t){
+  var name=t.name||t.brand||t.operator||'Fuel station',brand=t.brand&&t.brand!==name?t.brand:'';
+  var address=[t['addr:housenumber'],t['addr:street'],t['addr:suburb']||t['addr:city'],t['addr:postcode']].filter(Boolean).join(' ');
+  var hours=t.opening_hours||'',phone=t.phone||t['contact:phone']||'';
+  return '<div class="fuel-popup"><strong>'+escHtml(name)+'</strong>'+
+    (brand?'<br>'+escHtml(brand):'')+(address?'<br>'+escHtml(address):'')+
+    (hours?'<br><b>Hours:</b> '+escHtml(hours):'')+(phone?'<br><b>Phone:</b> '+escHtml(phone):'')+
+    '<br><span class="muted">Active fuel POI · OpenStreetMap</span></div>';
+}
+function refreshFuelStations(){
+  if(!fuelOn)return;
+  clearTimeout(fuelRefreshTimer);
+  fuelRefreshTimer=setTimeout(function(){
+    if(!fuelOn)return;
+    var b=map.getBounds(),south=Math.max(-44,b.getSouth()),north=Math.min(-9,b.getNorth()),west=Math.max(112,b.getWest()),east=Math.min(154,b.getEast());
+    if(south>=north||west>=east){fuelLayer.clearLayers();return;}
+    var id=++fuelRequest,btn=fuelControl._button;if(btn)btn.classList.add('loading');
+    var bbox=[south,west,north,east].map(function(n){return n.toFixed(5)}).join(',');
+    var q='[out:json][timeout:25];nwr["amenity"="fuel"]('+bbox+');out center tags;';
+    fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
+      if(id!==fuelRequest||!fuelOn)return;fuelLayer.clearLayers();
+      var seen={};(data.elements||[]).forEach(function(e){
+        var t=e.tags||{};if(!fuelIsActive(t))return;
+        var lat=e.lat!=null?e.lat:(e.center&&e.center.lat),lon=e.lon!=null?e.lon:(e.center&&e.center.lon);if(lat==null||lon==null)return;
+        var key=(+lat).toFixed(5)+','+(+lon).toFixed(5);if(seen[key])return;seen[key]=1;
+        L.marker([lat,lon],{icon:fuelIcon,pane:'markerPane',title:t.name||t.brand||'Fuel station'}).bindPopup(fuelPopup(t)).addTo(fuelLayer);
+      });
+      if(btn)btn.title='Fuel stations: '+Object.keys(seen).length+' active mapped in view';
+    }).catch(function(err){console.warn('Fuel station query failed',err);if(btn)btn.title='Fuel station lookup failed — click to retry';}).finally(function(){if(id===fuelRequest&&btn)btn.classList.remove('loading');});
+  },300);
+}
+map.on('moveend',function(){if(fuelOn)refreshFuelStations();});
+
 
 els.layerStreetsBtn.onclick = function(){
   map.removeLayer(terrainLayer); streetsLayer.addTo(map);
