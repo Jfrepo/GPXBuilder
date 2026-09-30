@@ -155,6 +155,8 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <div class="grp">
             <button class="icon-btn" id="splitAfterBtn" disabled title="Split the GPX track at the selected point">Split at point</button>
             <button class="icon-btn" id="joinNextBtn" disabled title="Rejoin with the next segment">Join next</button>
+            <button class="icon-btn" id="movePointBtn" disabled title="Move the selected point to a new map location">Move point</button>
+            <button class="icon-btn" id="extendTrackBtn" disabled title="Extend the track from the selected endpoint">Extend Track</button>
           </div>
           <div class="grp">
             <button class="icon-btn danger" id="deletePointBtn" disabled title="Delete just this point">Delete point</button>
@@ -227,7 +229,8 @@ var state = {
   selection: null,
   mode: 'view',
   history: [], future: [],
-  pendingImport: null
+  pendingImport: null,
+  extend: null
 };
 
 var els = {};
@@ -235,7 +238,7 @@ var els = {};
  "fileInput","importBtn","saveBtn",
  "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
- "splitAfterBtn","joinNextBtn","deletePointBtn","deleteSegBtn",
+ "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
  "pointsToggle","pointsWrap","pointsBody",
  "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
@@ -397,6 +400,19 @@ map.on('click', function(ev){
     segs[segs.length-1].push({lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)});
     pushHistory();
     render();
+  } else if(state.mode==='move' && state.current && state.selection){
+    var mp = segAt(state.selection.seg)[state.selection.pt];
+    if(mp){
+      mp.lat=+ev.latlng.lat.toFixed(6); mp.lon=+ev.latlng.lng.toFixed(6);
+      pushHistory();
+    }
+    state.mode='view'; updateModeBanner(); render();
+  } else if(state.mode==='extend' && state.current && state.extend){
+    var eseg=segAt(state.extend.seg);
+    var np={lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)};
+    if(state.extend.atStart){ eseg.unshift(np); state.selection={seg:state.extend.seg,pt:0}; }
+    else { eseg.push(np); state.selection={seg:state.extend.seg,pt:eseg.length-1}; }
+    pushHistory(); render();
   } else {
     state.selection = null;
     render();
@@ -462,7 +478,14 @@ function startNewRoute(){
   render();
   renderLibrary();
 }
-function updateModeBanner(){ els.modeBanner.classList.toggle('hidden', state.mode!=='draw'); }
+function updateModeBanner(){
+  var active = state.mode==='draw' || state.mode==='move' || state.mode==='extend';
+  els.modeBanner.classList.toggle('hidden', !active);
+  if(state.mode==='move') els.modeBanner.textContent='Move point: tap the new location on the map';
+  else if(state.mode==='extend') els.modeBanner.textContent='Extend Track: tap map to add connected points · Finish when done';
+  else els.modeBanner.textContent='Drawing mode — click the map to add points';
+  els.finishDrawBtn.textContent = state.mode==='extend' ? 'Finish extending' : (state.mode==='move' ? 'Cancel' : 'Finish route');
+}
 
 function fitToTrack(){
   var latlngs = [];
@@ -504,7 +527,10 @@ function render(){
 function getCss(varName){
   return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#2563a8';
 }
-function selectPoint(seg,pt){ state.selection = {seg:seg, pt:pt}; render(); }
+function selectPoint(seg,pt){
+  if(state.mode==='move' || state.mode==='extend') return;
+  state.selection = {seg:seg, pt:pt}; render();
+}
 
 // ---------- editing operations ----------
 function segAt(i){ return state.current.segments[i]; }
@@ -548,6 +574,17 @@ function deleteSegment(){
   state.selection=null;
   pushHistory(); render();
 }
+function movePoint(){
+  if(!state.current || !state.selection) return;
+  state.mode='move'; updateModeBanner(); refreshToolbar();
+}
+function extendTrack(){
+  if(!state.current || !state.selection) return;
+  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  if(!seg || (pi!==0 && pi!==seg.length-1)) return;
+  state.extend={seg:si, atStart:pi===0};
+  state.mode='extend'; updateModeBanner(); refreshToolbar();
+}
 function reverseTrack(){
   if(!state.current) return;
   state.current.segments = state.current.segments.slice().reverse().map(function(s){ return s.slice().reverse(); });
@@ -571,6 +608,8 @@ function refreshToolbar(){
   var seg = (sel && state.current) ? segAt(sel.seg) : null;
   els.splitAfterBtn.disabled = !sel || !seg || sel.pt>=seg.length-1;
   els.joinNextBtn.disabled = !sel || !state.current || sel.seg>=state.current.segments.length-1;
+  els.movePointBtn.disabled = !sel || state.mode!=='view';
+  els.extendTrackBtn.disabled = !sel || !seg || (sel.pt!==0 && sel.pt!==seg.length-1) || state.mode!=='view';
   els.deletePointBtn.disabled = !sel;
   els.deleteSegBtn.disabled = !sel;
   els.reverseBtn.disabled = !hasTrack;
@@ -720,8 +759,9 @@ els.saveBtn.onclick = function(){
 };
 els.newRouteBtn.onclick = startNewRoute;
 els.finishDrawBtn.onclick = function(){
-  state.mode='view'; updateModeBanner();
-  if(!state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
+  var wasDraw = state.mode==='draw';
+  state.mode='view'; state.extend=null; updateModeBanner(); render();
+  if(wasDraw && !state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
 };
 els.deleteTrackBtn.onclick = function(){
   armConfirm(els.deleteTrackBtn, function(){
@@ -736,6 +776,8 @@ els.deleteSegBtn.onclick = function(){ armConfirm(els.deleteSegBtn, deleteSegmen
 els.deletePointBtn.onclick = function(){ armConfirm(els.deletePointBtn, deletePoint); };
 els.splitAfterBtn.onclick = splitAfter;
 els.joinNextBtn.onclick = joinNext;
+els.movePointBtn.onclick = movePoint;
+els.extendTrackBtn.onclick = extendTrack;
 els.reverseBtn.onclick = reverseTrack;
 els.undoBtn.onclick = undo;
 els.redoBtn.onclick = redo;
