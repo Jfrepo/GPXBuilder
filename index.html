@@ -153,8 +153,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
         </div>
         <div class="toolbar">
           <div class="grp">
-            <button class="icon-btn" id="splitAfterBtn" disabled title="Split right after the selected point">Split after</button>
-            <button class="icon-btn" id="splitBeforeBtn" disabled title="Split right before the selected point">Split before</button>
+            <button class="icon-btn" id="splitAfterBtn" disabled title="Split the GPX track at the selected point">Split at point</button>
             <button class="icon-btn" id="joinNextBtn" disabled title="Rejoin with the next segment">Join next</button>
           </div>
           <div class="grp">
@@ -236,7 +235,7 @@ var els = {};
  "fileInput","importBtn","saveBtn",
  "mapWrap","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
- "splitAfterBtn","splitBeforeBtn","joinNextBtn","deletePointBtn","deleteSegBtn",
+ "splitAfterBtn","joinNextBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
  "pointsToggle","pointsWrap","pointsBody",
  "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
@@ -571,7 +570,6 @@ function refreshToolbar(){
   var hasTrack=!!state.current, sel=state.selection;
   var seg = (sel && state.current) ? segAt(sel.seg) : null;
   els.splitAfterBtn.disabled = !sel || !seg || sel.pt>=seg.length-1;
-  els.splitBeforeBtn.disabled = !sel || !seg || sel.pt<=0;
   els.joinNextBtn.disabled = !sel || !state.current || sel.seg>=state.current.segments.length-1;
   els.deletePointBtn.disabled = !sel;
   els.deleteSegBtn.disabled = !sel;
@@ -737,7 +735,6 @@ els.deleteTrackBtn.onclick = function(){
 els.deleteSegBtn.onclick = function(){ armConfirm(els.deleteSegBtn, deleteSegment); };
 els.deletePointBtn.onclick = function(){ armConfirm(els.deletePointBtn, deletePoint); };
 els.splitAfterBtn.onclick = splitAfter;
-els.splitBeforeBtn.onclick = splitBefore;
 els.joinNextBtn.onclick = joinNext;
 els.reverseBtn.onclick = reverseTrack;
 els.undoBtn.onclick = undo;
