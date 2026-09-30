@@ -283,7 +283,7 @@ function cornerWaypoints(item){
   (item.segments||[]).forEach(function(seg,si){
     for(var i=1;i<seg.length-1;i++){
       var angle=turnAngle(seg[i-1],seg[i],seg[i+1]);
-      if(angle>=5) out.push({p:seg[i],seg:si,pt:i,angle:angle});
+      if(angle>=0.1) out.push({p:seg[i],seg:si,pt:i,angle:angle});
     }
   });
   return out;
@@ -382,7 +382,14 @@ function buildGpx(item){
   if(item.type==='route'){
     lines.push('  <rte>');
     lines.push('    <name>'+esc(item.name)+'</name>');
-    (item.segments[0]||[]).forEach(function(p){
+    var routePts=[];
+    (item.segments||[]).forEach(function(seg){
+      seg.forEach(function(p){
+        var last=routePts[routePts.length-1];
+        if(!last || last.lat!==p.lat || last.lon!==p.lon) routePts.push(p);
+      });
+    });
+    routePts.forEach(function(p){
       lines.push('    <rtept lat="'+p.lat+'" lon="'+p.lon+'">');
       if(p.ele!=null) lines.push('      <ele>'+p.ele+'</ele>');
       lines.push('    </rtept>');
@@ -491,22 +498,23 @@ var trackLayerGroup = L.layerGroup().addTo(map);
 map.on('click', function(ev){
   if(state.mode==='draw' && state.current){
     var segs = state.current.segments;
-    segs[segs.length-1].push({lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)});
     pushHistory();
+    segs[segs.length-1].push({lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)});
     render();
   } else if(state.mode==='move' && state.current && state.selection){
     var mp = segAt(state.selection.seg)[state.selection.pt];
     if(mp){
-      mp.lat=+ev.latlng.lat.toFixed(6); mp.lon=+ev.latlng.lng.toFixed(6);
       pushHistory();
+      mp.lat=+ev.latlng.lat.toFixed(6); mp.lon=+ev.latlng.lng.toFixed(6);
     }
     state.mode='view'; updateModeBanner(); render();
   } else if(state.mode==='extend' && state.current && state.extend){
     var eseg=segAt(state.extend.seg);
     var np={lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)};
+    pushHistory();
     if(state.extend.atStart){ eseg.unshift(np); state.selection={seg:state.extend.seg,pt:0}; }
     else { eseg.push(np); state.selection={seg:state.extend.seg,pt:eseg.length-1}; }
-    pushHistory(); render();
+    render();
   } else {
     state.selection = null;
     render();
@@ -558,7 +566,7 @@ function loadItem(id){
   if(!item) return;
   state.current = deepClone(item);
   state.currentId = id;
-  state.selection = null; state.history=[]; state.future=[];
+  state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='view'; updateModeBanner();
   render();
   fitToTrack();
@@ -567,7 +575,7 @@ function loadItem(id){
 function startNewRoute(){
   var center = map.getCenter();
   state.current = {id:uid(), type:'route', name:'New route', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
-  state.currentId = null; state.selection = null; state.history=[]; state.future=[];
+  state.currentId = null; state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='draw'; updateModeBanner();
   render();
   renderLibrary();
@@ -634,41 +642,39 @@ function splitAfter(){
   if(!state.current||!state.selection) return;
   var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
   if(pi>=seg.length-1) return;
-  state.current.segments.splice(si,1, seg.slice(0,pi+1), seg.slice(pi+1));
+  pushHistory();
+  state.current.segments.splice(si,1, seg.slice(0,pi+1), seg.slice(pi));
   state.selection={seg:si, pt:pi};
-  pushHistory(); render();
-}
-function splitBefore(){
-  if(!state.current||!state.selection) return;
-  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
-  if(pi<=0) return;
-  state.current.segments.splice(si,1, seg.slice(0,pi), seg.slice(pi));
-  state.selection={seg:si+1, pt:0};
-  pushHistory(); render();
+  render();
 }
 function joinNext(){
   if(!state.current||!state.selection) return;
   var si=state.selection.seg;
   if(si>=state.current.segments.length-1) return;
-  var merged = segAt(si).concat(segAt(si+1));
+  pushHistory();
+  var a=segAt(si), b=segAt(si+1);
+  var duplicate=a.length && b.length && a[a.length-1].lat===b[0].lat && a[a.length-1].lon===b[0].lon;
+  var merged = a.concat(duplicate ? b.slice(1) : b);
   state.current.segments.splice(si,2,merged);
-  state.selection={seg:si, pt:segAt(si).length-1};
-  pushHistory(); render();
+  state.selection={seg:si, pt:Math.max(0,a.length-1)};
+  render();
 }
 function deletePoint(){
   if(!state.current||!state.selection) return;
   var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  pushHistory();
   seg.splice(pi,1);
   if(seg.length===0) state.current.segments.splice(si,1);
   state.selection=null;
-  pushHistory(); render();
+  render();
 }
 function deleteSegment(){
   if(!state.current||!state.selection) return;
+  pushHistory();
   state.current.segments.splice(state.selection.seg,1);
   if(state.current.segments.length===0) state.current.segments.push([]);
   state.selection=null;
-  pushHistory(); render();
+  render();
 }
 function movePoint(){
   if(!state.current || !state.selection) return;
@@ -683,9 +689,10 @@ function extendTrack(){
 }
 function reverseTrack(){
   if(!state.current) return;
+  pushHistory();
   state.current.segments = state.current.segments.slice().reverse().map(function(s){ return s.slice().reverse(); });
   state.selection=null;
-  pushHistory(); render();
+  render();
 }
 
 // ---------- toolbar/dock ----------
