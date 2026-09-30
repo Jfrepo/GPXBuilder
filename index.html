@@ -257,6 +257,26 @@ function haversine(a,b){
   return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
 }
 function fmtKm(m){ return (m/1000).toFixed(m<10000?2:1) + ' km'; }
+function bearing(a,b){
+  var y=Math.sin(toRad(b.lon-a.lon))*Math.cos(toRad(b.lat));
+  var x=Math.cos(toRad(a.lat))*Math.sin(toRad(b.lat))-Math.sin(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.cos(toRad(b.lon-a.lon));
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function turnAngle(a,b,c){
+  var d=Math.abs(bearing(a,b)-bearing(b,c));
+  if(d>180) d=360-d;
+  return d;
+}
+function cornerWaypoints(item){
+  var out=[];
+  (item.segments||[]).forEach(function(seg,si){
+    for(var i=1;i<seg.length-1;i++){
+      var angle=turnAngle(seg[i-1],seg[i],seg[i+1]);
+      if(angle>=5) out.push({p:seg[i],seg:si,pt:i,angle:angle});
+    }
+  });
+  return out;
+}
 function fmtDate(iso){ try{ var d=new Date(iso); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }catch(e){ return ''; } }
 
 // ---------- local storage ----------
@@ -340,6 +360,14 @@ function buildGpx(item){
   var lines = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
   lines.push('<gpx version="1.1" creator="Switchback Map" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
+  var corners=cornerWaypoints(item);
+  corners.forEach(function(w,i){
+    lines.push('  <wpt lat="'+w.p.lat+'" lon="'+w.p.lon+'">');
+    if(w.p.ele!=null) lines.push('    <ele>'+w.p.ele+'</ele>');
+    lines.push('    <name>Corner '+(i+1)+'</name>');
+    lines.push('    <desc>Track corner waypoint</desc>');
+    lines.push('  </wpt>');
+  });
   if(item.type==='route'){
     lines.push('  <rte>');
     lines.push('    <name>'+esc(item.name)+'</name>');
