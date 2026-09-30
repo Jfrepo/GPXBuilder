@@ -435,63 +435,38 @@ els.layerTerrainBtn.onclick = function(){
 var slopePane = map.createPane('slopePane');
 slopePane.style.zIndex = 350;
 slopePane.style.pointerEvents = 'none';
-var contourLabelPane = map.createPane('contourLabelPane');
-contourLabelPane.style.zIndex = 351;
-contourLabelPane.style.pointerEvents = 'none';
-var slopeLayer=L.layerGroup().addTo(map), slopeOn=false, slopeRefreshTimer=null, contourRequest=0;
-var contourQuery='https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Elevation_and_Depth_Theme/MapServer/2/query';
+var slopeLayer=null, slopeOn=false, slopeRefreshTimer=null;
+var contourMapService='https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Elevation_and_Depth_Theme/MapServer';
 
+function contourExportUrl(){
+  var b=map.getBounds(), size=map.getSize();
+  var sw=L.CRS.EPSG3857.project(b.getSouthWest()), ne=L.CRS.EPSG3857.project(b.getNorthEast());
+  return contourMapService+'/export?bbox='+[sw.x,sw.y,ne.x,ne.y].join(',')+
+    '&bboxSR=3857&imageSR=3857&size='+Math.max(1,Math.round(size.x))+','+Math.max(1,Math.round(size.y))+
+    '&layers=show:2&format=png32&transparent=true&dpi=144&f=image';
+}
 function updateSlopeClip(){
   if(!slopeOn) return;
   var pct=+els.slopeReveal.value;
-  var clip='inset(0 '+(100-pct)+'% 0 0)';
-  slopePane.style.clipPath=clip;
-  contourLabelPane.style.clipPath=clip;
+  slopePane.style.clipPath='inset(0 '+(100-pct)+'% 0 0)';
   els.slopeSwipe.style.left='calc('+pct+'% - 2px)';
-}
-function clearContours(){ slopeLayer.clearLayers(); }
-function contourLabel(latlng, elevation){
-  return L.marker(latlng,{pane:'contourLabelPane',interactive:false,icon:L.divIcon({
-    className:'contour-elev-label',
-    html:'<span>'+Math.round(elevation)+' m</span>',
-    iconSize:null
-  })});
 }
 function refreshSlopeImage(){
   if(!slopeOn) return;
-  clearContours();
   if(map.getZoom()<12){
-    els.slopeLegend.innerHTML='<strong>NSW contours</strong><br><span>Zoom in further to show labelled contours</span>';
+    if(slopeLayer){map.removeLayer(slopeLayer);slopeLayer=null;}
+    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Zoom in to level 12+ to display contour lines</span>';
     return;
   }
-  els.slopeLegend.innerHTML='<strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span>';
-  var id=++contourRequest, b=map.getBounds();
-  var env=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(',');
-  var url=contourQuery+'?where=1%3D1&geometry='+encodeURIComponent(env)+
-    '&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects'+
-    '&outFields=elevation,classsubtype&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000';
-  fetch(url).then(function(r){if(!r.ok) throw new Error('Contour service '+r.status);return r.json();})
-  .then(function(data){
-    if(id!==contourRequest||!slopeOn) return;
-    (data.features||[]).forEach(function(ft){
-      if(!ft.geometry||!ft.properties) return;
-      var elev=Number(ft.properties.elevation);
-      var coords=ft.geometry.type==='LineString'?[ft.geometry.coordinates]:(ft.geometry.coordinates||[]);
-      coords.forEach(function(line){
-        if(line.length<2) return;
-        var latlngs=line.map(function(p){return [p[1],p[0]];});
-        L.polyline(latlngs,{pane:'slopePane',color:'#8a5a2b',weight:(Math.round(elev)%100===0?2:1),opacity:.9,interactive:false}).addTo(slopeLayer);
-        if(line.length>6){
-          var mid=latlngs[Math.floor(latlngs.length/2)];
-          contourLabel(mid,elev).addTo(slopeLayer);
-        }
-      });
-    });
-    updateSlopeClip();
-  }).catch(function(){
-    if(id!==contourRequest) return;
-    els.slopeLegend.innerHTML='<strong>NSW contours</strong><br><span>Contour service unavailable — pan/zoom to retry</span>';
+  els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Contour lines show elevation shape<br>Closer spacing = steeper terrain</span>';
+  var bounds=map.getBounds(), url=contourExportUrl();
+  if(slopeLayer) map.removeLayer(slopeLayer);
+  slopeLayer=L.imageOverlay(url,bounds,{pane:'slopePane',opacity:1,interactive:false,errorOverlayUrl:''}).addTo(map);
+  slopeLayer.once('load',function(){updateSlopeClip();});
+  slopeLayer.once('error',function(){
+    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Overlay failed to load — pan or zoom to retry</span>';
   });
+  updateSlopeClip();
 }
 function queueSlopeRefresh(){
   if(!slopeOn) return;
@@ -503,7 +478,10 @@ els.slopeOverlayToggle.onchange=function(){
   els.slopeLegend.classList.toggle('hidden',!slopeOn);
   els.slopeSwipe.classList.toggle('hidden',!slopeOn);
   if(slopeOn) refreshSlopeImage();
-  else { contourRequest++; clearContours(); slopePane.style.clipPath=''; contourLabelPane.style.clipPath=''; }
+  else {
+    if(slopeLayer){map.removeLayer(slopeLayer);slopeLayer=null;}
+    slopePane.style.clipPath='';
+  }
 };
 els.slopeReveal.oninput=updateSlopeClip;
 map.on('moveend zoomend resize',queueSlopeRefresh);
