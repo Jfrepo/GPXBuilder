@@ -251,7 +251,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
         <div class="toolbar">
           <div class="grp">
             <button class="icon-btn" id="splitAfterBtn" disabled title="Split the GPX track at the selected point">Split at point</button>
-            <button class="icon-btn" id="joinNextBtn" disabled title="Rejoin with the next segment">Join next</button>
+            <button class="icon-btn" id="joinNextBtn" disabled title="Join the selected endpoint to the nearest available track">Join next</button>
             <button class="icon-btn" id="movePointBtn" disabled title="Move the selected point to a new map location">Move point</button>
             <button class="icon-btn" id="extendTrackBtn" disabled title="Extend the track from the selected endpoint">Extend Track</button>
             <button class="icon-btn primary hidden" id="completeChangeBtn" title="Finish the current map edit">Complete Change</button>
@@ -1124,7 +1124,7 @@ function splitAfter(){
   var original=deepClone(state.current),now=new Date().toISOString();
   var firstSegs=original.segments.slice(0,si).map(function(s){return deepClone(s);});
   var secondSegs=original.segments.slice(si+1).map(function(s){return deepClone(s);});
-  var firstSplitSeg=trimSegmentEndByDistance(seg.slice(0,pi+1),50);
+  var firstSplitSeg=deepClone(seg.slice(0,pi+1));
   var secondSplitSeg=trimSegmentStartByDistance(seg.slice(pi),50);
   if(firstSplitSeg.length)firstSegs.push(firstSplitSeg);
   if(secondSplitSeg.length)secondSegs.unshift(secondSplitSeg);
@@ -1148,17 +1148,50 @@ function splitAfter(){
   state.history=[];state.future=[];state.extend=null;
   persistLibrary();renderLibrary();render();
 }
+function trackEndpointInfo(item){
+  var segs=(item&&item.segments)||[],first=null,last=null;
+  for(var i=0;i<segs.length&&!first;i++)if(segs[i]&&segs[i].length)first={seg:i,pt:0,p:segs[i][0]};
+  for(var j=segs.length-1;j>=0&&!last;j--)if(segs[j]&&segs[j].length)last={seg:j,pt:segs[j].length-1,p:segs[j][segs[j].length-1]};
+  return {first:first,last:last};
+}
+function reverseSegments(segs){return segs.slice().reverse().map(function(s){return s.slice().reverse();});}
 function joinNext(){
-  if(!state.current||!state.selection) return;
-  var si=state.selection.seg;
-  if(si>=state.current.segments.length-1) return;
+  if(!state.current||!state.selection||!state.currentId)return;
+  var ends=trackEndpointInfo(state.current),sel=state.selection;
+  var atStart=ends.first&&sel.seg===ends.first.seg&&sel.pt===ends.first.pt;
+  var atEnd=ends.last&&sel.seg===ends.last.seg&&sel.pt===ends.last.pt;
+  if(!atStart&&!atEnd)return;
+  var anchor=atStart?ends.first.p:ends.last.p,best=null;
+  state.library.forEach(function(item){
+    if(!item||item.id===state.currentId||item.visible===false)return;
+    var e=trackEndpointInfo(item);if(!e.first||!e.last)return;
+    [{side:'start',p:e.first.p},{side:'end',p:e.last.p}].forEach(function(x){
+      var d=haversine(anchor,x.p);
+      if(!best||d<best.distance)best={item:item,side:x.side,distance:d};
+    });
+  });
+  if(!best)return;
+
   pushHistory();
-  var a=segAt(si), b=segAt(si+1);
-  var duplicate=a.length && b.length && a[a.length-1].lat===b[0].lat && a[a.length-1].lon===b[0].lon;
-  var merged = a.concat(duplicate ? b.slice(1) : b);
-  state.current.segments.splice(si,2,merged);
-  state.selection={seg:si, pt:Math.max(0,a.length-1)};
-  render();
+  var currentSegs=deepClone(state.current.segments),otherSegs=deepClone(best.item.segments);
+  if(atEnd){
+    if(best.side==='end')otherSegs=reverseSegments(otherSegs);
+    var a=currentSegs[currentSegs.length-1],b=otherSegs[0];
+    if(a&&b&&a.length&&b.length&&a[a.length-1].lat===b[0].lat&&a[a.length-1].lon===b[0].lon)b.shift();
+    if(a&&b)a.push.apply(a,b);
+    currentSegs=currentSegs.concat(otherSegs.slice(1));
+  }else{
+    if(best.side==='start')otherSegs=reverseSegments(otherSegs);
+    var oa=otherSegs[otherSegs.length-1],cb=currentSegs[0];
+    if(oa&&cb&&oa.length&&cb.length&&oa[oa.length-1].lat===cb[0].lat&&oa[oa.length-1].lon===cb[0].lon)cb.shift();
+    if(oa&&cb)oa.push.apply(oa,cb);
+    currentSegs=otherSegs.concat(currentSegs.slice(1));
+  }
+  state.current.segments=currentSegs;state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
+  state.library=state.library.filter(function(t){return t.id!==best.item.id;});
+  var li=state.library.findIndex(function(t){return t.id===state.currentId;});
+  if(li>=0)state.library[li]=deepClone(state.current);else state.library.unshift(deepClone(state.current));
+  state.selection=null;state.future=[];persistLibrary();renderLibrary();render();
 }
 function deletePoint(){
   if(!state.current||!state.selection) return;
@@ -1211,7 +1244,10 @@ function refreshToolbar(){
   var hasTrack=!!state.current, sel=state.selection;
   var seg = (sel && state.current) ? segAt(sel.seg) : null;
   els.splitAfterBtn.disabled = !sel || !seg || sel.pt<=0 || sel.pt>=seg.length-1;
-  els.joinNextBtn.disabled = !sel || !state.current || sel.seg>=state.current.segments.length-1;
+  var currentEnds=state.current?trackEndpointInfo(state.current):{first:null,last:null};
+  var selIsTrackEnd=!!(sel&&((currentEnds.first&&sel.seg===currentEnds.first.seg&&sel.pt===currentEnds.first.pt)||(currentEnds.last&&sel.seg===currentEnds.last.seg&&sel.pt===currentEnds.last.pt)));
+  var hasJoinTarget=!!(state.currentId&&state.library.some(function(t){return t.id!==state.currentId&&t.visible!==false&&trackEndpointInfo(t).first;}));
+  els.joinNextBtn.disabled = !selIsTrackEnd || !hasJoinTarget;
   els.movePointBtn.disabled = !sel || state.mode!=='view';
   els.extendTrackBtn.disabled = !sel || !seg || (sel.pt!==0 && sel.pt!==seg.length-1) || state.mode!=='view';
   els.deletePointBtn.disabled = !sel;
