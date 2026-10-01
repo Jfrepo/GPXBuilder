@@ -291,6 +291,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <div class="grp">
             <button class="icon-btn" id="splitAfterBtn" disabled title="Split the GPX track at the selected point">Split at point</button>
             <button class="icon-btn" id="joinNextBtn" disabled title="Join the selected segment endpoint to the nearest segment in this track">Join next</button>
+            <button class="icon-btn" id="joinToPointBtn" disabled title="Extend the selected endpoint directly to another point and join the track">Join To Point</button>
             <button class="icon-btn" id="movePointBtn" disabled title="Move the selected point to a new map location">Move point</button>
             <button class="icon-btn" id="extendTrackBtn" disabled title="Extend the track from the selected endpoint">Extend Track</button>
             <button class="icon-btn primary hidden" id="completeChangeBtn" title="Finish the current map edit">Complete Change</button>
@@ -372,6 +373,7 @@ var state = {
   history: [], future: [],
   pendingImport: null,
   extend: null,
+  joinFrom: null,
   trackMenuId: null,
   paletteId: null,
   clipboardTrack: null,
@@ -386,7 +388,7 @@ var els = {};
  "fileInput","importBtn","saveBtn",
  "mapWrap","desktopToolbarHost","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
- "splitAfterBtn","joinNextBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
+ "splitAfterBtn","joinNextBtn","joinToPointBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
  "pointsToggle","pointsWrap","pointsBody",
  "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
@@ -1250,13 +1252,14 @@ function startNewRoute(){
   renderLibrary();
 }
 function updateModeBanner(){
-  var active = state.mode==='draw' || state.mode==='move' || state.mode==='extend';
+  var active = state.mode==='draw' || state.mode==='move' || state.mode==='extend' || state.mode==='joinpoint';
   els.modeBanner.classList.toggle('hidden', !active);
   var msg = els.modeBanner.querySelector('span');
-  if(state.mode==='move') msg.textContent='Move point: tap the new location on the map';
+  if(state.mode==='joinpoint') msg.textContent='Join To Point: select the destination point';
+  else if(state.mode==='move') msg.textContent='Move point: tap the new location on the map';
   else if(state.mode==='extend') msg.textContent='Extend Track: tap map to add connected points';
   else msg.textContent='Drawing mode — click the map to add points';
-  els.finishDrawBtn.textContent = state.mode==='move' ? 'Cancel' : 'Complete Change';
+  els.finishDrawBtn.textContent = (state.mode==='move' || state.mode==='joinpoint') ? 'Cancel' : 'Complete Change';
   els.completeChangeBtn.classList.toggle('hidden', !(state.mode==='draw' || state.mode==='extend'));
 }
 
@@ -1354,6 +1357,7 @@ function getCss(varName){
 }
 function selectPoint(seg,pt){
   if(state.sharedPreview)return;
+  if(state.mode==='joinpoint'){completeJoinToPoint(seg,pt);return;}
   if(state.mode==='move' || state.mode==='extend') return;
   state.selection = {seg:seg, pt:pt}; render(); highlightTrackInLibrary(true);
 }
@@ -1423,6 +1427,37 @@ function selectedSegmentEndpoint(){
   if(state.selection.pt===0)return {seg:si,side:'start',p:seg[0]};
   if(state.selection.pt===seg.length-1)return {seg:si,side:'end',p:seg[seg.length-1]};
   return null;
+}
+function startJoinToPoint(){
+  var selected=selectedSegmentEndpoint();if(!selected||state.mode!=='view')return;
+  state.joinFrom={seg:selected.seg,pt:state.selection.pt,side:selected.side};
+  state.mode='joinpoint';updateModeBanner();refreshToolbar();
+}
+function completeJoinToPoint(targetSeg,targetPt){
+  var from=state.joinFrom;if(!from||!state.current){state.mode='view';state.joinFrom=null;updateModeBanner();render();return;}
+  if(from.seg===targetSeg&&from.pt===targetPt)return;
+  var sourceSeg=state.current.segments[from.seg],destSeg=state.current.segments[targetSeg];
+  if(!sourceSeg||!destSeg)return;
+  var target=destSeg[targetPt];if(!target)return;
+  pushHistory();
+  if(from.seg===targetSeg){
+    var source=sourceSeg[from.pt];
+    if(source.lat!==target.lat||source.lon!==target.lon)sourceSeg.push(deepClone(target));
+  }else{
+    var a=deepClone(sourceSeg),b=deepClone(destSeg);
+    if(from.side==='start')a.reverse();
+    var left=b.slice(0,targetPt+1),right=b.slice(targetPt);
+    var useLeft=left.length<=right.length?left:right.slice().reverse();
+    if(a.length&&useLeft.length&&a[a.length-1].lat===useLeft[0].lat&&a[a.length-1].lon===useLeft[0].lon)useLeft.shift();
+    var joined=a.concat(useLeft);
+    if(from.side==='start')joined.reverse();
+    var keep=Math.min(from.seg,targetSeg),drop=Math.max(from.seg,targetSeg);
+    state.current.segments[keep]=joined;state.current.segments.splice(drop,1);
+  }
+  state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
+  if(state.currentId){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
+  state.selection=null;state.future=[];state.extend=null;state.joinFrom=null;state.mode='view';
+  persistLibrary();renderLibrary();updateModeBanner();render();
 }
 function joinNext(){
   var selected=selectedSegmentEndpoint();if(!selected||!state.current)return;
@@ -1507,7 +1542,7 @@ function armConfirm(btn, action){
 function refreshToolbar(){
   var hasTrack=!!state.current, sel=state.selection;
   if(state.sharedPreview){
-    ['splitAfterBtn','joinNextBtn','movePointBtn','extendTrackBtn','deletePointBtn','deleteSegBtn','reverseBtn','undoBtn','redoBtn','deleteTrackBtn','saveBtn'].forEach(function(k){if(els[k])els[k].disabled=true;});
+    ['splitAfterBtn','joinNextBtn','joinToPointBtn','movePointBtn','extendTrackBtn','deletePointBtn','deleteSegBtn','reverseBtn','undoBtn','redoBtn','deleteTrackBtn','saveBtn'].forEach(function(k){if(els[k])els[k].disabled=true;});
     els.exportBtn.disabled=!hasTrack;
     return;
   }
@@ -1515,6 +1550,7 @@ function refreshToolbar(){
   els.splitAfterBtn.disabled = !sel || !seg || sel.pt<=0 || sel.pt>=seg.length-1;
   var selSegEnd=selectedSegmentEndpoint();
   els.joinNextBtn.disabled = !selSegEnd || !state.current || !seg || seg.length<2;
+  els.joinToPointBtn.disabled = !selSegEnd || state.mode!=='view';
   els.movePointBtn.disabled = !sel || state.mode!=='view';
   els.extendTrackBtn.disabled = !sel || !seg || (sel.pt!==0 && sel.pt!==seg.length-1) || state.mode!=='view';
   els.deletePointBtn.disabled = !sel;
@@ -1659,7 +1695,7 @@ els.saveBtn.onclick = function(){
 els.newRouteBtn.onclick = startNewRoute;
 els.finishDrawBtn.onclick = function(){
   var wasDraw = state.mode==='draw';
-  state.mode='view'; state.extend=null; updateModeBanner(); render();
+  state.mode='view'; state.extend=null; state.joinFrom=null; updateModeBanner(); render();
   if(wasDraw && !state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
 };
 els.deleteTrackBtn.onclick = function(){
@@ -1675,6 +1711,7 @@ els.deleteSegBtn.onclick = function(){ armConfirm(els.deleteSegBtn, deleteSegmen
 els.deletePointBtn.onclick = function(){ armConfirm(els.deletePointBtn, deletePoint); };
 els.splitAfterBtn.onclick = splitAfter;
 els.joinNextBtn.onclick = joinNext;
+els.joinToPointBtn.onclick = startJoinToPoint;
 els.movePointBtn.onclick = movePoint;
 els.extendTrackBtn.onclick = extendTrack;
 els.completeChangeBtn.onclick = function(){ els.finishDrawBtn.click(); };
