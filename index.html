@@ -332,7 +332,8 @@ var state = {
   trackMenuId: null,
   paletteId: null,
   clipboardTrack: null,
-  noteOpenId: null
+  noteOpenId: null,
+  splitSiblingId: null
 };
 
 var els = {};
@@ -1062,8 +1063,20 @@ function render(){
   trackLayerGroup.clearLayers();
   state.library.forEach(function(item){
     if(item.visible===false||item.id===state.currentId)return;
-    var colour=defaultTrackColour(item);
-    (item.segments||[]).forEach(function(seg){if(seg.length>1)L.polyline(seg.map(function(p){return[p.lat,p.lon];}),{color:colour,weight:4,opacity:.72,interactive:false,dashArray:item.draft?'9 7':null}).addTo(trackLayerGroup);});
+    var colour=defaultTrackColour(item),showSplitPoints=item.id===state.splitSiblingId;
+    (item.segments||[]).forEach(function(seg,si){
+      if(seg.length>1)L.polyline(seg.map(function(p){return[p.lat,p.lon];}),{color:colour,weight:4,opacity:.72,interactive:false,dashArray:item.draft?'9 7':null}).addTo(trackLayerGroup);
+      if(showSplitPoints){
+        var stride=seg.length>1200?Math.ceil(seg.length/1200):1;
+        for(var i=0;i<seg.length;i+=stride){
+          var p=seg[i],isEnd=(i===0||i===seg.length-1),r=isEnd?6:4;
+          (function(itemId,si,i,p,r,colour){
+            var m=L.circleMarker([p.lat,p.lon],{radius:r,color:'#fff',weight:1,fillColor:colour,fillOpacity:1}).addTo(trackLayerGroup);
+            m.on('click',function(ev){L.DomEvent.stopPropagation(ev);loadItem(itemId);state.selection={seg:si,pt:i};render();});
+          })(item.id,si,i,p,r,colour);
+        }
+      }
+    });
   });
   if(state.current && state.current.visible!==false){
     var lineColor=defaultTrackColour(state.current);
@@ -1144,6 +1157,7 @@ function splitAfter(){
     first.id=uid();state.library.unshift(deepClone(first));state.currentId=first.id;
   }
   state.library.unshift(second);
+  state.splitSiblingId=second.id;
   state.current=first;state.currentId=first.id;state.selection=null;
   state.history=[];state.future=[];state.extend=null;
   persistLibrary();renderLibrary();render();
@@ -1191,7 +1205,7 @@ function joinNext(){
   state.library=state.library.filter(function(t){return t.id!==best.item.id;});
   var li=state.library.findIndex(function(t){return t.id===state.currentId;});
   if(li>=0)state.library[li]=deepClone(state.current);else state.library.unshift(deepClone(state.current));
-  state.selection=null;state.future=[];persistLibrary();renderLibrary();render();
+  state.selection=null;state.splitSiblingId=null;state.future=[];persistLibrary();renderLibrary();render();
 }
 function deletePoint(){
   if(!state.current||!state.selection) return;
