@@ -1363,31 +1363,22 @@ function splitAfter(){
   var si=state.selection.seg,pi=state.selection.pt,seg=segAt(si);
   if(!seg||pi<=0||pi>=seg.length-1) return;
 
-  var original=deepClone(state.current),now=new Date().toISOString();
-  var firstSegs=original.segments.slice(0,si).map(function(s){return deepClone(s);});
-  var secondSegs=original.segments.slice(si+1).map(function(s){return deepClone(s);});
+  pushHistory();
   var firstSplitSeg=deepClone(seg.slice(0,pi+1));
   var secondSplitSeg=trimSegmentStartByDistance(seg.slice(pi),50);
-  if(firstSplitSeg.length)firstSegs.push(firstSplitSeg);
-  if(secondSplitSeg.length)secondSegs.unshift(secondSplitSeg);
-
-  var first=deepClone(original);
-  first.segments=firstSegs;first.updatedAt=now;first.stats=computeStats(first);
-
-  var second=deepClone(original);
-  second.id=uid();second.name=nextTrackSuffixName(original.name);
-  second.segments=secondSegs;second.createdAt=now;second.updatedAt=now;second.stats=computeStats(second);
-  second.visible=true;
+  var replacement=[];
+  if(firstSplitSeg.length)replacement.push(firstSplitSeg);
+  if(secondSplitSeg.length)replacement.push(secondSplitSeg);
+  state.current.segments.splice.apply(state.current.segments,[si,1].concat(replacement));
+  state.current.updatedAt=new Date().toISOString();
+  state.current.stats=computeStats(state.current);
 
   if(state.currentId){
     var li=state.library.findIndex(function(t){return t.id===state.currentId;});
-    if(li>=0)state.library[li]=deepClone(first);else state.library.unshift(deepClone(first));
-  }else{
-    first.id=uid();state.library.unshift(deepClone(first));state.currentId=first.id;
+    if(li>=0)state.library[li]=deepClone(state.current);
+    else state.library.unshift(deepClone(state.current));
   }
-  state.library.unshift(second);
-  state.current=first;state.currentId=first.id;state.selection=null;
-  state.history=[];state.future=[];state.extend=null;
+  state.selection=null;state.future=[];state.extend=null;
   persistLibrary();renderLibrary();render();
 }
 function trackEndpointInfo(item){
