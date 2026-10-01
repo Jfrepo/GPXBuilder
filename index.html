@@ -1329,7 +1329,7 @@ function render(){
         var p=seg[i],isEnd=(i===0||i===seg.length-1),r=isEnd?5:3;
         (function(itemId,si,i,p,r,colour){
           var m=L.circleMarker([p.lat,p.lon],{radius:r,color:'#fff',weight:1,fillColor:colour,fillOpacity:.9}).addTo(trackLayerGroup);
-          m.on('click',function(ev){L.DomEvent.stopPropagation(ev);loadItem(itemId);state.selection={seg:si,pt:i};render();highlightTrackInLibrary(true);});
+          m.on('click',function(ev){L.DomEvent.stopPropagation(ev);if(state.mode==='joinpoint'){completeJoinToLibraryPoint(itemId,si,i);return;}loadItem(itemId);state.selection={seg:si,pt:i};render();highlightTrackInLibrary(true);});
         })(item.id,si,i,p,r,colour);
       }
     });
@@ -1432,6 +1432,25 @@ function startJoinToPoint(){
   var selected=selectedSegmentEndpoint();if(!selected||state.mode!=='view')return;
   state.joinFrom={seg:selected.seg,pt:state.selection.pt,side:selected.side};
   state.mode='joinpoint';updateModeBanner();refreshToolbar();
+}
+function completeJoinToLibraryPoint(targetId,targetSeg,targetPt){
+  var from=state.joinFrom;if(!from||!state.current||!state.currentId||targetId===state.currentId){if(targetId===state.currentId)completeJoinToPoint(targetSeg,targetPt);return;}
+  var targetItem=state.library.find(function(t){return t.id===targetId;});if(!targetItem)return;
+  var sourceItem=deepClone(state.current),sourceSeg=sourceItem.segments[from.seg],destSeg=targetItem.segments[targetSeg];
+  if(!sourceSeg||!destSeg||!destSeg[targetPt])return;
+  var a=deepClone(sourceSeg),target=deepClone(destSeg[targetPt]);
+  if(from.side==='start')a.reverse();
+  if(a.length&&(a[a.length-1].lat!==target.lat||a[a.length-1].lon!==target.lon))a.push(target);
+  var left=deepClone(destSeg.slice(0,targetPt+1)),right=deepClone(destSeg.slice(targetPt));
+  var tail=left.length<=right.length?left.slice().reverse():right;
+  if(tail.length&&a.length&&tail[0].lat===a[a.length-1].lat&&tail[0].lon===a[a.length-1].lon)tail.shift();
+  var joined=a.concat(tail);
+  if(from.side==='start')joined.reverse();
+  var now=new Date().toISOString(),combined={id:uid(),type:'track',name:(sourceItem.name||'Track A')+' + '+(targetItem.name||'Track B'),color:sourceItem.color||'#2563a8',segments:[joined],createdAt:now,updatedAt:now,visible:true};
+  combined.stats=computeStats(combined);
+  state.current=combined;state.currentId=null;state.selection=null;state.history=[];state.future=[];state.extend=null;state.joinFrom=null;state.mode='view';
+  updateModeBanner();render();
+  openNameDialog({title:'Name joined track',value:combined.name,help:'Both original tracks are unchanged. This will save a new combined track.',mode:'save'});
 }
 function completeJoinToPoint(targetSeg,targetPt){
   var from=state.joinFrom;if(!from||!state.current){state.mode='view';state.joinFrom=null;updateModeBanner();render();return;}
