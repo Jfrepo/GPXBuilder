@@ -170,6 +170,14 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 .fuel-control-btn.loading{opacity:.65}
 .fuel-marker{background:#b91c1c;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45);width:14px;height:14px}
 .fuel-popup{font:500 12px/1.35 'Source Sans 3',sans-serif;min-width:180px}.fuel-popup strong{font-size:13px}.fuel-popup .muted{color:#68737d;font-size:11px}
+.location-controls{display:flex;flex-direction:column;gap:4px;margin-bottom:22px!important}
+.location-control-btn{display:block;min-width:78px;height:32px;border:0;border-radius:3px;background:#fff;color:#333;box-shadow:0 1px 5px rgba(0,0,0,.35);font:700 11px/32px 'Source Sans 3',sans-serif;text-align:center;cursor:pointer;padding:0 8px}
+.location-control-btn.on{background:#2563a8;color:#fff}
+.location-control-btn.error{background:#b91c1c;color:#fff}
+.user-location-dot{width:16px;height:16px;border:3px solid #fff;border-radius:50%;background:#2563a8;box-shadow:0 1px 5px rgba(0,0,0,.55)}
+.user-heading-arrow{width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:18px solid #2563a8;filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));transform-origin:50% 70%}
+#mapDiv.heading-up .leaflet-map-pane{will-change:transform}
+@media(max-width:767px){.location-control-btn{min-width:72px;height:30px;line-height:30px;font-size:10px}.location-controls{margin-bottom:18px!important}}
 </style>
 </head>
 <body>
@@ -534,6 +542,69 @@ var terrainLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/serv
 });
 streetsLayer.addTo(map);
 L.control.scale({metric:true, imperial:false}).addTo(map);
+
+var locationWatchId=null,userLocationMarker=null,userHeadingMarker=null,lastUserLatLng=null,lastHeading=null,headingUp=false;
+var LocationControls=L.Control.extend({
+  options:{position:'bottomleft'},
+  onAdd:function(){
+    var box=L.DomUtil.create('div','location-controls');
+    var loc=L.DomUtil.create('button','location-control-btn',box);loc.type='button';loc.textContent='My Location';loc.title='Show and follow current location';
+    var head=L.DomUtil.create('button','location-control-btn',box);head.type='button';head.textContent='North';head.title='Switch between north-up and direction-of-travel';
+    L.DomEvent.disableClickPropagation(box);L.DomEvent.disableScrollPropagation(box);
+    L.DomEvent.on(loc,'click',function(){startLocationFollow(true);});
+    L.DomEvent.on(head,'click',function(){setHeadingUp(!headingUp);});
+    this._loc=loc;this._head=head;return box;
+  }
+});
+var locationControls=new LocationControls();map.addControl(locationControls);
+
+function setMapBearing(deg){
+  var pane=map.getPane('mapPane');if(!pane)return;
+  if(!headingUp||deg==null||!isFinite(deg)){pane.style.transform='';document.getElementById('mapDiv').classList.remove('heading-up');return;}
+  document.getElementById('mapDiv').classList.add('heading-up');
+  var base=pane._leaflet_pos||L.point(0,0);
+  pane.style.transform='translate3d('+base.x+'px,'+base.y+'px,0) rotate('+(-deg)+'deg)';
+  pane.style.transformOrigin=(map.getSize().x/2)+'px '+(map.getSize().y/2)+'px';
+}
+function setHeadingUp(on){
+  headingUp=on;
+  if(locationControls._head){locationControls._head.textContent=on?'Heading':'North';locationControls._head.classList.toggle('on',on);}
+  if(on){startLocationFollow(false);requestDeviceHeading();if(lastHeading!=null)setMapBearing(lastHeading);}
+  else setMapBearing(null);
+}
+function updateUserLocation(pos){
+  var c=pos.coords,ll=L.latLng(c.latitude,c.longitude);lastUserLatLng=ll;
+  if(c.heading!=null&&isFinite(c.heading)&&c.speed!=null&&c.speed>0.5){lastHeading=c.heading;}
+  if(!userLocationMarker)userLocationMarker=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="user-location-dot"></div>',iconSize:[16,16],iconAnchor:[8,8]}),zIndexOffset:1000}).addTo(map);
+  else userLocationMarker.setLatLng(ll);
+  if(!userHeadingMarker)userHeadingMarker=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="user-heading-arrow"></div>',iconSize:[14,20],iconAnchor:[7,10]}),zIndexOffset:999}).addTo(map);
+  else userHeadingMarker.setLatLng(ll);
+  var arrow=userHeadingMarker.getElement()&&userHeadingMarker.getElement().querySelector('.user-heading-arrow');
+  if(arrow&&lastHeading!=null)arrow.style.transform='rotate('+lastHeading+'deg)';
+  if(locationControls._loc){locationControls._loc.classList.add('on');locationControls._loc.classList.remove('error');locationControls._loc.textContent='Following';}
+  map.panTo(ll,{animate:true});
+  if(headingUp&&lastHeading!=null)setMapBearing(lastHeading);
+}
+function startLocationFollow(recenter){
+  if(!navigator.geolocation){if(locationControls._loc){locationControls._loc.textContent='No GPS';locationControls._loc.classList.add('error');}return;}
+  if(locationWatchId==null)locationWatchId=navigator.geolocation.watchPosition(updateUserLocation,function(){
+    if(locationControls._loc){locationControls._loc.textContent='GPS blocked';locationControls._loc.classList.add('error');}
+  },{enableHighAccuracy:true,maximumAge:2000,timeout:12000});
+  if(recenter&&lastUserLatLng)map.setView(lastUserLatLng,Math.max(map.getZoom(),15));
+}
+function deviceHeadingHandler(ev){
+  var h=null;
+  if(typeof ev.webkitCompassHeading==='number')h=ev.webkitCompassHeading;
+  else if(ev.absolute&&typeof ev.alpha==='number')h=(360-ev.alpha)%360;
+  if(h!=null&&isFinite(h)){lastHeading=h;if(headingUp)setMapBearing(h);}
+}
+function requestDeviceHeading(){
+  if(typeof DeviceOrientationEvent==='undefined')return;
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission().then(function(r){if(r==='granted')window.addEventListener('deviceorientation',deviceHeadingHandler,true);}).catch(function(){});
+  }else window.addEventListener('deviceorientationabsolute',deviceHeadingHandler,true);
+}
+map.on('move zoom resize',function(){if(headingUp&&lastHeading!=null)setTimeout(function(){setMapBearing(lastHeading);},0);});
 
 var OverlayToggleControl=L.Control.extend({
   options:{position:'topleft'},
