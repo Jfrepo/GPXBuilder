@@ -1088,20 +1088,40 @@ function selectPoint(seg,pt){
 
 // ---------- editing operations ----------
 function segAt(i){ return state.current.segments[i]; }
+function nextTrackSuffixName(name){
+  var base=String(name||'Track').replace(/\.\d+$/,'');
+  var n=1;while(state.library.some(function(t){return String(t.name||'')===base+'.'+n;}))n++;
+  return base+'.'+n;
+}
 function splitAfter(){
   if(!state.current||!state.selection) return;
-  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  var si=state.selection.seg,pi=state.selection.pt,seg=segAt(si);
   if(!seg||pi<=0||pi>=seg.length-1) return;
-  pushHistory();
-  var left=seg.slice(0,pi+1),right=seg.slice(pi);
-  state.current.segments.splice(si,1,left,right);
-  state.selection={seg:si+1,pt:0};
-  state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
+
+  var original=deepClone(state.current),now=new Date().toISOString();
+  var firstSegs=original.segments.slice(0,si).map(function(s){return deepClone(s);});
+  var secondSegs=original.segments.slice(si+1).map(function(s){return deepClone(s);});
+  firstSegs.push(deepClone(seg.slice(0,pi+1)));
+  secondSegs.unshift(deepClone(seg.slice(pi)));
+
+  var first=deepClone(original);
+  first.segments=firstSegs;first.updatedAt=now;first.stats=computeStats(first);
+
+  var second=deepClone(original);
+  second.id=uid();second.name=nextTrackSuffixName(original.name);
+  second.segments=secondSegs;second.createdAt=now;second.updatedAt=now;second.stats=computeStats(second);
+  second.visible=true;
+
   if(state.currentId){
     var li=state.library.findIndex(function(t){return t.id===state.currentId;});
-    if(li>=0){state.library[li]=deepClone(state.current);persistLibrary();}
+    if(li>=0)state.library[li]=deepClone(first);else state.library.unshift(deepClone(first));
+  }else{
+    first.id=uid();state.library.unshift(deepClone(first));state.currentId=first.id;
   }
-  renderLibrary();render();
+  state.library.unshift(second);
+  state.current=first;state.currentId=first.id;state.selection=null;
+  state.history=[];state.future=[];state.extend=null;
+  persistLibrary();renderLibrary();render();
 }
 function joinNext(){
   if(!state.current||!state.selection) return;
