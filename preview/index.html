@@ -376,7 +376,9 @@ var state = {
   paletteId: null,
   clipboardTrack: null,
   noteOpenId: null,
-  splitSiblingId: null
+  splitSiblingId: null,
+  sharedPreview: false,
+  sharedPreviewMeta: null
 };
 
 var els = {};
@@ -1113,15 +1115,26 @@ function loadSharedLibrary(){
     els.sharedTrackList.innerHTML='<div class="empty-note">Shared Library is unavailable. '+esc(e.message||'Connection error')+'</div>';
   });
 }
+function previewSharedTrack(meta){
+  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+    var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
+    if(!parsed.length)throw new Error('No track data');
+    var item=parsed[0];
+    item.name=meta.name||item.name;item.visible=true;item.sharedId=meta.id;item.sharedBaseVersion=meta.version||1;
+    state.current=item;state.currentId=null;state.sharedPreview=true;state.sharedPreviewMeta=meta;
+    state.selection=null;state.history=[];state.future=[];state.extend=null;state.mode='view';
+    updateModeBanner();render();fitToTrack();renderSharedLibrary();
+  }).catch(function(e){alert('Could not preview this shared GPX. '+(e.message||''));});
+}
 function renderSharedLibrary(){
   var wrap=els.sharedTrackList;wrap.innerHTML='';
   if(!state.sharedLibrary.length){wrap.innerHTML='<div class="empty-note">No shared tracks have been published yet.</div>';return;}
   state.sharedLibrary.slice().sort(function(a,b){return String(b.modifiedAt||'').localeCompare(String(a.modifiedAt||''));}).forEach(function(item){
-    var d=document.createElement('div');d.className='shared-item';
+    var d=document.createElement('div');d.className='shared-item'+(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===item.id?' active':'');d.style.cursor='pointer';d.title='Preview this shared track on the map';d.onclick=function(){previewSharedTrack(item);};
     var n=document.createElement('div');n.className='shared-item-name';n.textContent=item.name||'Unnamed track';d.appendChild(n);
     var m=document.createElement('div');m.className='shared-item-meta';m.textContent='v'+(item.version||1)+' · '+(item.modifiedBy||'Unknown')+' · '+fmtSharedDate(item.modifiedAt);d.appendChild(m);
     var a=document.createElement('div');a.className='shared-item-actions';
-    var copy=document.createElement('button');copy.type='button';copy.className='icon-btn primary';copy.textContent='Copy to My Library';copy.onclick=function(){copySharedToLocal(item);};a.appendChild(copy);
+    var copy=document.createElement('button');copy.type='button';copy.className='icon-btn primary';copy.textContent='Copy to My Library';copy.onclick=function(ev){ev.stopPropagation();copySharedToLocal(item);};a.appendChild(copy);
     d.appendChild(a);wrap.appendChild(d);
   });
 }
@@ -1202,6 +1215,7 @@ function renderLibrary(){
   });
 }
 function loadItem(id){
+  state.sharedPreview=false;state.sharedPreviewMeta=null;
   var item = state.library.find(function(t){ return t.id===id; });
   if(!item) return;
   state.current = deepClone(item);
@@ -1213,6 +1227,7 @@ function loadItem(id){
   renderLibrary();
 }
 function startNewRoute(){
+  state.sharedPreview=false;state.sharedPreviewMeta=null;
   var center = map.getCenter();
   state.current = {id:uid(), type:'route', name:'New route', color:'#2563a8', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
   state.currentId = null; state.selection = null; state.history=[]; state.future=[]; state.extend=null;
@@ -1324,6 +1339,7 @@ function getCss(varName){
   return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#2563a8';
 }
 function selectPoint(seg,pt){
+  if(state.sharedPreview)return;
   if(state.mode==='move' || state.mode==='extend') return;
   state.selection = {seg:seg, pt:pt}; render(); highlightTrackInLibrary(true);
 }
@@ -1467,6 +1483,11 @@ function armConfirm(btn, action){
 }
 function refreshToolbar(){
   var hasTrack=!!state.current, sel=state.selection;
+  if(state.sharedPreview){
+    ['splitAfterBtn','joinNextBtn','movePointBtn','extendTrackBtn','deletePointBtn','deleteSegBtn','reverseBtn','undoBtn','redoBtn','deleteTrackBtn','saveBtn'].forEach(function(k){if(els[k])els[k].disabled=true;});
+    els.exportBtn.disabled=!hasTrack;
+    return;
+  }
   var seg = (sel && state.current) ? segAt(sel.seg) : null;
   els.splitAfterBtn.disabled = !sel || !seg || sel.pt<=0 || sel.pt>=seg.length-1;
   var selSegEnd=selectedSegmentEndpoint();
