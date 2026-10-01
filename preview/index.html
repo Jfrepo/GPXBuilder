@@ -171,13 +171,14 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 .fuel-marker{background:#b91c1c;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45);width:14px;height:14px}
 .fuel-popup{font:500 12px/1.35 'Source Sans 3',sans-serif;min-width:180px}.fuel-popup strong{font-size:13px}.fuel-popup .muted{color:#68737d;font-size:11px}
 .location-controls{display:flex;flex-direction:column;gap:4px;margin-bottom:22px!important}
-.location-control-btn{display:block;min-width:78px;height:32px;border:0;border-radius:3px;background:#fff;color:#333;box-shadow:0 1px 5px rgba(0,0,0,.35);font:700 11px/32px 'Source Sans 3',sans-serif;text-align:center;cursor:pointer;padding:0 8px}
+.location-control-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:0;border-radius:50%;background:#fff;color:#333;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:pointer;padding:0}
+.location-control-btn svg{width:18px;height:18px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.location-control-btn .nav-fill{fill:currentColor;stroke:currentColor}
 .location-control-btn.on{background:#2563a8;color:#fff}
 .location-control-btn.error{background:#b91c1c;color:#fff}
 .user-location-dot{width:16px;height:16px;border:3px solid #fff;border-radius:50%;background:#2563a8;box-shadow:0 1px 5px rgba(0,0,0,.55)}
 .user-heading-arrow{width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:18px solid #2563a8;filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));transform-origin:50% 70%}
 #mapDiv.heading-up .leaflet-map-pane{will-change:transform}
-@media(max-width:767px){.location-control-btn{min-width:72px;height:30px;line-height:30px;font-size:10px}.location-controls{margin-bottom:18px!important}}
+@media(max-width:767px){.location-control-btn{width:32px;height:32px}.location-controls{margin-bottom:18px!important}}
 </style>
 </head>
 <body>
@@ -548,8 +549,8 @@ var LocationControls=L.Control.extend({
   options:{position:'bottomleft'},
   onAdd:function(){
     var box=L.DomUtil.create('div','location-controls');
-    var loc=L.DomUtil.create('button','location-control-btn',box);loc.type='button';loc.textContent='My Location';loc.title='Show and follow current location';
-    var head=L.DomUtil.create('button','location-control-btn',box);head.type='button';head.textContent='North';head.title='Switch between north-up and direction-of-travel';
+    var loc=L.DomUtil.create('button','location-control-btn',box);loc.type='button';loc.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg>';loc.title='Show current location';loc.setAttribute('aria-label','Show current location');
+    var head=L.DomUtil.create('button','location-control-btn',box);head.type='button';head.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path class="nav-fill" d="M12 3l6 17-6-4-6 4z"></path></svg>';head.title='North up — tap for heading up';head.setAttribute('aria-label','North up. Tap for heading up');
     L.DomEvent.disableClickPropagation(box);L.DomEvent.disableScrollPropagation(box);
     L.DomEvent.on(loc,'click',function(){startLocationFollow(true);});
     L.DomEvent.on(head,'click',function(){setHeadingUp(!headingUp);});
@@ -568,7 +569,7 @@ function setMapBearing(deg){
 }
 function setHeadingUp(on){
   headingUp=on;
-  if(locationControls._head){locationControls._head.textContent=on?'Heading':'North';locationControls._head.classList.toggle('on',on);}
+  if(locationControls._head){locationControls._head.classList.toggle('on',on);locationControls._head.title=on?'Heading up — tap for north up':'North up — tap for heading up';locationControls._head.setAttribute('aria-label',on?'Heading up. Tap for north up':'North up. Tap for heading up');}
   if(on){startLocationFollow(false);requestDeviceHeading();if(lastHeading!=null)setMapBearing(lastHeading);}
   else setMapBearing(null);
 }
@@ -581,14 +582,14 @@ function updateUserLocation(pos){
   else userHeadingMarker.setLatLng(ll);
   var arrow=userHeadingMarker.getElement()&&userHeadingMarker.getElement().querySelector('.user-heading-arrow');
   if(arrow&&lastHeading!=null)arrow.style.transform='rotate('+lastHeading+'deg)';
-  if(locationControls._loc){locationControls._loc.classList.add('on');locationControls._loc.classList.remove('error');locationControls._loc.textContent='Following';}
+  if(locationControls._loc){locationControls._loc.classList.add('on');locationControls._loc.classList.remove('error');locationControls._loc.title='Following current location';locationControls._loc.setAttribute('aria-label','Following current location');}
   map.panTo(ll,{animate:true});
   if(headingUp&&lastHeading!=null)setMapBearing(lastHeading);
 }
 function startLocationFollow(recenter){
-  if(!navigator.geolocation){if(locationControls._loc){locationControls._loc.textContent='No GPS';locationControls._loc.classList.add('error');}return;}
+  if(!navigator.geolocation){if(locationControls._loc){locationControls._loc.title='Location unavailable';locationControls._loc.setAttribute('aria-label','Location unavailable');locationControls._loc.classList.add('error');}return;}
   if(locationWatchId==null)locationWatchId=navigator.geolocation.watchPosition(updateUserLocation,function(){
-    if(locationControls._loc){locationControls._loc.textContent='GPS blocked';locationControls._loc.classList.add('error');}
+    if(locationControls._loc){locationControls._loc.title='Location permission blocked';locationControls._loc.setAttribute('aria-label','Location permission blocked');locationControls._loc.classList.add('error');}
   },{enableHighAccuracy:true,maximumAge:2000,timeout:12000});
   if(recenter&&lastUserLatLng)map.setView(lastUserLatLng,Math.max(map.getZoom(),15));
 }
