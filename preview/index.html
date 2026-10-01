@@ -55,7 +55,7 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .library-tab{min-height:32px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font:700 .74rem 'Source Sans 3',sans-serif;cursor:pointer}
 .library-tab.on{background:var(--accent);border-color:var(--accent);color:var(--accent-contrast)}
 .shared-toolbar{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:.38rem .55rem;border-bottom:1px solid var(--border);font-size:.68rem;color:var(--text-muted)}
-.shared-item{padding:.42rem .5rem;border-bottom:1px solid var(--border)}
+.shared-item{padding:.42rem .5rem;border-bottom:1px solid var(--border)}.shared-item.active{background:var(--surface-2);box-shadow:inset 4px 0 0 var(--accent)}
 .shared-item-name{font-weight:700;font-size:.8rem;line-height:1.15}
 .shared-item-meta{font-size:.66rem;color:var(--text-muted);margin:.18rem 0 .32rem}
 .shared-item-actions{display:flex;gap:5px}.shared-item-actions .icon-btn{min-height:28px;padding:.2rem .42rem;font-size:.68rem}
@@ -1134,7 +1134,8 @@ function renderSharedLibrary(){
     var n=document.createElement('div');n.className='shared-item-name';n.textContent=item.name||'Unnamed track';d.appendChild(n);
     var m=document.createElement('div');m.className='shared-item-meta';m.textContent='v'+(item.version||1)+' · '+(item.modifiedBy||'Unknown')+' · '+fmtSharedDate(item.modifiedAt);d.appendChild(m);
     var a=document.createElement('div');a.className='shared-item-actions';
-    var copy=document.createElement('button');copy.type='button';copy.className='icon-btn primary';copy.textContent='Copy to My Library';copy.onclick=function(ev){ev.stopPropagation();copySharedToLocal(item);};a.appendChild(copy);
+    var preview=document.createElement('button');preview.type='button';preview.className='icon-btn';preview.textContent=(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===item.id)?'Previewing':'Preview';preview.onclick=function(ev){ev.preventDefault();ev.stopPropagation();previewSharedTrack(item);};a.appendChild(preview);
+    var copy=document.createElement('button');copy.type='button';copy.className='icon-btn primary';copy.textContent='Copy to My Library';copy.onclick=function(ev){ev.preventDefault();ev.stopPropagation();copySharedToLocal(item);};a.appendChild(copy);
     d.appendChild(a);wrap.appendChild(d);
   });
 }
