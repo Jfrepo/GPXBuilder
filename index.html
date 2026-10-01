@@ -1439,38 +1439,23 @@ function completeJoinToLibraryPoint(targetId,targetSeg,targetPt){
   var targetItem=state.library.find(function(t){return t.id===targetId;});if(!targetItem)return;
   var sourceItem=deepClone(state.current);
   var sourceSeg=sourceItem.segments[from.seg],destSeg=targetItem.segments[targetSeg];
-  if(!sourceSeg||!destSeg||!destSeg[targetPt])return;
+  if(!sourceSeg||!sourceSeg[from.pt]||!destSeg||!destSeg[targetPt])return;
 
-  // Build one continuous geometry: complete Track A -> connector -> complete Track B.
-  // Flatten all source segments in their stored order.
-  var a=[];
-  sourceItem.segments.forEach(function(s){(s||[]).forEach(function(p){if(!a.length||a[a.length-1].lat!==p.lat||a[a.length-1].lon!==p.lon)a.push(deepClone(p));});});
-  if(from.side==='start')a.reverse();
+  // Cross-track Join To Point is non-destructive:
+  // retain every original segment from both tracks exactly as stored and add
+  // only a new connector segment between the two selected points.
+  var sourcePoint=deepClone(sourceSeg[from.pt]);
+  var targetPoint=deepClone(destSeg[targetPt]);
+  var combinedSegments=[];
+  sourceItem.segments.forEach(function(s){if(s&&s.length)combinedSegments.push(deepClone(s));});
+  if(sourcePoint.lat!==targetPoint.lat||sourcePoint.lon!==targetPoint.lon)combinedSegments.push([sourcePoint,targetPoint]);
+  targetItem.segments.forEach(function(s){if(s&&s.length)combinedSegments.push(deepClone(s));});
 
-  // Build Track B so the clicked point is the first point, while retaining all
-  // of its geometry. For the clicked segment, traverse from the clicked point
-  // to one end, then back through the clicked point to the other end.
-  var clicked=deepClone(destSeg[targetPt]);
-  var before=deepClone(destSeg.slice(0,targetPt)).reverse();
-  var after=deepClone(destSeg.slice(targetPt+1));
-  var b=[clicked].concat(after,before);
-  targetItem.segments.forEach(function(s,si){
-    if(si===targetSeg)return;
-    (s||[]).forEach(function(p){if(!b.length||b[b.length-1].lat!==p.lat||b[b.length-1].lon!==p.lon)b.push(deepClone(p));});
-  });
-
-  var joined=a.slice();
-  if(joined.length&&b.length){
-    var last=joined[joined.length-1],first=b[0];
-    if(last.lat!==first.lat||last.lon!==first.lon)joined.push(deepClone(first));
-    for(var i=1;i<b.length;i++)joined.push(deepClone(b[i]));
-  }else if(b.length)joined=b;
-
-  var now=new Date().toISOString(),combined={id:uid(),type:'track',name:(sourceItem.name||'Track A')+' + '+(targetItem.name||'Track B'),color:sourceItem.color||'#2563a8',segments:[joined],createdAt:now,updatedAt:now,visible:true};
+  var now=new Date().toISOString(),combined={id:uid(),type:'track',name:(sourceItem.name||'Track A')+' + '+(targetItem.name||'Track B'),color:sourceItem.color||'#2563a8',segments:combinedSegments,createdAt:now,updatedAt:now,visible:true};
   combined.stats=computeStats(combined);
   state.current=combined;state.currentId=null;state.selection=null;state.history=[];state.future=[];state.extend=null;state.joinFrom=null;state.mode='view';
   updateModeBanner();render();
-  openNameDialog({title:'Name joined track',value:combined.name,help:'Both complete original tracks are retained and unchanged. This saves one continuous combined track.',mode:'save'});
+  openNameDialog({title:'Name joined track',value:combined.name,help:'Both original tracks are preserved exactly. Only the selected point-to-point connector is added.',mode:'save'});
 }
 function completeJoinToPoint(targetSeg,targetPt){
   var from=state.joinFrom;if(!from||!state.current){state.mode='view';state.joinFrom=null;updateModeBanner();render();return;}
