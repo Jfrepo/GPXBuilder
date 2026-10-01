@@ -107,6 +107,13 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 @media (min-width: 900px){ .drawer-close, .hamburger{display:none;} }
 .tiny{font-size:.7rem;}
 .leaflet-marker-sel{filter:drop-shadow(0 0 2px var(--line-selected));}
+.mobile-library-toggle{display:none}
+@media(max-width:899px){
+ .mobile-library-toggle{display:flex;position:absolute;left:10px;top:10px;z-index:910;width:46px;height:46px;min-width:46px;align-items:center;justify-content:center;border:1px solid #c8cdd2;border-radius:6px;background:#fff;color:#222;box-shadow:0 1px 6px rgba(0,0,0,.3);font:700 24px/1 sans-serif;padding:0}
+ .drawer.open~.main{}
+ .drawer-close{display:none!important}
+ .leaflet-top.leaflet-left{top:58px}
+}
 /* ---------- Mobile UI v1.1: 80% map / compact controls ---------- */
 @media (max-width:767px){
  .topbar{min-height:48px;height:48px;padding:max(.2rem,env(safe-area-inset-top)) .45rem .2rem}
@@ -201,6 +208,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
   </div>
 
   <div class="layout">
+    <button class="mobile-library-toggle" id="mobileLibraryToggle" type="button" aria-label="Open track library" title="Track library">&#9776;</button>
     <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
     <div class="drawer" id="drawer">
       <div class="drawer-head">
@@ -351,7 +359,7 @@ var state = {
 };
 
 var els = {};
-["hamburgerBtn","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
+["hamburgerBtn","mobileLibraryToggle","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
  "mapWrap","desktopToolbarHost","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
@@ -1569,12 +1577,21 @@ els.pointsToggle.onclick = function(){
 };
 
 // ---------- drawer ----------
-function openDrawer(){ els.drawer.classList.add('open'); els.drawerBackdrop.classList.remove('hidden'); }
-function closeDrawer(){ els.drawer.classList.remove('open'); els.drawerBackdrop.classList.add('hidden'); }
+function syncMobileLibraryToggle(){
+  if(!els.mobileLibraryToggle)return;
+  var open=els.drawer.classList.contains('open');
+  els.mobileLibraryToggle.innerHTML=open?'&times;':'&#9776;';
+  els.mobileLibraryToggle.setAttribute('aria-label',open?'Close track library':'Open track library');
+  els.mobileLibraryToggle.title=open?'Close track library':'Track library';
+}
+function openDrawer(){ els.drawer.classList.add('open'); els.drawerBackdrop.classList.remove('hidden'); syncMobileLibraryToggle(); }
+function closeDrawer(){ els.drawer.classList.remove('open'); els.drawerBackdrop.classList.add('hidden'); syncMobileLibraryToggle(); }
 function closeDrawerMobile(){ if(window.innerWidth<900) closeDrawer(); }
 els.hamburgerBtn.onclick = openDrawer;
+els.mobileLibraryToggle.onclick=function(){if(els.drawer.classList.contains('open'))closeDrawer();else openDrawer();};
 els.drawerCloseBtn.onclick = closeDrawer;
 els.drawerBackdrop.onclick = closeDrawer;
+syncMobileLibraryToggle();
 
 setTimeout(function(){
   map.invalidateSize();
