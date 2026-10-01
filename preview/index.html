@@ -1437,21 +1437,39 @@ function completeJoinToLibraryPoint(targetId,targetSeg,targetPt){
   var from=state.joinFrom;if(!from||!state.current)return;
   if(targetId===from.trackId){completeJoinToPoint(targetSeg,targetPt);return;}
   var targetItem=state.library.find(function(t){return t.id===targetId;});if(!targetItem)return;
-  var sourceItem=deepClone(state.current),sourceSeg=sourceItem.segments[from.seg],destSeg=targetItem.segments[targetSeg];
+  var sourceItem=deepClone(state.current);
+  var sourceSeg=sourceItem.segments[from.seg],destSeg=targetItem.segments[targetSeg];
   if(!sourceSeg||!destSeg||!destSeg[targetPt])return;
-  var a=deepClone(sourceSeg),target=deepClone(destSeg[targetPt]);
-  if(from.side==='start')a.reverse();
-  if(a.length&&(a[a.length-1].lat!==target.lat||a[a.length-1].lon!==target.lon))a.push(target);
-  var left=deepClone(destSeg.slice(0,targetPt+1)),right=deepClone(destSeg.slice(targetPt));
-  var tail=left.length<=right.length?left.slice().reverse():right;
-  if(tail.length&&a.length&&tail[0].lat===a[a.length-1].lat&&tail[0].lon===a[a.length-1].lon)tail.shift();
-  var joined=a.concat(tail);
-  if(from.side==='start')joined.reverse();
-  var now=new Date().toISOString(),combined={id:uid(),type:'track',name:(sourceItem.name||'Track A')+' + '+(targetItem.name||'Track B'),color:sourceItem.color||'#2563a8',segments:[joined],createdAt:now,updatedAt:now,visible:true};
+
+  // Cross-track join keeps the complete geometry of both original tracks.
+  // Orient Track A so its selected endpoint is the final point.
+  var sourceSegments=deepClone(sourceItem.segments);
+  if(from.side==='start')sourceSegments=sourceSegments.slice().reverse().map(function(s){return s.slice().reverse();});
+
+  // Split Track B at the selected destination point, then order both sides so
+  // the selected point is first while retaining every point in Track B.
+  var before=deepClone(destSeg.slice(0,targetPt+1)).reverse();
+  var after=deepClone(destSeg.slice(targetPt));
+  if(before.length&&after.length&&before[0].lat===after[0].lat&&before[0].lon===after[0].lon)after.shift();
+  var targetJoined=before.concat(after);
+  var targetSegments=[targetJoined];
+  targetItem.segments.forEach(function(s,si){if(si!==targetSeg)targetSegments.push(deepClone(s));});
+
+  var aEnd=sourceSegments[sourceSegments.length-1]&&sourceSegments[sourceSegments.length-1][sourceSegments[sourceSegments.length-1].length-1];
+  var bStart=targetSegments[0]&&targetSegments[0][0];
+  var combinedSegments=sourceSegments;
+  if(aEnd&&bStart){
+    var connector=[deepClone(aEnd)];
+    if(aEnd.lat!==bStart.lat||aEnd.lon!==bStart.lon)connector.push(deepClone(bStart));
+    combinedSegments=combinedSegments.concat([connector]);
+  }
+  combinedSegments=combinedSegments.concat(targetSegments);
+
+  var now=new Date().toISOString(),combined={id:uid(),type:'track',name:(sourceItem.name||'Track A')+' + '+(targetItem.name||'Track B'),color:sourceItem.color||'#2563a8',segments:combinedSegments,createdAt:now,updatedAt:now,visible:true};
   combined.stats=computeStats(combined);
   state.current=combined;state.currentId=null;state.selection=null;state.history=[];state.future=[];state.extend=null;state.joinFrom=null;state.mode='view';
   updateModeBanner();render();
-  openNameDialog({title:'Name joined track',value:combined.name,help:'Both original tracks are unchanged. This will save a new combined track.',mode:'save'});
+  openNameDialog({title:'Name joined track',value:combined.name,help:'Both complete original tracks are retained and unchanged. This saves a new combined track.',mode:'save'});
 }
 function completeJoinToPoint(targetSeg,targetPt){
   var from=state.joinFrom;if(!from||!state.current){state.mode='view';state.joinFrom=null;updateModeBanner();render();return;}
