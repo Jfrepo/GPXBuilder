@@ -111,8 +111,9 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 @media (max-width:767px){
  .topbar{min-height:48px;height:48px;padding:max(.2rem,env(safe-area-inset-top)) .45rem .2rem}
  .brand .name{font-size:1.18rem}.hamburger{width:38px;min-width:38px;height:38px}
- .local-chip{font-size:0;width:26px;height:26px;min-width:26px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;gap:0;overflow:hidden;white-space:nowrap}
- .local-chip::first-letter{font-size:13px}
+ .local-chip{width:26px!important;height:26px!important;min-width:26px!important;max-width:26px!important;padding:0!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:0!important;overflow:hidden!important;white-space:nowrap!important;flex:0 0 26px!important}
+ .local-chip-label{display:none!important}
+ .local-chip-icon{display:block!important;font-size:13px!important;line-height:1!important;width:16px;text-align:center}
  .main{display:flex;flex-direction:column;height:calc(100dvh - 48px)}
  .map-wrap{flex:0 0 80%;height:80%;min-height:0}
  .dock{flex:0 0 20%;height:20%;max-height:20%;box-sizing:border-box;padding:.25rem .4rem calc(.25rem + env(safe-area-inset-bottom));overflow-y:auto}
@@ -193,7 +194,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
       <span class="name disp">Switchback Map</span>
       <span class="tag">Local edition &middot; real OpenStreetMap tiles</span>
     </div>
-    <span class="local-chip">&#128190; saved on this device only</span>
+    <span class="local-chip" title="Saved on this device only" aria-label="Saved on this device only"><span class="local-chip-icon" aria-hidden="true">&#128190;</span><span class="local-chip-label">saved on this device only</span></span>
     <input type="file" id="fileInput" accept=".gpx" multiple class="hidden">
     <button class="icon-btn" id="importBtn">Import</button>
     <button class="icon-btn primary" id="saveBtn">Save</button>
