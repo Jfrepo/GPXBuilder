@@ -236,7 +236,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
         <div class="track-list" id="trackList"><div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div></div>
       </div>
       <div id="sharedLibraryPanel" class="hidden">
-        <div class="shared-toolbar"><span class="shared-readonly">Read only</span><button class="icon-btn" id="refreshSharedBtn" type="button">Refresh</button></div>
+        <div class="shared-toolbar"><label>User <select id="sharedUserSelect" title="Shared Library identity"><option value="Justin">Justin</option><option value="Paul">Paul</option></select></label><span class="shared-readonly">Read only</span><button class="icon-btn" id="refreshSharedBtn" type="button">Refresh</button></div>
         <div class="track-list" id="sharedTrackList"><div class="empty-note">Loading shared tracks…</div></div>
       </div>
     </div>
@@ -358,6 +358,8 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 "use strict";
 
 var STORAGE_KEY = 'switchback_local_tracks_v1';
+var SHARED_USER_KEY = 'mancardo_shared_user_v1';
+var SHARED_API = 'https://mancardo-api.jayfenno.workers.dev';
 
 var state = {
   library: [],
@@ -378,7 +380,7 @@ var state = {
 };
 
 var els = {};
-["hamburgerBtn","mobileLibraryToggle","drawer","drawerBackdrop","drawerCloseBtn","trackList","sharedTrackList","myLibraryTab","sharedLibraryTab","myLibraryPanel","sharedLibraryPanel","refreshSharedBtn","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
+["hamburgerBtn","mobileLibraryToggle","drawer","drawerBackdrop","drawerCloseBtn","trackList","sharedTrackList","myLibraryTab","sharedLibraryTab","myLibraryPanel","sharedLibraryPanel","refreshSharedBtn","sharedUserSelect","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
  "mapWrap","desktopToolbarHost","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
@@ -1103,12 +1105,12 @@ function setLibraryView(view){
 function fmtSharedDate(iso){try{return new Date(iso).toLocaleString();}catch(e){return iso||'';}}
 function loadSharedLibrary(){
   els.sharedTrackList.innerHTML='<div class="empty-note">Loading shared tracks…</div>';
-  fetch('shared/library.json?ts='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
+  fetch(SHARED_API+'/api/tracks',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
     state.sharedLibrary=Array.isArray(data.tracks)?data.tracks:[];
     renderSharedLibrary();
-  }).catch(function(){
+  }).catch(function(e){
     state.sharedLibrary=[];
-    els.sharedTrackList.innerHTML='<div class="empty-note">Shared Library is not available yet. My Library is unaffected.</div>';
+    els.sharedTrackList.innerHTML='<div class="empty-note">Shared Library is unavailable. '+esc(e.message||'Connection error')+'</div>';
   });
 }
 function renderSharedLibrary(){
@@ -1124,12 +1126,11 @@ function renderSharedLibrary(){
   });
 }
 function copySharedToLocal(meta){
-  if(!meta.file){alert('This shared track has no GPX file attached.');return;}
-  fetch(meta.file+'?ts='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
     if(!parsed.length)throw new Error('No track data');
     parsed.forEach(function(item){
-      item.sharedId=meta.id||meta.file;
+      item.sharedId=meta.id;
       item.sharedBaseVersion=meta.version||1;
       item.sharedBaseModifiedAt=meta.modifiedAt||null;
       item.sharedBaseModifiedBy=meta.modifiedBy||null;
@@ -1138,21 +1139,25 @@ function copySharedToLocal(meta){
       item.visible=true;
       state.library.push(item);
     });
-    persistLibrary();renderLibrary();setLibraryView('my');
-    loadItem(parsed[0].id);
-  }).catch(function(){alert('Could not copy this shared GPX to My Library.');});
+    persistLibrary();renderLibrary();setLibraryView('my');loadItem(parsed[0].id);
+  }).catch(function(e){alert('Could not copy this shared GPX to My Library. '+(e.message||''));});
 }
 function publishTrackToShared(id){
   var item=state.library.find(function(t){return t.id===id;});if(!item)return;
-  var shared=item.sharedId?state.sharedLibrary.find(function(s){return s.id===item.sharedId;}):null;
-  if(shared&&item.sharedBaseVersion&&shared.version>item.sharedBaseVersion){
-    alert('A newer shared version exists. Your copy is based on v'+item.sharedBaseVersion+', while Shared Library is v'+shared.version+' modified by '+(shared.modifiedBy||'another user')+'. Refresh/copy the latest version before publishing.');
-    return;
-  }
-  var stamp=new Date().toISOString().replace(/[:.]/g,'-');
-  var blob=new Blob([buildGpx(item)],{type:'application/gpx+xml'}),a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);a.download=(item.name||'track').replace(/[^a-z0-9._-]+/gi,'_')+'_publish_'+stamp+'.gpx';a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-  alert('Publish package created. Automatic Shared Library upload is waiting for the shared write backend; no credentials are embedded in ManCardo.');
+  var who=els.sharedUserSelect.value||'Justin';
+  var endpoint=item.sharedId?SHARED_API+'/api/tracks/'+encodeURIComponent(item.sharedId)+'/publish':SHARED_API+'/api/tracks';
+  var payload=item.sharedId?{modifiedBy:who,gpx:buildGpx(item),basedOnVersion:item.sharedBaseVersion}:{name:item.name,modifiedBy:who,gpx:buildGpx(item)};
+  fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
+    return r.json().catch(function(){return {};}).then(function(data){if(!r.ok){var err=new Error(data.error||('HTTP '+r.status));err.status=r.status;err.data=data;throw err;}return data;});
+  }).then(function(data){
+    item.sharedId=data.id;item.sharedBaseVersion=data.version;item.sharedBaseModifiedAt=data.modifiedAt;item.sharedBaseModifiedBy=data.modifiedBy;item.updatedAt=new Date().toISOString();
+    if(state.currentId===item.id)state.current=deepClone(item);
+    persistLibrary();renderLibrary();loadSharedLibrary();
+    alert('Published to Shared Library as v'+data.version+' · '+data.modifiedBy+'.');
+  }).catch(function(e){
+    if(e.status===409){alert('A newer Shared version exists. Your copy is based on v'+(item.sharedBaseVersion||'?')+', while Shared Library is v'+((e.data&&e.data.currentVersion)||'?')+'. Copy the latest Shared version before publishing.');}
+    else alert('Publish failed. '+(e.message||'Please try again.'));
+  });
 }
 function renderLibrary(){
   var wrap=els.trackList;wrap.innerHTML='';
@@ -1660,6 +1665,8 @@ els.pointsToggle.onclick = function(){
 els.myLibraryTab.onclick=function(){setLibraryView('my');};
 els.sharedLibraryTab.onclick=function(){setLibraryView('shared');};
 els.refreshSharedBtn.onclick=loadSharedLibrary;
+try{els.sharedUserSelect.value=localStorage.getItem(SHARED_USER_KEY)||'Justin';}catch(e){}
+els.sharedUserSelect.onchange=function(){try{localStorage.setItem(SHARED_USER_KEY,els.sharedUserSelect.value);}catch(e){}};
 
 // ---------- drawer ----------
 function syncMobileLibraryToggle(){
