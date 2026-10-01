@@ -1088,6 +1088,29 @@ function selectPoint(seg,pt){
 
 // ---------- editing operations ----------
 function segAt(i){ return state.current.segments[i]; }
+function interpolateTrackPoint(a,b,f){
+  var p={lat:a.lat+(b.lat-a.lat)*f,lon:a.lon+(b.lon-a.lon)*f};
+  if(a.ele!=null&&b.ele!=null)p.ele=a.ele+(b.ele-a.ele)*f;
+  return p;
+}
+function trimSegmentEndByDistance(seg,metres){
+  var out=deepClone(seg),remaining=metres;
+  while(out.length>1&&remaining>0){
+    var a=out[out.length-2],b=out[out.length-1],d=haversine(a,b);
+    if(d<=remaining){remaining-=d;out.pop();}
+    else{out[out.length-1]=interpolateTrackPoint(b,a,remaining/d);remaining=0;}
+  }
+  return out;
+}
+function trimSegmentStartByDistance(seg,metres){
+  var out=deepClone(seg),remaining=metres;
+  while(out.length>1&&remaining>0){
+    var a=out[0],b=out[1],d=haversine(a,b);
+    if(d<=remaining){remaining-=d;out.shift();}
+    else{out[0]=interpolateTrackPoint(a,b,remaining/d);remaining=0;}
+  }
+  return out;
+}
 function nextTrackSuffixName(name){
   var base=String(name||'Track').replace(/\.\d+$/,'');
   var n=1;while(state.library.some(function(t){return String(t.name||'')===base+'.'+n;}))n++;
@@ -1101,8 +1124,10 @@ function splitAfter(){
   var original=deepClone(state.current),now=new Date().toISOString();
   var firstSegs=original.segments.slice(0,si).map(function(s){return deepClone(s);});
   var secondSegs=original.segments.slice(si+1).map(function(s){return deepClone(s);});
-  firstSegs.push(deepClone(seg.slice(0,pi+1)));
-  secondSegs.unshift(deepClone(seg.slice(pi)));
+  var firstSplitSeg=trimSegmentEndByDistance(seg.slice(0,pi+1),50);
+  var secondSplitSeg=trimSegmentStartByDistance(seg.slice(pi),50);
+  if(firstSplitSeg.length)firstSegs.push(firstSplitSeg);
+  if(secondSplitSeg.length)secondSegs.unshift(secondSplitSeg);
 
   var first=deepClone(original);
   first.segments=firstSegs;first.updatedAt=now;first.stats=computeStats(first);
