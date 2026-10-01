@@ -51,6 +51,16 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .drawer{width:280px; flex:none; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0;}
 .drawer-head{padding:.8rem .9rem .5rem; display:flex; align-items:center; justify-content:space-between;}
 .track-list{overflow-y:auto;flex:1;padding:.18rem .3rem;}
+.library-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:.38rem .55rem;border-bottom:1px solid var(--border)}
+.library-tab{min-height:32px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font:700 .74rem 'Source Sans 3',sans-serif;cursor:pointer}
+.library-tab.on{background:var(--accent);border-color:var(--accent);color:var(--accent-contrast)}
+.shared-toolbar{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:.38rem .55rem;border-bottom:1px solid var(--border);font-size:.68rem;color:var(--text-muted)}
+.shared-item{padding:.42rem .5rem;border-bottom:1px solid var(--border)}
+.shared-item-name{font-weight:700;font-size:.8rem;line-height:1.15}
+.shared-item-meta{font-size:.66rem;color:var(--text-muted);margin:.18rem 0 .32rem}
+.shared-item-actions{display:flex;gap:5px}.shared-item-actions .icon-btn{min-height:28px;padding:.2rem .42rem;font-size:.68rem}
+.shared-readonly{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+
 .track-item{display:flex;flex-direction:column;gap:.05rem;padding:.28rem .45rem;border-radius:4px;border:1px solid transparent;margin-bottom:.06rem;}
 .track-item:hover{background:var(--surface-2);}
 .track-item.active{border-color:var(--accent);background:var(--surface-2);box-shadow:inset 4px 0 0 var(--accent)}
@@ -220,8 +230,15 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
           <button class="icon-btn drawer-close" id="drawerCloseBtn">&times;</button>
         </div>
       </div>
-      <label id="selectAllWrap" style="display:flex;align-items:center;gap:.45rem;padding:.45rem .6rem;border-bottom:1px solid var(--border);font-size:.78rem;font-weight:600;"><input type="checkbox" id="selectAllTracks"> <span>Select / Deselect all tracks</span></label>
-      <div class="track-list" id="trackList"><div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div></div>
+      <div class="library-tabs"><button class="library-tab on" id="myLibraryTab" type="button">My Library</button><button class="library-tab" id="sharedLibraryTab" type="button">Shared Library</button></div>
+      <div id="myLibraryPanel">
+        <label id="selectAllWrap" style="display:flex;align-items:center;gap:.45rem;padding:.45rem .6rem;border-bottom:1px solid var(--border);font-size:.78rem;font-weight:600;"><input type="checkbox" id="selectAllTracks"> <span>Select / Deselect all tracks</span></label>
+        <div class="track-list" id="trackList"><div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div></div>
+      </div>
+      <div id="sharedLibraryPanel" class="hidden">
+        <div class="shared-toolbar"><span class="shared-readonly">Read only</span><button class="icon-btn" id="refreshSharedBtn" type="button">Refresh</button></div>
+        <div class="track-list" id="sharedTrackList"><div class="empty-note">Loading shared tracks…</div></div>
+      </div>
     </div>
 
     <div class="main">
@@ -344,6 +361,8 @@ var STORAGE_KEY = 'switchback_local_tracks_v1';
 
 var state = {
   library: [],
+  sharedLibrary: [],
+  libraryView: 'my',
   current: null,
   currentId: null,
   selection: null,
@@ -359,7 +378,7 @@ var state = {
 };
 
 var els = {};
-["hamburgerBtn","mobileLibraryToggle","drawer","drawerBackdrop","drawerCloseBtn","trackList","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
+["hamburgerBtn","mobileLibraryToggle","drawer","drawerBackdrop","drawerCloseBtn","trackList","sharedTrackList","myLibraryTab","sharedLibraryTab","myLibraryPanel","sharedLibraryPanel","refreshSharedBtn","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
  "mapWrap","desktopToolbarHost","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
@@ -1073,6 +1092,68 @@ els.selectAllTracks.onchange=function(){
   if(state.current)state.current.visible=visible;
   persistLibrary();renderLibrary();render();
 };
+function setLibraryView(view){
+  state.libraryView=view==='shared'?'shared':'my';
+  els.myLibraryPanel.classList.toggle('hidden',state.libraryView!=='my');
+  els.sharedLibraryPanel.classList.toggle('hidden',state.libraryView!=='shared');
+  els.myLibraryTab.classList.toggle('on',state.libraryView==='my');
+  els.sharedLibraryTab.classList.toggle('on',state.libraryView==='shared');
+  if(state.libraryView==='shared')loadSharedLibrary();
+}
+function fmtSharedDate(iso){try{return new Date(iso).toLocaleString();}catch(e){return iso||'';}}
+function loadSharedLibrary(){
+  els.sharedTrackList.innerHTML='<div class="empty-note">Loading shared tracks…</div>';
+  fetch('shared/library.json?ts='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
+    state.sharedLibrary=Array.isArray(data.tracks)?data.tracks:[];
+    renderSharedLibrary();
+  }).catch(function(){
+    state.sharedLibrary=[];
+    els.sharedTrackList.innerHTML='<div class="empty-note">Shared Library is not available yet. My Library is unaffected.</div>';
+  });
+}
+function renderSharedLibrary(){
+  var wrap=els.sharedTrackList;wrap.innerHTML='';
+  if(!state.sharedLibrary.length){wrap.innerHTML='<div class="empty-note">No shared tracks have been published yet.</div>';return;}
+  state.sharedLibrary.slice().sort(function(a,b){return String(b.modifiedAt||'').localeCompare(String(a.modifiedAt||''));}).forEach(function(item){
+    var d=document.createElement('div');d.className='shared-item';
+    var n=document.createElement('div');n.className='shared-item-name';n.textContent=item.name||'Unnamed track';d.appendChild(n);
+    var m=document.createElement('div');m.className='shared-item-meta';m.textContent='v'+(item.version||1)+' · '+(item.modifiedBy||'Unknown')+' · '+fmtSharedDate(item.modifiedAt);d.appendChild(m);
+    var a=document.createElement('div');a.className='shared-item-actions';
+    var copy=document.createElement('button');copy.type='button';copy.className='icon-btn primary';copy.textContent='Copy to My Library';copy.onclick=function(){copySharedToLocal(item);};a.appendChild(copy);
+    d.appendChild(a);wrap.appendChild(d);
+  });
+}
+function copySharedToLocal(meta){
+  if(!meta.file){alert('This shared track has no GPX file attached.');return;}
+  fetch(meta.file+'?ts='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+    var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
+    if(!parsed.length)throw new Error('No track data');
+    parsed.forEach(function(item){
+      item.sharedId=meta.id||meta.file;
+      item.sharedBaseVersion=meta.version||1;
+      item.sharedBaseModifiedAt=meta.modifiedAt||null;
+      item.sharedBaseModifiedBy=meta.modifiedBy||null;
+      item.name=meta.name||item.name;
+      item.updatedAt=new Date().toISOString();
+      item.visible=true;
+      state.library.push(item);
+    });
+    persistLibrary();renderLibrary();setLibraryView('my');
+    loadItem(parsed[0].id);
+  }).catch(function(){alert('Could not copy this shared GPX to My Library.');});
+}
+function publishTrackToShared(id){
+  var item=state.library.find(function(t){return t.id===id;});if(!item)return;
+  var shared=item.sharedId?state.sharedLibrary.find(function(s){return s.id===item.sharedId;}):null;
+  if(shared&&item.sharedBaseVersion&&shared.version>item.sharedBaseVersion){
+    alert('A newer shared version exists. Your copy is based on v'+item.sharedBaseVersion+', while Shared Library is v'+shared.version+' modified by '+(shared.modifiedBy||'another user')+'. Refresh/copy the latest version before publishing.');
+    return;
+  }
+  var stamp=new Date().toISOString().replace(/[:.]/g,'-');
+  var blob=new Blob([buildGpx(item)],{type:'application/gpx+xml'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=(item.name||'track').replace(/[^a-z0-9._-]+/gi,'_')+'_publish_'+stamp+'.gpx';a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+  alert('Publish package created. Automatic Shared Library upload is waiting for the shared write backend; no credentials are embedded in Switchback.');
+}
 function renderLibrary(){
   var wrap=els.trackList;wrap.innerHTML='';
   updateSelectAll();
@@ -1098,7 +1179,7 @@ function renderLibrary(){
     }
     if(state.trackMenuId===item.id){
       var menu=document.createElement('div');menu.className='track-menu';
-      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],[item.draft?'Remove Draft':'Draft',function(){toggleDraft(item.id)}],['Note',function(){toggleNote(item.id)}],['Copy',function(){copyTrack(item.id)}],['Paste',pasteTrack]].forEach(function(x){
+      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],[item.draft?'Remove Draft':'Draft',function(){toggleDraft(item.id)}],['Note',function(){toggleNote(item.id)}],['Copy',function(){copyTrack(item.id)}],['Publish to Shared',function(){publishTrackToShared(item.id)}],['Paste',pasteTrack]].forEach(function(x){
         var b=document.createElement('button');b.type='button';b.textContent=x[0];if(x[0]==='Paste'&&!state.clipboardTrack)b.disabled=true;
         b.onclick=function(ev){ev.stopPropagation();x[1]();};menu.appendChild(b);
       });d.appendChild(menu);
@@ -1576,6 +1657,10 @@ els.pointsToggle.onclick = function(){
   if(!hidden) renderPointsTable();
 };
 
+els.myLibraryTab.onclick=function(){setLibraryView('my');};
+els.sharedLibraryTab.onclick=function(){setLibraryView('shared');};
+els.refreshSharedBtn.onclick=loadSharedLibrary;
+
 // ---------- drawer ----------
 function syncMobileLibraryToggle(){
   if(!els.mobileLibraryToggle)return;
@@ -1602,6 +1687,7 @@ window.addEventListener('resize', function(){ map.invalidateSize(); });
 // ---------- boot ----------
 loadLibrary();
 renderLibrary();
+loadSharedLibrary();
 refreshDock();
 map.setView([-32.5,147.0], 6);
 })();
