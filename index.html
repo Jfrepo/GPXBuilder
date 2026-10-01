@@ -170,6 +170,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 .fuel-control-btn.on{background:#b91c1c;color:#fff}
 .fuel-control-btn.loading{opacity:.65}
 .fuel-marker{background:#b91c1c;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45);width:14px;height:14px}
+.fuel-direct{display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:5px 8px;border-radius:16px;background:#2563a8;color:#fff!important;text-decoration:none!important;font-weight:700;font-size:11px}.fuel-direct svg{width:14px;height:14px;fill:currentColor}.fuel-control-btn.error{background:#b91c1c!important;color:#fff!important}
 .fuel-popup{font:500 12px/1.35 'Source Sans 3',sans-serif;min-width:180px}.fuel-popup strong{font-size:13px}.fuel-popup .muted{color:#68737d;font-size:11px}
 .location-controls{display:flex;flex-direction:column;gap:4px;margin-bottom:22px!important}
 .location-control-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:0;border-radius:50%;background:#fff;color:#333;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:pointer;padding:0}
@@ -628,7 +629,8 @@ setTimeout(function(){
   if(el){el.style.marginTop='0';el.style.clear='both';}
 },0);
 
-var fuelLayer=L.layerGroup().addTo(map),fuelOn=false,fuelRequest=0,fuelRefreshTimer=null;
+var fuelLayer=L.layerGroup().addTo(map),fuelOn=false,fuelRequest=0,fuelRefreshTimer=null,fuelLastKey='',fuelLastAt=0;
+var FUEL_OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.nchc.org.tw/api/interpreter'];
 var fuelIcon=L.divIcon({className:'',html:'<div class="fuel-marker"></div>',iconSize:[14,14],iconAnchor:[7,7]});
 var FuelControl=L.Control.extend({
   options:{position:'topleft'},
@@ -637,7 +639,7 @@ var FuelControl=L.Control.extend({
     L.DomEvent.disableClickPropagation(btn);L.DomEvent.disableScrollPropagation(btn);
     L.DomEvent.on(btn,'click',function(){
       fuelOn=!fuelOn;btn.classList.toggle('on',fuelOn);
-      if(fuelOn)refreshFuelStations();else{fuelRequest++;fuelLayer.clearLayers();btn.classList.remove('loading');}
+      if(fuelOn){fuelLastKey='';refreshFuelStations();}else{fuelRequest++;fuelLayer.clearLayers();fuelLastKey='';btn.classList.remove('loading','error');}
     });
     this._button=btn;return btn;
   }
@@ -659,14 +661,22 @@ function fuelIsActive(t){
     !t['disused:amenity']&&!t['abandoned:amenity']&&!t['demolished:amenity']&&!t['construction:amenity']&&
     !/^(no|private)$/i.test(String(t.access||''));
 }
-function fuelPopup(t){
+function fuelPopup(t,lat,lon){
   var name=t.name||t.brand||t.operator||'Fuel station',brand=t.brand&&t.brand!==name?t.brand:'';
   var address=[t['addr:housenumber'],t['addr:street'],t['addr:suburb']||t['addr:city'],t['addr:postcode']].filter(Boolean).join(' ');
   var hours=t.opening_hours||'',phone=t.phone||t['contact:phone']||'';
+  var apple='https://maps.apple.com/directions?destination='+encodeURIComponent((+lat).toFixed(6)+','+(+lon).toFixed(6))+'&mode=driving';
   return '<div class="fuel-popup"><strong>'+escHtml(name)+'</strong>'+
     (brand?'<br>'+escHtml(brand):'')+(address?'<br>'+escHtml(address):'')+
     (hours?'<br><b>Hours:</b> '+escHtml(hours):'')+(phone?'<br><b>Phone:</b> '+escHtml(phone):'')+
-    '<br><span class="muted">Active fuel POI · OpenStreetMap</span></div>';
+    '<br><a class="fuel-direct" href="'+apple+'" target="_blank" rel="noopener" aria-label="Direct to '+escHtml(name)+' using Apple Maps" title="Navigate with Apple Maps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l7 19-7-5-7 5z"/></svg><span>Direct To</span></a>'+
+    '<br><span class="muted">Active mapped fuel POI · OpenStreetMap</span></div>';
+}
+function fetchFuelOverpass(q,index){
+  index=index||0;if(index>=FUEL_OVERPASS.length)return Promise.reject(new Error('All fuel data servers unavailable'));
+  var url=FUEL_OVERPASS[index]+'?data='+encodeURIComponent(q);
+  return fetch(url,{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .catch(function(){return fetchFuelOverpass(q,index+1);});
 }
 function refreshFuelStations(){
   if(!fuelOn)return;
@@ -678,16 +688,17 @@ function refreshFuelStations(){
     var id=++fuelRequest,btn=fuelControl._button;if(btn)btn.classList.add('loading');
     var bbox=[south,west,north,east].map(function(n){return n.toFixed(5)}).join(',');
     var q='[out:json][timeout:25];nwr["amenity"="fuel"]('+bbox+');out center tags;';
-    fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
-      if(id!==fuelRequest||!fuelOn)return;fuelLayer.clearLayers();
+    var cacheKey=bbox;if(cacheKey===fuelLastKey&&Date.now()-fuelLastAt<45000){if(btn){btn.classList.remove('loading','error');}return;}
+    fetchFuelOverpass(q,0).then(function(data){
+      if(id!==fuelRequest||!fuelOn)return;fuelLayer.clearLayers();fuelLastKey=cacheKey;fuelLastAt=Date.now();if(btn)btn.classList.remove('error');
       var seen={};(data.elements||[]).forEach(function(e){
         var t=e.tags||{};if(!fuelIsActive(t))return;
         var lat=e.lat!=null?e.lat:(e.center&&e.center.lat),lon=e.lon!=null?e.lon:(e.center&&e.center.lon);if(lat==null||lon==null)return;
         var key=(+lat).toFixed(5)+','+(+lon).toFixed(5);if(seen[key])return;seen[key]=1;
-        L.marker([lat,lon],{icon:fuelIcon,pane:'markerPane',title:t.name||t.brand||'Fuel station'}).bindPopup(fuelPopup(t)).addTo(fuelLayer);
+        L.marker([lat,lon],{icon:fuelIcon,pane:'markerPane',title:t.name||t.brand||'Fuel station'}).bindPopup(fuelPopup(t,lat,lon)).addTo(fuelLayer);
       });
       if(btn)btn.title='Fuel stations: '+Object.keys(seen).length+' active mapped in view';
-    }).catch(function(err){console.warn('Fuel station query failed',err);if(btn)btn.title='Fuel station lookup failed — click to retry';}).finally(function(){if(id===fuelRequest&&btn)btn.classList.remove('loading');});
+    }).catch(function(err){console.warn('Fuel station query failed',err);if(btn){btn.title='Fuel lookup temporarily unavailable — existing markers retained; move map or toggle Fuel to retry';btn.classList.add('error');}}).finally(function(){if(id===fuelRequest&&btn)btn.classList.remove('loading');});
   },300);
 }
 map.on('moveend',function(){if(fuelOn)refreshFuelStations();});
