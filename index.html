@@ -1425,7 +1425,16 @@ function selectedSegmentEndpoint(){
   return null;
 }
 function joinNext(){
-  var selected=selectedSegmentEndpoint();if(!selected||state.current.segments.length<2)return;
+  var selected=selectedSegmentEndpoint();if(!selected||!state.current)return;
+  if(state.current.segments.length===1){
+    var seg=state.current.segments[selected.seg];if(!seg||seg.length<2)return;
+    pushHistory();
+    var first=seg[0],last=seg[seg.length-1];
+    if(first.lat!==last.lat||first.lon!==last.lon)seg.push(deepClone(first));
+    state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
+    if(state.currentId){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
+    state.selection=null;state.future=[];state.extend=null;persistLibrary();renderLibrary();render();return;
+  }
   var best=null;
   state.current.segments.forEach(function(seg,si){
     if(si===selected.seg||!seg||!seg.length)return;
@@ -1505,7 +1514,7 @@ function refreshToolbar(){
   var seg = (sel && state.current) ? segAt(sel.seg) : null;
   els.splitAfterBtn.disabled = !sel || !seg || sel.pt<=0 || sel.pt>=seg.length-1;
   var selSegEnd=selectedSegmentEndpoint();
-  els.joinNextBtn.disabled = !selSegEnd || !state.current || state.current.segments.length<2;
+  els.joinNextBtn.disabled = !selSegEnd || !state.current || !seg || seg.length<2;
   els.movePointBtn.disabled = !sel || state.mode!=='view';
   els.extendTrackBtn.disabled = !sel || !seg || (sel.pt!==0 && sel.pt!==seg.length-1) || state.mode!=='view';
   els.deletePointBtn.disabled = !sel;
