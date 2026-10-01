@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Switchback Map</title>
+<title>ManCardo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -208,7 +208,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
   <div class="topbar">
     <button class="icon-btn hamburger" id="hamburgerBtn" title="Library">&#9776;</button>
     <div class="brand">
-      <span class="name disp">Switchback Map</span>
+      <span class="name disp">ManCardo</span>
       <span class="tag">Local edition &middot; real OpenStreetMap tiles</span>
     </div>
     <span class="local-chip" title="Saved on this device only" aria-label="Saved on this device only"><span class="local-chip-icon" aria-hidden="true">&#128190;</span><span class="local-chip-label">saved on this device only</span></span>
@@ -465,7 +465,7 @@ function computeStats(item){
   return {distanceMeters:dist, points:points, segments:segs, ascent: hasEle? Math.round(ascent): null};
 }
 
-// ---------- GPX parsing / building (same schema as Switchback) ----------
+// ---------- GPX parsing / building (same schema as ManCardo) ----------
 function parseGpxFile(text, filename){
   var doc;
   try{ doc = new DOMParser().parseFromString(text, 'application/xml'); } catch(e){ return []; }
@@ -517,7 +517,7 @@ function parsePts(nodeList){
 function buildGpx(item){
   var lines = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
-  lines.push('<gpx version="1.1" creator="Switchback Map" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
+  lines.push('<gpx version="1.1" creator="ManCardo" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
   var corners=cornerWaypoints(item);
   corners.forEach(function(w,i){
     lines.push('  <wpt lat="'+w.p.lat+'" lon="'+w.p.lon+'">');
@@ -1152,7 +1152,7 @@ function publishTrackToShared(id){
   var stamp=new Date().toISOString().replace(/[:.]/g,'-');
   var blob=new Blob([buildGpx(item)],{type:'application/gpx+xml'}),a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download=(item.name||'track').replace(/[^a-z0-9._-]+/gi,'_')+'_publish_'+stamp+'.gpx';a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-  alert('Publish package created. Automatic Shared Library upload is waiting for the shared write backend; no credentials are embedded in Switchback.');
+  alert('Publish package created. Automatic Shared Library upload is waiting for the shared write backend; no credentials are embedded in ManCardo.');
 }
 function renderLibrary(){
   var wrap=els.trackList;wrap.innerHTML='';
