@@ -1019,7 +1019,7 @@ function redo(){
 }
 
 // ---------- library UI ----------
-var TRACK_COLOURS=[{name:'Blue',value:'#2563a8'},{name:'Red',value:'#d43f3a'},{name:'Purple',value:'#7c3aed'},{name:'Yellow',value:'#e0a800'}];
+var TRACK_COLOURS=[{name:'Blue',value:'#2563a8'},{name:'Red',value:'#d43f3a'},{name:'Purple',value:'#7c3aed'},{name:'Yellow',value:'#e0a800'},{name:'Lime Green',value:'#32CD32'}];
 function defaultTrackColour(item){return item.color||(item.type==='route'?getCss('--warn'):getCss('--line-track'));}
 function setTrackColour(id,colour){
   var item=state.library.find(function(t){return t.id===id;}); if(!item)return;
