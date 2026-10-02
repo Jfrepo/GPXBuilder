@@ -1109,7 +1109,7 @@ function setLibraryView(view){
 function fmtSharedDate(iso){try{return new Date(iso).toLocaleString();}catch(e){return iso||'';}}
 function loadSharedLibrary(){
   els.sharedTrackList.innerHTML='<div class="empty-note">Loading shared tracks…</div>';
-  fetch(SHARED_API+'/api/tracks',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
+  fetch(SHARED_API+'/api/tracks',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
     state.sharedLibrary=Array.isArray(data.tracks)?data.tracks:[];
     renderSharedLibrary();
   }).catch(function(e){
@@ -1118,7 +1118,7 @@ function loadSharedLibrary(){
   });
 }
 function previewSharedTrack(meta){
-  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
     if(!parsed.length)throw new Error('No track data');
     var item=parsed[0];
@@ -1145,7 +1145,7 @@ function renderSharedLibrary(){
 function deleteSharedTrack(meta){
   if(!meta||!meta.id)return;
   if(!confirm('Delete "'+(meta.name||'this track')+'" from Shared Library?\n\nThis will permanently delete all Shared versions of this track.'))return;
-  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id),{method:'DELETE'}).then(function(r){
+  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id),{method:'DELETE',credentials:'include'}).then(function(r){
     return r.json().catch(function(){return {};}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data;});
   }).then(function(){
     if(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===meta.id){
@@ -1155,7 +1155,7 @@ function deleteSharedTrack(meta){
   }).catch(function(e){alert('Could not delete this Shared track. '+(e.message||''));});
 }
 function copySharedToLocal(meta){
-  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
     if(!parsed.length)throw new Error('No track data');
     parsed.forEach(function(item){
