@@ -572,7 +572,7 @@ var map = L.map('mapDiv', {zoomControl:true}).setView([-32.5,147.0], 6);
 
 // Keyboard zoom shortcuts: Shift + Up Arrow = zoom in, Shift + Down Arrow = zoom out.
 window.addEventListener('keydown', function(ev){
-  if(!ev.shiftKey || ev.repeat) return;
+  if(!ev.shiftKey) return;
   var target=ev.target;
   var tag=target && target.tagName ? target.tagName.toLowerCase() : '';
   if(tag==='input' || tag==='textarea' || tag==='select' || (target && target.isContentEditable)) return;
