@@ -579,18 +579,40 @@ function buildGpx(item){
 var map = L.map('mapDiv', {zoomControl:true}).setView([-32.5,147.0], 6);
 
 // Keyboard zoom shortcuts: Shift + Up Arrow = zoom in, Shift + Down Arrow = zoom out.
-window.addEventListener('keydown', function(ev){
+// Capture at document level so the shortcut remains reliable after clicking the map,
+// Leaflet's +/- controls, or other buttons that take focus.
+function handleMapZoomShortcut(ev){
   if(!ev.shiftKey) return;
+
   var target=ev.target;
   var tag=target && target.tagName ? target.tagName.toLowerCase() : '';
   if(tag==='input' || tag==='textarea' || tag==='select' || (target && target.isContentEditable)) return;
-  if(ev.key==='ArrowUp'){
-    ev.preventDefault();
-    map.zoomIn();
-  }else if(ev.key==='ArrowDown'){
-    ev.preventDefault();
-    map.zoomOut();
-  }
+
+  var key = ev.key || '';
+  var code = ev.code || '';
+  var keyCode = ev.keyCode || ev.which;
+  var isUp = key==='ArrowUp' || code==='ArrowUp' || keyCode===38;
+  var isDown = key==='ArrowDown' || code==='ArrowDown' || keyCode===40;
+  if(!isUp && !isDown) return;
+
+  ev.preventDefault();
+  ev.stopPropagation();
+  if(typeof ev.stopImmediatePropagation==='function') ev.stopImmediatePropagation();
+
+  if(isUp) map.setZoom(Math.min(map.getMaxZoom(), map.getZoom()+1));
+  else map.setZoom(Math.max(map.getMinZoom(), map.getZoom()-1));
+}
+
+document.addEventListener('keydown', handleMapZoomShortcut, true);
+
+// Leaflet zoom controls keep keyboard focus after a mouse click. Remove that focus
+// after activation so subsequent keyboard shortcuts aren't routed through the control.
+map.whenReady(function(){
+  var container=map.getContainer();
+  container.addEventListener('click', function(ev){
+    var el=ev.target && ev.target.closest ? ev.target.closest('.leaflet-control-zoom-in,.leaflet-control-zoom-out') : null;
+    if(el && typeof el.blur==='function') setTimeout(function(){el.blur();},0);
+  }, true);
 });
 // Note: raw tile.openstreetmap.org blocks requests from local (file://) pages because
 // they arrive with no/"null" referrer, which OSM's usage policy treats as unidentified
