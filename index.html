@@ -168,6 +168,8 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
   .toolbar .grp:last-child{border-bottom:0;padding-bottom:0}
   .toolbar .icon-btn{position:relative;width:100%;height:40px;min-height:40px;padding:0;font-size:1.35rem;font-weight:700;line-height:1;color:#111827;background:#fff;border-color:#8b98a3;overflow:visible}
   .toolbar .tool-svg{width:28px;height:28px;display:block;margin:auto}
+  .toolbar .undo-redo-svg{width:30px;height:30px}
+  .toolbar .reverse-svg{width:30px;height:30px}
   .toolbar .icon-btn.danger{color:#8f2618;background:#fff4f1;border-color:#b8685b}
   .toolbar .icon-btn:disabled{color:#4b5563;background:#e5e7eb;border-color:#9ca3af;font-weight:700}
   .toolbar .tool-icon::after{content:attr(data-tooltip);position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%);z-index:3000;display:none;white-space:nowrap;padding:.38rem .55rem;border-radius:4px;background:#111827;color:#fff;font:700 .8rem/1.2 'Source Sans 3',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.28);pointer-events:none}
@@ -307,9 +309,9 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
             <button class="icon-btn danger tool-icon" id="deleteSegBtn" disabled aria-label="Delete segment" data-tooltip="Delete segment" title="Delete segment">⌫</button>
           </div>
           <div class="grp">
-            <button class="icon-btn tool-icon" id="reverseBtn" disabled aria-label="Reverse" data-tooltip="Reverse" title="Reverse">⇄</button>
-            <button class="icon-btn tool-icon" id="undoBtn" disabled aria-label="Undo" data-tooltip="Undo" title="Undo">↶</button>
-            <button class="icon-btn tool-icon" id="redoBtn" disabled aria-label="Redo" data-tooltip="Redo" title="Redo">↷</button>
+            <button class="icon-btn tool-icon" id="reverseBtn" disabled aria-label="Reverse" data-tooltip="Reverse" title="Reverse"><svg class="tool-svg reverse-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 9h18" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M20 5l7 4-7 4z" fill="currentColor"/><path d="M28 23H10" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M12 19l-7 4 7 4z" fill="currentColor"/></svg></button>
+            <button class="icon-btn tool-icon" id="undoBtn" disabled aria-label="Undo" data-tooltip="Undo" title="Undo"><svg class="tool-svg undo-redo-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M13.8 7.2L5.8 13.6l8 6.4v-4.1h4.1c4.8 0 8.1 2.5 8.1 7.4 0 1.4-.2 2.6-.6 3.7 1.8-1.9 2.8-4.5 2.8-7.2 0-6.1-4.7-10.1-10.7-10.1h-3.7V7.2z" fill="currentColor"/></svg></button>
+            <button class="icon-btn tool-icon" id="redoBtn" disabled aria-label="Redo" data-tooltip="Redo" title="Redo"><svg class="tool-svg undo-redo-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M18.2 7.2l8 6.4-8 6.4v-4.1h-4.1c-4.8 0-8.1 2.5-8.1 7.4 0 1.4.2 2.6.6 3.7-1.8-1.9-2.8-4.5-2.8-7.2 0-6.1 4.7-10.1 10.7-10.1h3.7V7.2z" fill="currentColor"/></svg></button>
           </div>
           <div class="grp">
             <button class="icon-btn tool-icon" id="exportBtn" disabled aria-label="Export GPX" data-tooltip="Export GPX" title="Export GPX">⇩</button>
