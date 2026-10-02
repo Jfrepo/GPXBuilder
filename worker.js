@@ -27,18 +27,31 @@ const POINT_LIST_FEATURE = String.raw`
     var key=pointKey(seg,pt);
     return state.pointHighlights.some(function(x){return pointKey(x.seg,x.pt)===key;});
   }
+  function highlightedRange(){
+    if(!state.pointHighlights||state.pointHighlights.length<2) return null;
+    var seg=state.pointHighlights[0].seg;
+    var pts=[];
+    for(var i=0;i<state.pointHighlights.length;i++){
+      if(state.pointHighlights[i].seg!==seg) return null;
+      pts.push(state.pointHighlights[i].pt);
+    }
+    pts.sort(function(a,b){return a-b;});
+    return {seg:seg,start:pts[0],end:pts[pts.length-1]};
+  }
   function setRange(seg,fromPt,toPt){
     var a=Math.min(fromPt,toPt),b=Math.max(fromPt,toPt);
     state.pointHighlights=[];
     for(var i=a;i<=b;i++) state.pointHighlights.push({seg:seg,pt:i});
     syncPointRowClasses();
     drawPointListHighlights();
+    refreshToolbar();
   }
   function clearPointHighlights(){
     state.pointHighlights=[];
     state.pointHover=null;
     state.pointHighlightAnchor=null;
     pointHighlightLayer.clearLayers();
+    refreshToolbar();
   }
 
   function drawPointListHighlights(){
@@ -148,12 +161,56 @@ const POINT_LIST_FEATURE = String.raw`
           selectPoint(si,pi);
           syncPointRowClasses();
           drawPointListHighlights();
+          refreshToolbar();
         });
         body.appendChild(tr);idx++;
       });
     });
     els.pointsWrap.scrollTop=oldScroll;
     if(pointScrollFrame==null) pointScrollFrame=requestAnimationFrame(highlightPointAtScrollCentre);
+  };
+
+  var baseDeleteSegment=deleteSegment;
+  deleteSegment=function(){
+    var range=highlightedRange();
+    if(!range){baseDeleteSegment();return;}
+    if(!state.current||!state.current.segments[range.seg]) return;
+
+    var seg=state.current.segments[range.seg];
+    var start=Math.max(0,range.start),end=Math.min(seg.length-1,range.end);
+    if(end<start) return;
+
+    pushHistory();
+    seg.splice(start,end-start+1);
+    if(seg.length===0){
+      state.current.segments.splice(range.seg,1);
+      if(state.current.segments.length===0) state.current.segments.push([]);
+    }
+
+    // Removing the highlighted points leaves the nearest surviving point before and
+    // after the deleted range adjacent in the GPX array. Leaflet therefore renders
+    // one direct straight line between those closest remaining points.
+    state.current.updatedAt=new Date().toISOString();
+    state.current.stats=computeStats(state.current);
+    if(state.currentId){
+      var li=state.library.findIndex(function(t){return t.id===state.currentId;});
+      if(li>=0) state.library[li]=deepClone(state.current);
+      persistLibrary();
+      renderLibrary();
+    }
+    state.selection=null;
+    state.future=[];
+    state.pointHighlights=[];
+    state.pointHighlightAnchor=null;
+    state.pointHover=null;
+    pointHighlightLayer.clearLayers();
+    render();
+  };
+
+  var baseRefreshToolbar=refreshToolbar;
+  refreshToolbar=function(){
+    baseRefreshToolbar();
+    if(!state.sharedPreview&&highlightedRange()) els.deleteSegBtn.disabled=false;
   };
 
   var baseRender=render;
