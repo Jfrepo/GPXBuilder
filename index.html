@@ -167,6 +167,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
   .toolbar .grp{display:flex;flex-direction:column;gap:.24rem;padding:0 0 .28rem;margin:0;border-right:0;border-bottom:1px solid var(--border)}
   .toolbar .grp:last-child{border-bottom:0;padding-bottom:0}
   .toolbar .icon-btn{position:relative;width:100%;height:40px;min-height:40px;padding:0;font-size:1.35rem;font-weight:700;line-height:1;color:#111827;background:#fff;border-color:#8b98a3;overflow:visible}
+  .toolbar .tool-svg{width:28px;height:28px;display:block;margin:auto}
   .toolbar .icon-btn.danger{color:#8f2618;background:#fff4f1;border-color:#b8685b}
   .toolbar .icon-btn:disabled{color:#4b5563;background:#e5e7eb;border-color:#9ca3af;font-weight:700}
   .toolbar .tool-icon::after{content:attr(data-tooltip);position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%);z-index:3000;display:none;white-space:nowrap;padding:.38rem .55rem;border-radius:4px;background:#111827;color:#fff;font:700 .8rem/1.2 'Source Sans 3',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.28);pointer-events:none}
@@ -298,7 +299,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
             <button class="icon-btn tool-icon" id="joinNextBtn" disabled aria-label="Join next" data-tooltip="Join next" title="Join next">⤳</button>
             <button class="icon-btn tool-icon" id="joinToPointBtn" disabled aria-label="Join To Point" data-tooltip="Join To Point" title="Join To Point">⌁</button>
             <button class="icon-btn tool-icon" id="movePointBtn" disabled aria-label="Move point" data-tooltip="Move point" title="Move point">✥</button>
-            <button class="icon-btn tool-icon" id="extendTrackBtn" disabled aria-label="Extend Track" data-tooltip="Extend Track" title="Extend Track">⇉</button>
+            <button class="icon-btn tool-icon" id="extendTrackBtn" disabled aria-label="Extend Track" data-tooltip="Extend Track" title="Extend Track"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M8 6h11c4 0 6 2 6 5s-2 5-6 5H11c-4 0-6 2-6 5s2 5 6 5h11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 3.8c-2.4 0-4.2 1.8-4.2 4.1 0 3.1 4.2 7.2 4.2 7.2s4.2-4.1 4.2-7.2c0-2.3-1.8-4.1-4.2-4.1zm0 2.2a1.9 1.9 0 1 1 0 3.8A1.9 1.9 0 0 1 6 6z" fill="currentColor"/><path d="M26 19c-2.4 0-4.2 1.8-4.2 4.1 0 3.1 4.2 7.2 4.2 7.2s4.2-4.1 4.2-7.2c0-2.3-1.8-4.1-4.2-4.1zm0 2.2a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8z" fill="currentColor"/></svg></button>
             <button class="icon-btn primary hidden tool-icon" id="completeChangeBtn" aria-label="Complete Change" data-tooltip="Complete Change" title="Complete Change">✓</button>
           </div>
           <div class="grp">
