@@ -584,14 +584,16 @@ window.addEventListener('keydown', function(ev){
   var target=ev.target;
   var tag=target && target.tagName ? target.tagName.toLowerCase() : '';
   if(tag==='input' || tag==='textarea' || tag==='select' || (target && target.isContentEditable)) return;
-  if(ev.key==='ArrowUp'){
-    ev.preventDefault();
-    map.zoomIn();
-  }else if(ev.key==='ArrowDown'){
-    ev.preventDefault();
-    map.zoomOut();
-  }
-});
+
+  var isUp = ev.key==='ArrowUp' || ev.code==='ArrowUp';
+  var isDown = ev.key==='ArrowDown' || ev.code==='ArrowDown';
+  if(!isUp && !isDown) return;
+
+  ev.preventDefault();
+  ev.stopPropagation();
+  if(isUp) map.zoomIn();
+  else map.zoomOut();
+}, true);
 // Note: raw tile.openstreetmap.org blocks requests from local (file://) pages because
 // they arrive with no/"null" referrer, which OSM's usage policy treats as unidentified
 // bulk traffic. Esri's public World basemaps are built for exactly this kind of open
