@@ -4,6 +4,9 @@ const POINT_LIST_CSS = String.raw`
 .layout,.main,.map-wrap{min-height:0}
 .dock{flex:none;max-height:48dvh;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 .points-table-wrap{max-height:none!important;min-height:96px;flex:1 1 220px;overflow:auto;overscroll-behavior:contain}
+.points-toggle{align-self:flex-start;margin-top:.65rem!important;padding:.58rem .9rem!important;min-height:42px;border:2px solid var(--accent)!important;border-radius:5px!important;background:var(--accent)!important;color:var(--accent-contrast)!important;font-size:.92rem!important;font-weight:700!important;text-decoration:none!important;box-shadow:0 2px 6px rgba(0,0,0,.18);letter-spacing:.01em}
+.points-toggle:hover{filter:brightness(1.06)}
+.points-toggle:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:2px}
 table.points tr.multi-point{background:rgba(193,68,45,.16)!important;box-shadow:inset 4px 0 0 var(--line-selected)}
 table.points tr.scroll-point{outline:2px solid #d49a00;outline-offset:-2px;background:rgba(224,168,0,.12)}
 table.points tr.multi-point.scroll-point{background:linear-gradient(90deg,rgba(193,68,45,.18),rgba(224,168,0,.16))!important}
