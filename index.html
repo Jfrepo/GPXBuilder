@@ -1176,7 +1176,7 @@ function publishTrackToShared(id){
   var who=els.sharedUserSelect.value||'Justin';
   var endpoint=item.sharedId?SHARED_API+'/api/tracks/'+encodeURIComponent(item.sharedId)+'/publish':SHARED_API+'/api/tracks';
   var payload=item.sharedId?{modifiedBy:who,gpx:buildGpx(item),basedOnVersion:item.sharedBaseVersion}:{name:item.name,modifiedBy:who,gpx:buildGpx(item)};
-  fetch(endpoint,{method:'POST'credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
+  fetch(endpoint,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
     return r.json().catch(function(){return {};}).then(function(data){if(!r.ok){var err=new Error(data.error||('HTTP '+r.status));err.status=r.status;err.data=data;throw err;}return data;});
   }).then(function(data){
     item.sharedId=data.id;item.sharedBaseVersion=data.version;item.sharedBaseModifiedAt=data.modifiedAt;item.sharedBaseModifiedBy=data.modifiedBy;item.updatedAt=new Date().toISOString();
