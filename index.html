@@ -569,6 +569,21 @@ function buildGpx(item){
 
 // ---------- Leaflet map ----------
 var map = L.map('mapDiv', {zoomControl:true}).setView([-32.5,147.0], 6);
+
+// Keyboard zoom shortcuts: Shift + Up Arrow = zoom in, Shift + Down Arrow = zoom out.
+window.addEventListener('keydown', function(ev){
+  if(!ev.shiftKey || ev.repeat) return;
+  var target=ev.target;
+  var tag=target && target.tagName ? target.tagName.toLowerCase() : '';
+  if(tag==='input' || tag==='textarea' || tag==='select' || (target && target.isContentEditable)) return;
+  if(ev.key==='ArrowUp'){
+    ev.preventDefault();
+    map.zoomIn();
+  }else if(ev.key==='ArrowDown'){
+    ev.preventDefault();
+    map.zoomOut();
+  }
+});
 // Note: raw tile.openstreetmap.org blocks requests from local (file://) pages because
 // they arrive with no/"null" referrer, which OSM's usage policy treats as unidentified
 // bulk traffic. Esri's public World basemaps are built for exactly this kind of open
