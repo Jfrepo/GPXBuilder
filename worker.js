@@ -1,12 +1,9 @@
 const POINT_LIST_CSS = String.raw`
 <style id="point-list-highlight-styles">
-table.points th.point-hl-head,
-table.points td.point-hl-cell{width:34px;min-width:34px;text-align:center;padding:.2rem .25rem}
-.point-hl-check{width:16px;height:16px;margin:0;vertical-align:middle;accent-color:var(--line-selected);cursor:pointer}
 table.points tr.multi-point{background:rgba(193,68,45,.16)!important;box-shadow:inset 4px 0 0 var(--line-selected)}
 table.points tr.scroll-point{outline:2px solid #d49a00;outline-offset:-2px;background:rgba(224,168,0,.12)}
 table.points tr.multi-point.scroll-point{background:linear-gradient(90deg,rgba(193,68,45,.18),rgba(224,168,0,.16))!important}
-table.points th.point-hl-head{font-size:.62rem;letter-spacing:.03em;cursor:default}
+table.points tr.range-anchor{box-shadow:inset 4px 0 0 var(--accent)}
 </style>`;
 
 const POINT_LIST_FEATURE = String.raw`
@@ -18,30 +15,18 @@ const POINT_LIST_FEATURE = String.raw`
 
   var pointHighlightLayer=L.layerGroup().addTo(map);
   var pointScrollFrame=null;
+  var shiftHeld=false;
 
   function pointKey(seg,pt){return String(seg)+':'+String(pt);}
   function hasHighlight(seg,pt){
     var key=pointKey(seg,pt);
     return state.pointHighlights.some(function(x){return pointKey(x.seg,x.pt)===key;});
   }
-  function addHighlight(seg,pt){
-    if(!hasHighlight(seg,pt)) state.pointHighlights.push({seg:seg,pt:pt});
-  }
-  function removeHighlight(seg,pt){
-    var key=pointKey(seg,pt);
-    state.pointHighlights=state.pointHighlights.filter(function(x){return pointKey(x.seg,x.pt)!==key;});
-  }
-  function toggleHighlight(seg,pt){
-    if(hasHighlight(seg,pt)) removeHighlight(seg,pt); else addHighlight(seg,pt);
-    state.pointHighlightAnchor={seg:seg,pt:pt};
-    renderPointsTable();
-    drawPointListHighlights();
-  }
-  function addHighlightRange(seg,fromPt,toPt){
+  function setRange(seg,fromPt,toPt){
     var a=Math.min(fromPt,toPt),b=Math.max(fromPt,toPt);
-    for(var i=a;i<=b;i++) addHighlight(seg,i);
-    state.pointHighlightAnchor={seg:seg,pt:toPt};
-    renderPointsTable();
+    state.pointHighlights=[];
+    for(var i=a;i<=b;i++) state.pointHighlights.push({seg:seg,pt:i});
+    syncPointRowClasses();
     drawPointListHighlights();
   }
   function clearPointHighlights(){
@@ -98,16 +83,18 @@ const POINT_LIST_FEATURE = String.raw`
       var si=parseInt(row.dataset.seg,10),pi=parseInt(row.dataset.pt,10);
       row.classList.toggle('multi-point',hasHighlight(si,pi));
       row.classList.toggle('scroll-point',!!state.pointHover&&state.pointHover.seg===si&&state.pointHover.pt===pi);
-      var check=row.querySelector('.point-hl-check');
-      if(check) check.checked=hasHighlight(si,pi);
+      row.classList.toggle('range-anchor',!!state.pointHighlightAnchor&&state.pointHighlightAnchor.seg===si&&state.pointHighlightAnchor.pt===pi);
     });
   }
 
   function setHoverPoint(seg,pt){
-    if(state.pointHover&&state.pointHover.seg===seg&&state.pointHover.pt===pt) return;
+    var changed=!(state.pointHover&&state.pointHover.seg===seg&&state.pointHover.pt===pt);
     state.pointHover={seg:seg,pt:pt};
-    syncPointRowClasses();
-    drawPointListHighlights();
+    if(shiftHeld&&state.pointHighlightAnchor&&state.pointHighlightAnchor.seg===seg){
+      setRange(seg,state.pointHighlightAnchor.pt,pt);
+      return;
+    }
+    if(changed){syncPointRowClasses();drawPointListHighlights();}
   }
 
   function highlightPointAtScrollCentre(){
@@ -125,19 +112,11 @@ const POINT_LIST_FEATURE = String.raw`
     if(best) setHoverPoint(parseInt(best.dataset.seg,10),parseInt(best.dataset.pt,10));
   }
 
-  var baseRenderPointsTable=renderPointsTable;
   renderPointsTable=function(){
     if(els.pointsWrap.classList.contains('hidden')) return;
     var oldScroll=els.pointsWrap.scrollTop;
     var body=els.pointsBody;body.innerHTML='';
     if(!state.current) return;
-
-    var headRow=els.pointsWrap.querySelector('thead tr');
-    if(headRow&&!headRow.querySelector('.point-hl-head')){
-      var h=document.createElement('th');
-      h.className='point-hl-head';h.textContent='HL';h.title='Highlight points on map';
-      headRow.insertBefore(h,headRow.firstChild);
-    }
 
     var running=0,idx=0;
     state.current.segments.forEach(function(seg,si){
@@ -148,15 +127,22 @@ const POINT_LIST_FEATURE = String.raw`
         if(state.selection&&state.selection.seg===si&&state.selection.pt===pi) tr.classList.add('sel');
         if(hasHighlight(si,pi)) tr.classList.add('multi-point');
         if(state.pointHover&&state.pointHover.seg===si&&state.pointHover.pt===pi) tr.classList.add('scroll-point');
-        tr.innerHTML='<td class="point-hl-cell"><input type="checkbox" class="point-hl-check" title="Highlight this point on map" '+(hasHighlight(si,pi)?'checked':'')+'></td><td>'+(idx+1)+'</td><td>'+si+'</td><td>'+p.lat.toFixed(5)+'</td><td>'+p.lon.toFixed(5)+'</td><td>'+(p.ele!=null?Math.round(p.ele):'')+'</td><td>'+(running/1000).toFixed(2)+'</td>';
+        if(state.pointHighlightAnchor&&state.pointHighlightAnchor.seg===si&&state.pointHighlightAnchor.pt===pi) tr.classList.add('range-anchor');
+        tr.innerHTML='<td>'+(idx+1)+'</td><td>'+si+'</td><td>'+p.lat.toFixed(5)+'</td><td>'+p.lon.toFixed(5)+'</td><td>'+(p.ele!=null?Math.round(p.ele):'')+'</td><td>'+(running/1000).toFixed(2)+'</td>';
 
-        var check=tr.querySelector('.point-hl-check');
-        check.addEventListener('click',function(ev){ev.stopPropagation();toggleHighlight(si,pi);});
         tr.addEventListener('mouseenter',function(){setHoverPoint(si,pi);});
         tr.addEventListener('click',function(ev){
-          if(ev.ctrlKey||ev.metaKey){ev.preventDefault();toggleHighlight(si,pi);return;}
-          if(ev.shiftKey&&state.pointHighlightAnchor&&state.pointHighlightAnchor.seg===si){ev.preventDefault();addHighlightRange(si,state.pointHighlightAnchor.pt,pi);return;}
+          if(ev.shiftKey&&state.pointHighlightAnchor&&state.pointHighlightAnchor.seg===si){
+            ev.preventDefault();
+            setRange(si,state.pointHighlightAnchor.pt,pi);
+            return;
+          }
+          state.pointHighlights=[];
+          state.pointHighlightAnchor={seg:si,pt:pi};
+          state.pointHover={seg:si,pt:pi};
           selectPoint(si,pi);
+          syncPointRowClasses();
+          drawPointListHighlights();
         });
         body.appendChild(tr);idx++;
       });
@@ -166,26 +152,29 @@ const POINT_LIST_FEATURE = String.raw`
   };
 
   var baseRender=render;
-  render=function(){
-    baseRender();
-    drawPointListHighlights();
-  };
+  render=function(){baseRender();drawPointListHighlights();};
 
   var baseLoadItem=loadItem;
-  loadItem=function(id){
-    clearPointHighlights();
-    baseLoadItem(id);
-  };
+  loadItem=function(id){clearPointHighlights();baseLoadItem(id);};
 
   var baseStartNewRoute=startNewRoute;
-  startNewRoute=function(){
-    clearPointHighlights();
-    baseStartNewRoute();
-  };
+  startNewRoute=function(){clearPointHighlights();baseStartNewRoute();};
+
+  document.addEventListener('keydown',function(ev){
+    if(ev.key==='Shift') shiftHeld=true;
+  },true);
+  document.addEventListener('keyup',function(ev){
+    if(ev.key==='Shift') shiftHeld=false;
+  },true);
+  window.addEventListener('blur',function(){shiftHeld=false;});
 
   els.pointsWrap.addEventListener('scroll',function(){
     if(pointScrollFrame!=null) cancelAnimationFrame(pointScrollFrame);
     pointScrollFrame=requestAnimationFrame(highlightPointAtScrollCentre);
+  },{passive:true});
+
+  els.pointsWrap.addEventListener('wheel',function(ev){
+    shiftHeld=!!ev.shiftKey;
   },{passive:true});
 
   els.pointsWrap.addEventListener('mouseleave',function(){
