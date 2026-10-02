@@ -1,0 +1,8 @@
+name = "mancardo"
+compatibility_date = "2026-10-02"
+preview_urls = true
+previews = { }
+
+[assets]
+directory = "."
+not_found_handling = "single-page-application"
