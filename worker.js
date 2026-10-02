@@ -1,9 +1,14 @@
 const POINT_LIST_CSS = String.raw`
 <style id="point-list-highlight-styles">
+.app{height:100dvh;max-height:100dvh;overflow:hidden}
+.layout,.main,.map-wrap{min-height:0}
+.dock{flex:none;max-height:48dvh;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.points-table-wrap{max-height:none!important;min-height:96px;flex:1 1 220px;overflow:auto;overscroll-behavior:contain}
 table.points tr.multi-point{background:rgba(193,68,45,.16)!important;box-shadow:inset 4px 0 0 var(--line-selected)}
 table.points tr.scroll-point{outline:2px solid #d49a00;outline-offset:-2px;background:rgba(224,168,0,.12)}
 table.points tr.multi-point.scroll-point{background:linear-gradient(90deg,rgba(193,68,45,.18),rgba(224,168,0,.16))!important}
 table.points tr.range-anchor{box-shadow:inset 4px 0 0 var(--accent)}
+@media(max-height:700px){.dock{max-height:55dvh}.points-table-wrap{min-height:80px}}
 </style>`;
 
 const POINT_LIST_FEATURE = String.raw`
