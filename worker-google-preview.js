@@ -20,7 +20,7 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
 
   var status=document.createElement('div');
   status.className='google-preview-status';
-  status.textContent='Waiting for Google Maps JavaScript API…';
+  status.textContent='Loading Google Maps…';
   mapWrap.appendChild(status);
 
   var tries=0;
@@ -63,9 +63,19 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
 })();
 `;
 
-function injectGooglePreview(html){
+function safeGoogleLoaderTag(value){
+  if(!value)return '';
+  try{
+    const u=new URL(value);
+    if(u.protocol!=='https:'||u.hostname!=='maps.googleapis.com'||!u.pathname.startsWith('/maps/api/js'))return '';
+    return '<script src="'+u.toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></script>';
+  }catch(e){return '';}
+}
+
+function injectGooglePreview(html,loaderUrl){
   if(html.indexOf('installGoogleMapsPreview')!==-1)return html;
-  html=html.replace('</head>',GOOGLE_PREVIEW_CSS+'\n</head>');
+  const loader=safeGoogleLoaderTag(loaderUrl);
+  html=html.replace('</head>',GOOGLE_PREVIEW_CSS+'\n'+loader+'\n</head>');
   var close=html.lastIndexOf('})();');if(close===-1)return html;
   return html.slice(0,close)+GOOGLE_PREVIEW_FEATURE+'\n'+html.slice(close);
 }
@@ -75,7 +85,7 @@ export default {
     const response=await baseWorker.fetch(request,env,ctx);
     const type=response.headers.get('content-type')||'';
     if(!type.includes('text/html'))return response;
-    const html=injectGooglePreview(await response.text());
+    const html=injectGooglePreview(await response.text(),env.GOOGLE_MAPS_JS_URL||'');
     const headers=new Headers(response.headers);headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store');
     return new Response(html,{status:response.status,statusText:response.statusText,headers});
   }
