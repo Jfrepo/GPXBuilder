@@ -25,7 +25,7 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
 
   var tries=0;
   function waitForGoogle(){
-    if(window.google&&google.maps&&typeof google.maps.Map==='function'){
+    if(window.google&&google.maps&&typeof google.maps.Map==='function'&&typeof google.maps.Data==='function'){
       status.remove();
       startGoogle();
       return;
@@ -40,6 +40,79 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
     var googleDiv=document.createElement('div');googleDiv.id='googleBaseMap';googleDiv.setAttribute('aria-hidden','true');mapWrap.insertBefore(googleDiv,leafletDiv);
     var centre=map.getCenter();
     var googleMap=new google.maps.Map(googleDiv,{center:{lat:centre.lat,lng:centre.lng},zoom:map.getZoom(),mapTypeId:'roadmap',disableDefaultUI:true,gestureHandling:'none',keyboardShortcuts:false,clickableIcons:false,streetViewControl:false,mapTypeControl:false,fullscreenControl:false,rotateControl:false,scaleControl:false,backgroundColor:'#e8edf1'});
+
+    // Render the visible route/track geometry in the same Google Maps renderer as the
+    // basemap. Leaflet remains the interaction engine, but its visual track paths are
+    // made transparent. This removes the pan/zoom latency where Leaflet paths moved
+    // before the Google basemap caught up.
+    var googleTrackData=new google.maps.Data({map:googleMap});
+    googleTrackData.setStyle(function(feature){
+      var kind=feature.getProperty('kind');
+      if(kind==='point'){
+        return {clickable:false,zIndex:3,icon:{
+          path:google.maps.SymbolPath.CIRCLE,
+          scale:Number(feature.getProperty('radius'))||4,
+          fillColor:feature.getProperty('fillColor')||'#2563a8',
+          fillOpacity:Number(feature.getProperty('fillOpacity')),
+          strokeColor:feature.getProperty('strokeColor')||'#ffffff',
+          strokeOpacity:Number(feature.getProperty('strokeOpacity')),
+          strokeWeight:Number(feature.getProperty('strokeWeight'))||1
+        }};
+      }
+      return {clickable:false,zIndex:1,
+        strokeColor:feature.getProperty('color')||'#2563a8',
+        strokeOpacity:Number(feature.getProperty('opacity')),
+        strokeWeight:Number(feature.getProperty('weight'))||4
+      };
+    });
+
+    function clearGoogleTrackData(){
+      var remove=[];
+      googleTrackData.forEach(function(feature){remove.push(feature);});
+      remove.forEach(function(feature){googleTrackData.remove(feature);});
+    }
+
+    function syncGoogleTrackVisuals(){
+      clearGoogleTrackData();
+      if(!trackLayerGroup||typeof trackLayerGroup.eachLayer!=='function')return;
+      trackLayerGroup.eachLayer(function(layer){
+        if(layer instanceof L.Polyline){
+          var opacity=Number(layer.options&&layer.options.opacity);
+          if(opacity>0){
+            var latlngs=layer.getLatLngs();
+            if(latlngs&&latlngs.length>1){
+              var path=latlngs.map(function(ll){return new google.maps.LatLng(ll.lat,ll.lng);});
+              googleTrackData.add(new google.maps.Data.Feature({
+                geometry:new google.maps.Data.LineString(path),
+                properties:{kind:'line',color:layer.options.color||'#2563a8',opacity:opacity,weight:layer.options.weight||4}
+              }));
+            }
+            if(typeof layer.setStyle==='function')layer.setStyle({opacity:0});
+          }
+          return;
+        }
+        if(layer instanceof L.CircleMarker){
+          var ll=layer.getLatLng();
+          var opts=layer.options||{};
+          var strokeOpacity=opts.opacity==null?1:Number(opts.opacity);
+          var fillOpacity=opts.fillOpacity==null?1:Number(opts.fillOpacity);
+          googleTrackData.add(new google.maps.Data.Feature({
+            geometry:new google.maps.Data.Point(new google.maps.LatLng(ll.lat,ll.lng)),
+            properties:{kind:'point',radius:opts.radius||4,fillColor:opts.fillColor||opts.color||'#2563a8',fillOpacity:fillOpacity,strokeColor:opts.color||'#ffffff',strokeOpacity:strokeOpacity,strokeWeight:opts.weight||1}
+          }));
+          if(typeof layer.setStyle==='function')layer.setStyle({opacity:0,fillOpacity:0});
+        }
+      });
+    }
+
+    if(typeof render==='function'){
+      var baseRenderForGoogleTracks=render;
+      render=function(){
+        var result=baseRenderForGoogleTracks.apply(this,arguments);
+        syncGoogleTrackVisuals();
+        return result;
+      };
+    }
 
     var toggle=els.layerStreetsBtn.parentElement;
     els.layerStreetsBtn.textContent='Roads';els.layerStreetsBtn.title='Google road map';
@@ -60,7 +133,9 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
     hybridBtn.onclick=function(){setType('hybrid');};
     map.on('move zoom resize moveend zoomend',queueSync);
     var initial='roadmap';try{var saved=localStorage.getItem('mancardo_google_map_type_v1');if(buttons[saved])initial=saved;}catch(e){}
-    setType(initial);setTimeout(function(){google.maps.event.trigger(googleMap,'resize');queueSync();},100);
+    setType(initial);
+    syncGoogleTrackVisuals();
+    setTimeout(function(){google.maps.event.trigger(googleMap,'resize');queueSync();},100);
   }
 
   waitForGoogle();
