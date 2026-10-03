@@ -3,13 +3,13 @@ import baseWorker from './worker-mobile-layout-v3.js';
 const MOBILE_LAYOUT_V4_CSS = String.raw`
 <style id="mancardo-mobile-layout-v4-styles">
 @media (max-width:767px){
-  /* Track row: keep key stats compact and put the point-list control at the far right. */
-  .stats-row{grid-template-columns:minmax(0,1fr) 68px 58px max-content!important;gap:.12rem .3rem!important}
-  .stats-row .stat:nth-child(1){grid-column:1!important;grid-row:1!important}
-  .stats-row .stat:nth-child(2){grid-column:2!important;grid-row:1!important}
-  .stats-row .stat:nth-child(5){grid-column:3!important;grid-row:1!important}
-  .stats-row #pointsToggle{grid-column:4!important;grid-row:1!important;justify-self:end!important;min-width:42px!important;max-width:46px!important;width:46px!important;font-size:0!important;padding:.12rem .28rem!important}
+  /* Track row: put the compact point-list control at the far left, then track name/stats. */
+  .stats-row{grid-template-columns:max-content minmax(0,1fr) 68px 58px!important;gap:.12rem .3rem!important}
+  .stats-row #pointsToggle{grid-column:1!important;grid-row:1!important;justify-self:start!important;min-width:42px!important;max-width:46px!important;width:46px!important;font-size:0!important;padding:.12rem .28rem!important}
   .stats-row #pointsToggle::after{content:'List';font-size:.62rem!important;line-height:1!important;font-weight:700}
+  .stats-row .stat:nth-child(1){grid-column:2!important;grid-row:1!important}
+  .stats-row .stat:nth-child(2){grid-column:3!important;grid-row:1!important}
+  .stats-row .stat:nth-child(5){grid-column:4!important;grid-row:1!important}
 }
 </style>`;
 
