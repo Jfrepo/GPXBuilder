@@ -167,10 +167,12 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
   .stat{min-width:58px;gap:0}
   .stat .v{font-size:.9rem;line-height:1.05}
   .stat .k{font-size:.58rem;line-height:1.05}
-  .toolbar{position:absolute;right:.7rem;top:4.2rem;bottom:.75rem;width:132px;z-index:740;display:flex;flex-direction:column;flex-wrap:nowrap;gap:.42rem;padding:.45rem;background:rgba(255,255,255,.94);border:1px solid var(--border);border-radius:5px;box-shadow:0 2px 8px rgba(0,0,0,.16);overflow-y:auto}
+  .toolbar{position:absolute;right:.7rem;top:4.2rem;bottom:.75rem;width:150px;z-index:740;display:flex;flex-direction:column;flex-wrap:nowrap;gap:.42rem;padding:.45rem;background:rgba(255,255,255,.94);border:1px solid var(--border);border-radius:5px;box-shadow:0 2px 8px rgba(0,0,0,.16);overflow-y:auto}
   .toolbar .grp{display:flex;flex-direction:column;gap:.28rem;padding:0 0 .42rem;margin:0;border-right:0;border-bottom:1px solid var(--border)}
   .toolbar .grp:last-child{border-bottom:0;padding-bottom:0}
-  .toolbar .icon-btn{width:100%;min-height:31px;padding:.3rem .38rem;font-size:.76rem;line-height:1.05}
+  .toolbar .icon-btn{width:100%;min-height:34px;padding:.38rem .48rem;font-size:1rem;font-weight:700;line-height:1.1;color:#111827;background:#ffffff;border-color:#8b98a3}
+  .toolbar .icon-btn.danger{color:#8f2618;background:#fff4f1;border-color:#b8685b}
+  .toolbar .icon-btn:disabled{color:#4b5563;background:#e5e7eb;border-color:#9ca3af;font-weight:700}
   .points-toggle{margin-top:.18rem;padding:.1rem 0;font-size:.72rem}
   .points-table-wrap{max-height:160px;margin-top:.2rem}
   .slope-legend{right:9.7rem;left:auto}
@@ -180,7 +182,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 }
 
 @media (min-width:768px){
- #desktopToolbarHost{position:absolute;right:.7rem;top:4.2rem;bottom:.75rem;width:132px;z-index:740;pointer-events:none}
+ #desktopToolbarHost{position:absolute;right:.7rem;top:4.2rem;bottom:.75rem;width:150px;z-index:740;pointer-events:none}
  #desktopToolbarHost .toolbar{position:static!important;right:auto!important;top:auto!important;bottom:auto!important;width:100%!important;max-height:100%;pointer-events:auto}
 }
 @media (max-width:767px){#desktopToolbarHost{display:none}}
@@ -598,7 +600,7 @@ window.addEventListener('keydown', function(ev){
     ev.preventDefault();
     map.zoomOut();
   }
-});
+}, true);
 // Note: raw tile.openstreetmap.org blocks requests from local (file://) pages because
 // they arrive with no/"null" referrer, which OSM's usage policy treats as unidentified
 // bulk traffic. Esri's public World basemaps are built for exactly this kind of open
