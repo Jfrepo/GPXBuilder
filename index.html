@@ -42,6 +42,10 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .icon-btn{display:inline-flex; align-items:center; justify-content:center; gap:.35rem; border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:3px; padding:.5rem .65rem; min-height:38px; font-size:.85rem;}
 .icon-btn:hover{border-color:var(--accent);}
 .icon-btn.primary{background:var(--accent); color:var(--accent-contrast); border-color:var(--accent); font-weight:600;}
+#saveBtn.save-unsaved{background:#d97706;color:#fff;border-color:#b45309;}
+#saveBtn.save-saved{background:#2f7d4f;color:#fff;border-color:#25663f;}
+#saveBtn.save-unsaved:hover{background:#b45309;border-color:#92400e;}
+#saveBtn.save-saved:hover{background:#25663f;border-color:#1f5635;}
 .icon-btn.danger{background:rgba(193,68,45,.10);color:var(--danger);border-color:var(--danger);font-weight:600;}
 .icon-btn.danger.confirming{background:var(--danger);color:#fff;}
 .icon-btn:disabled{opacity:1;cursor:not-allowed;background:var(--surface-2);color:var(--text-muted);border-color:var(--border);}
@@ -380,7 +384,8 @@ var state = {
   noteOpenId: null,
   splitSiblingId: null,
   sharedPreview: false,
-  sharedPreviewMeta: null
+  sharedPreviewMeta: null,
+  saveDirty: false
 };
 
 var els = {};
@@ -421,6 +426,16 @@ function haversine(a,b){
   return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
 }
 function fmtKm(m){ return (m/1000).toFixed(m<10000?2:1) + ' km'; }
+function setSaveState(dirty){
+  state.saveDirty=!!dirty;
+  if(!els.saveBtn)return;
+  els.saveBtn.classList.toggle('save-unsaved',state.saveDirty);
+  els.saveBtn.classList.toggle('save-saved',!state.saveDirty&&!!state.current);
+  els.saveBtn.textContent=state.saveDirty?'Save changes':(state.current?'Saved':'Save');
+  els.saveBtn.title=state.saveDirty?'Changes have not been saved':'All changes saved';
+}
+function markUnsaved(){if(state.current&&!state.sharedPreview)setSaveState(true);}
+function markSaved(){setSaveState(false);}
 function bearing(a,b){
   var y=Math.sin(toRad(b.lon-a.lon))*Math.cos(toRad(b.lat));
   var x=Math.cos(toRad(a.lat))*Math.sin(toRad(b.lat))-Math.sin(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.cos(toRad(b.lon-a.lon));
@@ -1015,6 +1030,7 @@ map.on('click', function(ev){
 // ---------- history ----------
 function pushHistory(){
   if(!state.current) return;
+  markUnsaved();
   state.history.push(JSON.stringify(state.current.segments));
   if(state.history.length>60) state.history.shift();
   state.future = [];
@@ -1253,6 +1269,7 @@ function loadItem(id){
   state.currentId = id;
   state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='view'; updateModeBanner();
+  markSaved();
   render();
   fitToTrack();
   renderLibrary();
@@ -1263,6 +1280,7 @@ function startNewRoute(){
   state.current = {id:uid(), type:'route', name:'New route', color:'#2563a8', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
   state.currentId = null; state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='draw'; updateModeBanner();
+  markUnsaved();
   render();
   renderLibrary();
 }
@@ -1600,6 +1618,7 @@ function refreshToolbar(){
   els.exportBtn.disabled = !hasTrack;
   els.deleteTrackBtn.disabled = !state.currentId;
   els.saveBtn.disabled = !hasTrack;
+  if(!hasTrack){els.saveBtn.classList.remove('save-unsaved','save-saved');els.saveBtn.textContent='Save';}
 }
 function refreshDock(){
   refreshToolbar();
@@ -1660,6 +1679,7 @@ els.nameSaveBtn.onclick = function(){
   state.current.updatedAt = new Date().toISOString();
   state.current.stats = computeStats(state.current);
   upsertLocal(deepClone(state.current));
+  markSaved();
   refreshDock();
 };
 function upsertLocal(item){
@@ -1727,6 +1747,7 @@ els.saveBtn.onclick = function(){
     state.current.updatedAt = new Date().toISOString();
     state.current.stats = computeStats(state.current);
     upsertLocal(deepClone(state.current));
+    markSaved();
   } else {
     openNameDialog({title:'Save to library', value:state.current.name, help:'Saved in this browser on this device.', mode:'save'});
   }
