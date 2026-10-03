@@ -1,5 +1,6 @@
 import baseWorker from './worker-shared-filter.js';
 
+// Preview branch touch: triggers Cloudflare Worker Preview build after enabling preview branches.
 const GOOGLE_PREVIEW_CSS = String.raw`
 <style id="google-preview-styles">
 #googleBaseMap{position:absolute;inset:0;z-index:0;background:#e8edf1}
