@@ -1,3 +1,4 @@
+# Preview rebuild marker for Save button state testing
 name = "mancardo"
 main = "worker-google-loader.js"
 compatibility_date = "2026-10-02"
