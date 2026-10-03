@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-google-preview.js"
+main = "worker-google-loader.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
