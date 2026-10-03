@@ -1,4 +1,4 @@
-import baseWorker from './worker.js';
+import baseWorker from './worker-layout.js';
 
 const SHARED_FILTER_FEATURE = String.raw`
 // ---------- shared-library user filtering ----------
