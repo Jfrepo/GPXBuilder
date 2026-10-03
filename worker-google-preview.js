@@ -25,7 +25,11 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
 
   var tries=0;
   function waitForGoogle(){
-    if(window.google&&google.maps){status.remove();startGoogle();return;}
+    if(window.google&&google.maps&&typeof google.maps.Map==='function'){
+      status.remove();
+      startGoogle();
+      return;
+    }
     tries++;
     if(tries<120)setTimeout(waitForGoogle,250);
     else status.textContent='Google Maps failed to load. Check the API key and website restrictions.';
@@ -75,7 +79,7 @@ function safeGoogleLoaderTag(value){
 function googleLoaderUrl(env){
   const key=String(env&&env.GOOGLE_MAPS_API_KEY||'').trim();
   if(key){
-    return 'https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&v=weekly&loading=async';
+    return 'https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&v=weekly';
   }
   return String(env&&env.GOOGLE_MAPS_JS_URL||'').trim();
 }
