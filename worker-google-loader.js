@@ -11,6 +11,7 @@ const SAVE_STATE_FEATURE = String.raw`
 (function installSaveStateIndicator(){
   if(!els||!els.saveBtn)return;
   var baselines=Object.create(null);
+  var forceDirty=false;
 
   function currentKey(){
     if(!state.current)return '';
@@ -26,6 +27,14 @@ const SAVE_STATE_FEATURE = String.raw`
   function rememberBaseline(){
     if(!state.current)return;
     baselines[currentKey()]=fingerprint(state.current);
+    forceDirty=false;
+  }
+  function isDirty(){
+    if(!state.current)return false;
+    var key=currentKey();
+    if(forceDirty)return true;
+    if(!Object.prototype.hasOwnProperty.call(baselines,key))return true;
+    return baselines[key]!==fingerprint(state.current);
   }
   function updateSaveState(){
     var btn=els.saveBtn;
@@ -35,15 +44,24 @@ const SAVE_STATE_FEATURE = String.raw`
       btn.title='Save';
       return;
     }
-    var key=currentKey();
-    var hasBaseline=Object.prototype.hasOwnProperty.call(baselines,key);
-    var dirty=!hasBaseline||baselines[key]!==fingerprint(state.current);
+    var dirty=isDirty();
     btn.classList.add(dirty?'save-state-dirty':'save-state-clean');
     btn.textContent=dirty?'Save changes':'Saved';
     btn.title=dirty?'Unsaved changes — click to save':'All changes saved';
   }
 
   if(state.current&&state.currentId)rememberBaseline();
+
+  // Most editing actions call pushHistory before changing geometry. Mark dirty immediately
+  // so the button changes even when an edit path also auto-persists the library copy.
+  if(typeof pushHistory==='function'){
+    var basePushHistory=pushHistory;
+    pushHistory=function(){
+      var result=basePushHistory.apply(this,arguments);
+      if(state.current&&!state.sharedPreview){forceDirty=true;setTimeout(updateSaveState,0);}
+      return result;
+    };
+  }
 
   var baseLoadItem=loadItem;
   loadItem=function(){
@@ -86,6 +104,8 @@ const SAVE_STATE_FEATURE = String.raw`
     };
   }
 
+  // Safety net for edit paths that do not call render/refreshDock.
+  setInterval(updateSaveState,250);
   updateSaveState();
 })();
 `;
