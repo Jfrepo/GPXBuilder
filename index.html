@@ -167,10 +167,16 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
   .stat{min-width:58px;gap:0}
   .stat .v{font-size:.9rem;line-height:1.05}
   .stat .k{font-size:.58rem;line-height:1.05}
-  .toolbar{position:absolute;right:.7rem;top:4.2rem;bottom:.75rem;width:132px;z-index:740;display:flex;flex-direction:column;flex-wrap:nowrap;gap:.42rem;padding:.45rem;background:rgba(255,255,255,.94);border:1px solid var(--border);border-radius:5px;box-shadow:0 2px 8px rgba(0,0,0,.16);overflow-y:auto}
-  .toolbar .grp{display:flex;flex-direction:column;gap:.28rem;padding:0 0 .42rem;margin:0;border-right:0;border-bottom:1px solid var(--border)}
+  .toolbar{position:absolute;right:.7rem;top:4.2rem;width:62px;z-index:740;display:flex;flex-direction:column;gap:.28rem;padding:.38rem;background:rgba(255,255,255,.97);border:1px solid var(--border);border-radius:5px;box-shadow:0 2px 8px rgba(0,0,0,.16);overflow:visible}
+  .toolbar .grp{display:flex;flex-direction:column;gap:.24rem;padding:0 0 .28rem;margin:0;border-right:0;border-bottom:1px solid var(--border)}
   .toolbar .grp:last-child{border-bottom:0;padding-bottom:0}
-  .toolbar .icon-btn{width:100%;min-height:31px;padding:.3rem .38rem;font-size:.76rem;line-height:1.05}
+  .toolbar .icon-btn{position:relative;width:100%;height:40px;min-height:40px;padding:0;font-size:1.35rem;font-weight:700;line-height:1;color:#111827;background:#fff;border-color:#8b98a3;overflow:visible}
+  .toolbar .tool-svg{width:28px;height:28px;display:block;margin:auto}
+  .toolbar .icon-btn.danger{color:#8f2618;background:#fff4f1;border-color:#b8685b}
+  .toolbar .icon-btn:disabled{color:#4b5563;background:#e5e7eb;border-color:#9ca3af;font-weight:700}
+  .toolbar .tool-icon::after{content:attr(data-tooltip);position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%);z-index:3000;display:none;white-space:nowrap;padding:.38rem .55rem;border-radius:4px;background:#111827;color:#fff;font:700 .8rem/1.2 'Source Sans 3',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.28);pointer-events:none}
+  .toolbar .tool-icon::before{content:'';position:absolute;right:calc(100% + 2px);top:50%;transform:translateY(-50%);z-index:3001;display:none;border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:8px solid #111827;pointer-events:none}
+  .toolbar .tool-icon:hover::after,.toolbar .tool-icon:hover::before,.toolbar .tool-icon:focus-visible::after,.toolbar .tool-icon:focus-visible::before{display:block}
   .points-toggle{margin-top:.18rem;padding:.1rem 0;font-size:.72rem}
   .points-table-wrap{max-height:160px;margin-top:.2rem}
   .slope-legend{right:9.7rem;left:auto}
@@ -180,8 +186,8 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 }
 
 @media (min-width:768px){
- #desktopToolbarHost{position:absolute;right:.7rem;top:4.2rem;bottom:.75rem;width:132px;z-index:740;pointer-events:none}
- #desktopToolbarHost .toolbar{position:static!important;right:auto!important;top:auto!important;bottom:auto!important;width:100%!important;max-height:100%;pointer-events:auto}
+ #desktopToolbarHost{position:absolute;right:.7rem;top:4.2rem;width:62px;z-index:740;pointer-events:none;overflow:visible}
+ #desktopToolbarHost .toolbar{position:static!important;right:auto!important;top:auto!important;bottom:auto!important;width:100%!important;pointer-events:auto;overflow:visible}
 }
 @media (max-width:767px){#desktopToolbarHost{display:none}}
 
@@ -293,25 +299,25 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
         </div>
         <div class="toolbar">
           <div class="grp">
-            <button class="icon-btn" id="splitAfterBtn" disabled title="Split the GPX track at the selected point">Split at point</button>
-            <button class="icon-btn" id="joinNextBtn" disabled title="Join the selected segment endpoint to the nearest segment in this track">Join next</button>
-            <button class="icon-btn" id="joinToPointBtn" disabled title="Extend the selected endpoint directly to another point and join the track">Join To Point</button>
-            <button class="icon-btn" id="movePointBtn" disabled title="Move the selected point to a new map location">Move point</button>
-            <button class="icon-btn" id="extendTrackBtn" disabled title="Extend the track from the selected endpoint">Extend Track</button>
-            <button class="icon-btn primary hidden" id="completeChangeBtn" title="Finish the current map edit">Complete Change</button>
+            <button class="icon-btn tool-icon" id="splitAfterBtn" disabled aria-label="Split at point" data-tooltip="Split at point" title="Split at point">✂</button>
+            <button class="icon-btn tool-icon" id="joinNextBtn" disabled aria-label="Join next" data-tooltip="Join next" title="Join next"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M8 6h11c4 0 6 2 6 5s-2 5-6 5H11c-4 0-6 2-6 5s2 5 6 5h7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 22l7 4-7 4z" fill="currentColor"/><path d="M6 3.8c-2.4 0-4.2 1.8-4.2 4.1 0 3.1 4.2 7.2 4.2 7.2s4.2-4.1 4.2-7.2c0-2.3-1.8-4.1-4.2-4.1zm0 2.2a1.9 1.9 0 1 1 0 3.8A1.9 1.9 0 0 1 6 6z" fill="currentColor"/><path d="M27 20c-2.4 0-4.2 1.8-4.2 4.1 0 3.1 4.2 7.2 4.2 7.2s4.2-4.1 4.2-7.2c0-2.3-1.8-4.1-4.2-4.1zm0 2.2a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8z" fill="currentColor"/></svg></button>
+            <button class="icon-btn tool-icon" id="joinToPointBtn" disabled aria-label="Join To Point" data-tooltip="Join To Point" title="Join To Point"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M6.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/><rect x="12.5" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><rect x="18.2" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><rect x="23.9" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><path d="M25.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/></svg></button>
+            <button class="icon-btn tool-icon" id="movePointBtn" disabled aria-label="Move point" data-tooltip="Move point" title="Move point">✥</button>
+            <button class="icon-btn tool-icon" id="extendTrackBtn" disabled aria-label="Extend Track" data-tooltip="Extend Track" title="Extend Track"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><rect x="9.2" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><rect x="15.4" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><path d="M25.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/></svg></button>
+            <button class="icon-btn primary hidden tool-icon" id="completeChangeBtn" aria-label="Complete Change" data-tooltip="Complete Change" title="Complete Change">✓</button>
           </div>
           <div class="grp">
-            <button class="icon-btn danger" id="deletePointBtn" disabled title="Delete just this point">Delete point</button>
-            <button class="icon-btn danger" id="deleteSegBtn" disabled title="Delete the whole isolated segment">Delete segment</button>
+            <button class="icon-btn danger tool-icon" id="deletePointBtn" disabled aria-label="Delete point" data-tooltip="Delete point" title="Delete point">⊖</button>
+            <button class="icon-btn danger tool-icon" id="deleteSegBtn" disabled aria-label="Delete segment" data-tooltip="Delete segment" title="Delete segment">⌫</button>
           </div>
           <div class="grp">
-            <button class="icon-btn" id="reverseBtn" disabled title="Reverse point order">Reverse</button>
-            <button class="icon-btn" id="undoBtn" disabled>Undo</button>
-            <button class="icon-btn" id="redoBtn" disabled>Redo</button>
+            <button class="icon-btn tool-icon" id="reverseBtn" disabled aria-label="Reverse" data-tooltip="Reverse" title="Reverse">⇄</button>
+            <button class="icon-btn tool-icon" id="undoBtn" disabled aria-label="Undo" data-tooltip="Undo" title="Undo">↶</button>
+            <button class="icon-btn tool-icon" id="redoBtn" disabled aria-label="Redo" data-tooltip="Redo" title="Redo">↷</button>
           </div>
           <div class="grp">
-            <button class="icon-btn" id="exportBtn" disabled title="Export as GPX for your Zumo">Export GPX</button>
-            <button class="icon-btn danger" id="deleteTrackBtn" disabled title="Delete from this device's library">Delete track</button>
+            <button class="icon-btn tool-icon" id="exportBtn" disabled aria-label="Export GPX" data-tooltip="Export GPX" title="Export GPX">⇩</button>
+            <button class="icon-btn danger tool-icon" id="deleteTrackBtn" disabled aria-label="Delete track" data-tooltip="Delete track" title="Delete track">🗑</button>
           </div>
         </div>
         <button class="points-toggle" id="pointsToggle">Show point list</button>
