@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-layout.js"
+main = "worker-shared-filter.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
