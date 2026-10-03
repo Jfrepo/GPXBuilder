@@ -1,6 +1,5 @@
 import baseWorker from './worker-shared-filter.js';
 
-// Preview branch touch: triggers Cloudflare Worker Preview build after enabling preview branches.
 const GOOGLE_PREVIEW_CSS = String.raw`
 <style id="google-preview-styles">
 #googleBaseMap{position:absolute;inset:0;z-index:0;background:#e8edf1}
@@ -13,7 +12,7 @@ const GOOGLE_PREVIEW_CSS = String.raw`
 </style>`;
 
 const GOOGLE_PREVIEW_FEATURE = String.raw`
-// ---------- Google Maps preview basemaps ----------
+// ---------- Google Maps basemaps ----------
 (function installGoogleMapsPreview(){
   var mapWrap=document.getElementById('mapWrap');
   var leafletDiv=document.getElementById('mapDiv');
@@ -29,7 +28,7 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
     if(window.google&&google.maps){status.remove();startGoogle();return;}
     tries++;
     if(tries<120)setTimeout(waitForGoogle,250);
-    else status.textContent='Google Maps JavaScript API is not loaded for this preview.';
+    else status.textContent='Google Maps failed to load. Check the API key and website restrictions.';
   }
 
   function startGoogle(){
@@ -73,6 +72,14 @@ function safeGoogleLoaderTag(value){
   }catch(e){return '';}
 }
 
+function googleLoaderUrl(env){
+  const key=String(env&&env.GOOGLE_MAPS_API_KEY||'').trim();
+  if(key){
+    return 'https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&v=weekly&loading=async';
+  }
+  return String(env&&env.GOOGLE_MAPS_JS_URL||'').trim();
+}
+
 function injectGooglePreview(html,loaderUrl){
   if(html.indexOf('installGoogleMapsPreview')!==-1)return html;
   const loader=safeGoogleLoaderTag(loaderUrl);
@@ -86,7 +93,7 @@ export default {
     const response=await baseWorker.fetch(request,env,ctx);
     const type=response.headers.get('content-type')||'';
     if(!type.includes('text/html'))return response;
-    const html=injectGooglePreview(await response.text(),env.GOOGLE_MAPS_JS_URL||'');
+    const html=injectGooglePreview(await response.text(),googleLoaderUrl(env));
     const headers=new Headers(response.headers);headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store');
     return new Response(html,{status:response.status,statusText:response.statusText,headers});
   }
