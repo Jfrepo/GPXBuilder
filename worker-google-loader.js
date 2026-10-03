@@ -141,3 +141,5 @@ export default {
     return new Response(html,{status:response.status,statusText:response.statusText,headers});
   }
 };
+
+// Production redeploy trigger: Google Maps + save-state bundle verified 2026-10-03.
