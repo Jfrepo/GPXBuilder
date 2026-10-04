@@ -3,6 +3,10 @@ import baseWorker from './worker-mobile-layout-v3.js';
 const MOBILE_LAYOUT_V4_CSS = String.raw`
 <style id="mancardo-mobile-layout-v4-styles">
 @media (max-width:767px){
+  /* Keep the mobile library drawer below the fixed ManCardo header so its action buttons stay visible. */
+  .drawer{top:48px!important;bottom:0!important;height:auto!important;max-height:calc(100dvh - 48px)!important}
+  .drawer-backdrop{top:48px!important}
+
   /* Track row: pin List to the left edge so it never shifts with track data. */
   .stats-row{position:relative!important;grid-template-columns:minmax(0,1fr) 68px 58px!important;gap:.12rem .3rem!important;padding-left:52px!important}
   .stats-row .stat:nth-child(1){grid-column:1!important;grid-row:1!important}
