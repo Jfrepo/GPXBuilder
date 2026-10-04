@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-3d-preview.js"
+main = "worker-mobile-layout-v4.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
