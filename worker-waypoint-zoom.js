@@ -42,7 +42,7 @@ const TRACK_CLICK_FLASH_FEATURE = String.raw`
     var originalVisible=item.visible!==false;
     activeFlash={id:id,originalVisible:originalVisible};
 
-    // Flash once for one second, then return to the saved Show state.
+    // Flash once for 0.75 seconds, then return to the saved Show state.
     // Visible tracks go off then back on. Hidden tracks briefly appear then hide again.
     setTransientVisibility(id,!originalVisible);
     render();
@@ -52,7 +52,7 @@ const TRACK_CLICK_FLASH_FEATURE = String.raw`
       setTransientVisibility(id,originalVisible);
       activeFlash=null;
       render();
-    },1000));
+    },750));
   }
 
   // Cancel any in-progress flash before the user deliberately changes Show state.
