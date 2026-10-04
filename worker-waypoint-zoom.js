@@ -67,6 +67,9 @@ const TRACK_CLICK_FLASH_FEATURE = String.raw`
     if(target&&target.closest&&target.closest('#trackList .track-show'))restoreActiveFlash();
   },true);
 
+  // Capture the Library card BEFORE the base row handler runs. The base handler calls
+  // renderLibrary(), which replaces the clicked DOM node before a bubbling document
+  // listener would see it. Capturing here makes the identify flash reliable.
   document.addEventListener('click',function(ev){
     var target=ev.target;
     if(!target||!target.closest)return;
@@ -83,7 +86,7 @@ const TRACK_CLICK_FLASH_FEATURE = String.raw`
     // Run after the base row click has loaded/selected the track so this works even
     // when the same already-selected track is pressed again.
     setTimeout(function(){flashTrack(id);},30);
-  },false);
+  },true);
 })();
 `;
 
