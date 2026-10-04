@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-library-sort.js"
+main = "worker-ui-optimizations-v2.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
