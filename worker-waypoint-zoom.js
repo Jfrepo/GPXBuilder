@@ -42,16 +42,10 @@ const TRACK_CLICK_FLASH_FEATURE = String.raw`
     var originalVisible=item.visible!==false;
     activeFlash={id:id,originalVisible:originalVisible};
 
-    // Visible tracks blink off/on twice over one second. Hidden tracks do the inverse,
-    // then return to their original hidden state. Nothing is persisted during the flash.
-    var phases=originalVisible?[false,true,false,true]:[true,false,true,false];
-    phases.forEach(function(visible,index){
-      flashTimers.push(setTimeout(function(){
-        if(!activeFlash||String(activeFlash.id)!==String(id))return;
-        setTransientVisibility(id,visible);
-        render();
-      },index*250));
-    });
+    // Flash once for one second, then return to the saved Show state.
+    // Visible tracks go off then back on. Hidden tracks briefly appear then hide again.
+    setTransientVisibility(id,!originalVisible);
+    render();
 
     flashTimers.push(setTimeout(function(){
       if(!activeFlash||String(activeFlash.id)!==String(id))return;
