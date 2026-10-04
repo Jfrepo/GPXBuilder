@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-mobile-layout-v5.js"
+main = "worker-library-sort.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
