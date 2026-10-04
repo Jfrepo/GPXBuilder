@@ -13,6 +13,7 @@ const MOBILE_LAYOUT_V4_CSS = String.raw`
 .track-list::-webkit-scrollbar{width:9px}
 .track-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px}
 .track-list::-webkit-scrollbar-track{background:transparent}
+.track-menu button.mancardo-menu-delete{color:var(--danger);border-color:var(--danger)}
 
 @media (max-width:767px){
   /* Keep the mobile library drawer below the fixed ManCardo header so its action buttons stay visible. */
@@ -55,6 +56,50 @@ const MOBILE_LAYOUT_V4_FEATURE = String.raw`
       return baseImportConfirm.apply(this,arguments);
     };
   }
+
+  // Library track options: clearer Shared wording plus a direct Delete action beside Paste.
+  function deleteLibraryTrackById(id){
+    var item=state.library.find(function(t){return t.id===id;});
+    if(!item)return;
+    if(!window.confirm('Delete "'+(item.name||'this track')+'" from My Library? This cannot be undone.'))return;
+    state.library=state.library.filter(function(t){return t.id!==id;});
+    if(state.currentId===id){state.current=null;state.currentId=null;state.selection=null;}
+    state.trackMenuId=null;state.paletteId=null;
+    persistLibrary();render();renderLibrary();
+  }
+
+  function enhanceLibraryTrackMenus(){
+    var cards=document.querySelectorAll('#trackList .track-item');
+    cards.forEach(function(card){
+      var menu=card.querySelector('.track-menu');
+      if(!menu)return;
+      var pasteBtn=null;
+      Array.prototype.forEach.call(menu.querySelectorAll('button'),function(btn){
+        var label=(btn.textContent||'').trim();
+        if(label==='Publish to Shared')btn.textContent='Post to Shared';
+        if(label==='Paste')pasteBtn=btn;
+      });
+      if(menu.querySelector('.mancardo-menu-delete'))return;
+      var id=card.getAttribute('data-track-id');
+      if(!id)return;
+      var del=document.createElement('button');
+      del.type='button';del.textContent='Delete';del.className='danger mancardo-menu-delete';del.title='Delete this track from My Library';
+      del.onclick=function(ev){ev.stopPropagation();deleteLibraryTrackById(id);};
+      if(pasteBtn&&pasteBtn.nextSibling)menu.insertBefore(del,pasteBtn.nextSibling);
+      else if(pasteBtn)menu.appendChild(del);
+      else menu.appendChild(del);
+    });
+  }
+
+  if(typeof renderLibrary==='function'){
+    var baseRenderLibrary=renderLibrary;
+    renderLibrary=function(){
+      var result=baseRenderLibrary.apply(this,arguments);
+      enhanceLibraryTrackMenus();
+      return result;
+    };
+  }
+  enhanceLibraryTrackMenus();
 
   // Long libraries: native trackpad/mouse-wheel scrolling plus Up/Down keyboard scrolling.
   var libraryHover=null;
