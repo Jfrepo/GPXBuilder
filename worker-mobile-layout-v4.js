@@ -6,6 +6,14 @@ const MOBILE_LAYOUT_V4_CSS = String.raw`
 #newRouteBtn{font-size:0!important}
 #newRouteBtn::after{content:'+ Track';font-size:.85rem!important;line-height:1!important}
 
+/* Keep both library panels height-constrained so long track lists scroll instead of being clipped. */
+.drawer{overflow:hidden}
+#myLibraryPanel:not(.hidden),#sharedLibraryPanel:not(.hidden){display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.track-list{flex:1;min-height:0;overflow-y:auto!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable;scrollbar-width:thin}
+.track-list::-webkit-scrollbar{width:9px}
+.track-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px}
+.track-list::-webkit-scrollbar-track{background:transparent}
+
 @media (max-width:767px){
   /* Keep the mobile library drawer below the fixed ManCardo header so its action buttons stay visible. */
   .drawer{top:48px!important;bottom:0!important;height:auto!important;max-height:calc(100dvh - 48px)!important}
@@ -32,6 +40,47 @@ const MOBILE_LAYOUT_V4_FEATURE = String.raw`
 
   var newTrackBtn=document.getElementById('newRouteBtn');
   if(newTrackBtn){newTrackBtn.setAttribute('aria-label','New track');newTrackBtn.title='New track';}
+
+  // Long libraries: native trackpad/mouse-wheel scrolling plus Up/Down keyboard scrolling.
+  var libraryHover=null;
+  var libraryLists=[document.getElementById('trackList'),document.getElementById('sharedTrackList')].filter(Boolean);
+  libraryLists.forEach(function(list,index){
+    list.tabIndex=0;
+    list.setAttribute('role','region');
+    list.setAttribute('aria-label',index===0?'My track library':'Shared track library');
+    list.addEventListener('mouseenter',function(){libraryHover=list;});
+    list.addEventListener('mouseleave',function(){if(libraryHover===list)libraryHover=null;});
+    list.addEventListener('pointerdown',function(){try{list.focus({preventScroll:true});}catch(e){try{list.focus();}catch(ignore){}}});
+    list.addEventListener('wheel',function(){libraryHover=list;},{passive:true});
+  });
+
+  function libraryScrollerForKeyboard(){
+    if(libraryHover&&libraryHover.offsetParent!==null)return libraryHover;
+    var active=document.activeElement;
+    for(var i=0;i<libraryLists.length;i++){
+      var list=libraryLists[i];
+      if(list.offsetParent!==null&&(active===list||list.contains(active)))return list;
+    }
+    return null;
+  }
+
+  window.addEventListener('keydown',function(ev){
+    if(ev.defaultPrevented||ev.altKey||ev.ctrlKey||ev.metaKey)return;
+    if(ev.key!=='ArrowDown'&&ev.key!=='ArrowUp'&&ev.key!=='PageDown'&&ev.key!=='PageUp'&&ev.key!=='Home'&&ev.key!=='End')return;
+    var list=libraryScrollerForKeyboard();
+    if(!list)return;
+    var target=ev.target;
+    var tag=target&&target.tagName?target.tagName.toLowerCase():'';
+    if((tag==='input'||tag==='textarea'||tag==='select'||(target&&target.isContentEditable))&&target!==list)return;
+    if(ev.key==='Home')list.scrollTo({top:0,behavior:'smooth'});
+    else if(ev.key==='End')list.scrollTo({top:list.scrollHeight,behavior:'smooth'});
+    else{
+      var amount=(ev.key==='PageDown'||ev.key==='PageUp')?Math.max(120,list.clientHeight*.8):56;
+      if(ev.key==='ArrowUp'||ev.key==='PageUp')amount=-amount;
+      list.scrollBy({top:amount,behavior:'smooth'});
+    }
+    ev.preventDefault();
+  },true);
 
   var googleLocationMarker=null;
   var pendingLocation=null;
