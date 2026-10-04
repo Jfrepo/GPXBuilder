@@ -6,8 +6,8 @@ const TRACK_MENU_CLEANUP_FEATURE = String.raw`
   if(window.__mancardoTrackMenuCleanupInstalled)return;
   window.__mancardoTrackMenuCleanupInstalled=true;
 
-  function pruneTrackMenu(){
-    var list=document.getElementById('trackList');
+  function pruneTrackMenu(root){
+    var list=root&&root.querySelectorAll?root:document.getElementById('trackList');
     if(!list)return;
     list.querySelectorAll('.track-menu button').forEach(function(button){
       var label=String(button.textContent||'').trim();
@@ -24,11 +24,25 @@ const TRACK_MENU_CLEANUP_FEATURE = String.raw`
     };
   }
 
+  var list=document.getElementById('trackList');
+  if(list&&typeof MutationObserver==='function'){
+    new MutationObserver(function(){pruneTrackMenu(list);}).observe(list,{childList:true,subtree:true});
+  }
+
   pruneTrackMenu();
 })();
 `;
 
+function stripCopyPasteFromSource(html){
+  // Remove the actions from the app's menu definition before it reaches the browser.
+  // The runtime cleanup below remains as a fallback in case another wrapper rebuilds the menu.
+  html=html.replace(/\['Copy',function\(\)\{copyTrack\(item\.id\)\}\],?/g,'');
+  html=html.replace(/,?\['Paste',pasteTrack\]/g,'');
+  return html;
+}
+
 function injectTrackMenuCleanup(html){
+  html=stripCopyPasteFromSource(html);
   if(html.includes('installMancardoTrackMenuCleanup'))return html;
   const close=html.lastIndexOf('})();');
   if(close===-1)return html;
