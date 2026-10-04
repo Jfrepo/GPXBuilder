@@ -86,7 +86,6 @@ const MOBILE_LAYOUT_V4_FEATURE = String.raw`
       del.type='button';del.textContent='Delete';del.className='danger mancardo-menu-delete';del.title='Delete this track from My Library';
       del.onclick=function(ev){ev.stopPropagation();deleteLibraryTrackById(id);};
       if(pasteBtn&&pasteBtn.nextSibling)menu.insertBefore(del,pasteBtn.nextSibling);
-      else if(pasteBtn)menu.appendChild(del);
       else menu.appendChild(del);
     });
   }
