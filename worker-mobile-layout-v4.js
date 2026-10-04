@@ -41,6 +41,21 @@ const MOBILE_LAYOUT_V4_FEATURE = String.raw`
   var newTrackBtn=document.getElementById('newRouteBtn');
   if(newTrackBtn){newTrackBtn.setAttribute('aria-label','New track');newTrackBtn.title='New track';}
 
+  // Imported GPX tracks are stored in My Library but remain hidden until the user ticks Show.
+  // This avoids rendering every newly imported track at once, especially with large GPX batches.
+  var importConfirmBtn=document.getElementById('importConfirmBtn');
+  if(importConfirmBtn&&typeof importConfirmBtn.onclick==='function'){
+    var baseImportConfirm=importConfirmBtn.onclick;
+    importConfirmBtn.onclick=function(){
+      try{
+        if(state&&Array.isArray(state.pendingImport)){
+          state.pendingImport.forEach(function(item){if(item)item.visible=false;});
+        }
+      }catch(e){}
+      return baseImportConfirm.apply(this,arguments);
+    };
+  }
+
   // Long libraries: native trackpad/mouse-wheel scrolling plus Up/Down keyboard scrolling.
   var libraryHover=null;
   var libraryLists=[document.getElementById('trackList'),document.getElementById('sharedTrackList')].filter(Boolean);
