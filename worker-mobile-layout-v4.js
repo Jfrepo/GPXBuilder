@@ -7,6 +7,11 @@ const MOBILE_LAYOUT_V4_CSS = String.raw`
   .drawer{top:48px!important;bottom:0!important;height:auto!important;max-height:calc(100dvh - 48px)!important}
   .drawer-backdrop{top:48px!important}
 
+  /* Simplify the mobile drawer heading and use track terminology. */
+  .drawer-head>.label-caps{display:none!important}
+  #newRouteBtn{font-size:0!important}
+  #newRouteBtn::after{content:'+ Track';font-size:.85rem!important;line-height:1!important}
+
   /* Track row: pin List to the left edge so it never shifts with track data. */
   .stats-row{position:relative!important;grid-template-columns:minmax(0,1fr) 68px 58px!important;gap:.12rem .3rem!important;padding-left:52px!important}
   .stats-row .stat:nth-child(1){grid-column:1!important;grid-row:1!important}
@@ -22,6 +27,9 @@ const MOBILE_LAYOUT_V4_FEATURE = String.raw`
 (function installMancardoMobileLayoutV4(){
   if(window.__mancardoMobileLayoutV4Installed)return;
   window.__mancardoMobileLayoutV4Installed=true;
+
+  var newTrackBtn=document.getElementById('newRouteBtn');
+  if(newTrackBtn){newTrackBtn.setAttribute('aria-label','New track');newTrackBtn.title='New track';}
 
   var googleLocationMarker=null;
   var pendingLocation=null;
