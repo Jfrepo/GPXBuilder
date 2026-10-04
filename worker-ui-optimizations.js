@@ -85,12 +85,6 @@ const UI_OPTIMIZATION_FEATURE = String.raw`
     return input;
   }
 
-  function itemForCard(card){
-    if(!window.state||!Array.isArray(state.library))return null;
-    var id=String(card.getAttribute('data-track-id')||'');
-    return state.library.find(function(item){return String(item&&item.id||'')===id;})||null;
-  }
-
   function applyLibrarySearchAndFilter(){
     var list=document.getElementById('trackList');
     if(!list)return;
@@ -100,9 +94,10 @@ const UI_OPTIMIZATION_FEATURE = String.raw`
     var mode=filter&&filterModes[filter.value]?filter.value:'all';
     var visibleCards=0;
     Array.prototype.forEach.call(list.querySelectorAll('.track-item'),function(card){
-      var item=itemForCard(card)||{};
-      var name=String(item.name||card.querySelector('.ti-name')&&card.querySelector('.ti-name').textContent||'').toLocaleLowerCase();
-      var shown=item.visible!==false;
+      var nameEl=card.querySelector('.ti-name');
+      var name=String(nameEl&&nameEl.textContent||'').toLocaleLowerCase();
+      var showBox=card.querySelector('.track-show');
+      var shown=!!(showBox&&showBox.checked);
       var matchesName=!q||name.indexOf(q)!==-1;
       var matchesMode=mode==='all'||(mode==='visible'&&shown)||(mode==='hidden'&&!shown);
       var yes=matchesName&&matchesMode;
@@ -162,7 +157,7 @@ const UI_OPTIMIZATION_FEATURE = String.raw`
     ensureMapStatus();
     var status=document.getElementById('mancardoMapStatus');if(!status)return;
     var count=0;
-    try{if(window.state&&Array.isArray(state.library))count=state.library.filter(function(item){return item&&item.visible!==false;}).length;}catch(e){}
+    try{count=document.querySelectorAll('#trackList .track-show:checked').length;}catch(e){}
     var gps=false;
     try{gps=!!lastUserLatLng;}catch(e){}
     var mode=mapModeLabel();
@@ -181,7 +176,7 @@ const UI_OPTIMIZATION_FEATURE = String.raw`
   // Also close the open menu when the user clicks outside its track card.
   document.addEventListener('pointerdown',function(ev){
     try{
-      if(!window.state||!state.trackMenuId)return;
+      if(typeof state==='undefined'||!state.trackMenuId)return;
       var card=ev.target&&ev.target.closest?ev.target.closest('.track-item'):null;
       if(card&&String(card.getAttribute('data-track-id'))===String(state.trackMenuId))return;
       if(ev.target&&ev.target.closest&&ev.target.closest('.track-menu'))return;
