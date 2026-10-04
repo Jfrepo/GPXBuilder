@@ -2,15 +2,17 @@ import baseWorker from './worker-mobile-layout-v3.js';
 
 const MOBILE_LAYOUT_V4_CSS = String.raw`
 <style id="mancardo-mobile-layout-v4-styles">
+/* Use Track terminology on every screen size. */
+#newRouteBtn{font-size:0!important}
+#newRouteBtn::after{content:'+ Track';font-size:.85rem!important;line-height:1!important}
+
 @media (max-width:767px){
   /* Keep the mobile library drawer below the fixed ManCardo header so its action buttons stay visible. */
   .drawer{top:48px!important;bottom:0!important;height:auto!important;max-height:calc(100dvh - 48px)!important}
   .drawer-backdrop{top:48px!important}
 
-  /* Simplify the mobile drawer heading and use track terminology. */
+  /* Simplify the mobile drawer heading. */
   .drawer-head>.label-caps{display:none!important}
-  #newRouteBtn{font-size:0!important}
-  #newRouteBtn::after{content:'+ Track';font-size:.85rem!important;line-height:1!important}
 
   /* Track row: pin List to the left edge so it never shifts with track data. */
   .stats-row{position:relative!important;grid-template-columns:minmax(0,1fr) 68px 58px!important;gap:.12rem .3rem!important;padding-left:52px!important}
