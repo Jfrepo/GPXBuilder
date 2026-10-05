@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-share-actions.js"
+main = "worker-find-plan.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
