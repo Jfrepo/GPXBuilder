@@ -82,9 +82,12 @@ const SEARCH_LAYOUT_FEATURE = String.raw`
   function moveSearch(){
     var btn=document.getElementById('mancardoMapSearchBtn');
     var panel=document.getElementById('mancardoMapSearchPanel');
+    var input=document.getElementById('mancardoMapSearchInput');
     var wrap=document.getElementById('mapWrap')||document.querySelector('.map-wrap');
     var topbar=document.querySelector('.topbar');
     if(!btn||!panel||!wrap||!topbar)return false;
+
+    if(input)input.placeholder='Town, Trail, Hotel, POI';
 
     var desktop=window.matchMedia('(min-width:768px)').matches;
     if(desktop){
