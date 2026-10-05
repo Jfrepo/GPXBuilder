@@ -1,10 +1,9 @@
 name = "mancardo"
-main = "worker-preview-diagnostic.js"
+main = "worker-find-plan.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
 
-# Preview diagnostic wrapper confirms whether runtime secrets are actually bound.
 [assets]
 directory = "."
 binding = "ASSETS"
