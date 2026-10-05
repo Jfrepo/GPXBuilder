@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-waypoint-delete-selected.js"
+main = "worker-share-actions.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
