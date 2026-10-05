@@ -2,6 +2,8 @@ import baseWorker from './worker-map-search-layout.js';
 
 const SEARCH_ACTION_FIXES = String.raw`
 <style id="mancardo-map-search-action-fixes">
+#mancardoSearchLocationCloseToggle{position:absolute!important;opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important}
+#mancardoSearchLocationCloseToggle:checked + #mancardoSearchLocationCard{display:none!important}
 #mancardoSearchLocationCard{
   position:absolute;
   left:50%;
@@ -22,8 +24,10 @@ const SEARCH_ACTION_FIXES = String.raw`
 #mancardoSearchLocationCard .mancardo-search-card-address{margin-top:.18rem;color:var(--text-muted);font-size:.68rem;line-height:1.25;padding-right:2rem}
 #mancardoSearchLocationCard .mancardo-search-card-close{
   position:absolute;right:.42rem;top:.36rem;width:30px;height:30px;min-height:30px;padding:0;
+  display:flex;align-items:center;justify-content:center;
   border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);
-  font:800 20px/26px system-ui,sans-serif;cursor:pointer;z-index:2;
+  font:800 20px/26px system-ui,sans-serif;cursor:pointer;z-index:2;user-select:none;-webkit-user-select:none;
+  pointer-events:auto!important;touch-action:manipulation!important;
 }
 #mancardoSearchLocationCard .mancardo-search-card-direct{
   display:inline-flex;align-items:center;gap:.32rem;margin-top:.55rem;padding:.38rem .55rem;
@@ -53,7 +57,9 @@ const SEARCH_ACTION_FIXES = String.raw`
 
   function removeCard(){
     var card=document.getElementById('mancardoSearchLocationCard');
+    var toggle=document.getElementById('mancardoSearchLocationCloseToggle');
     if(card&&card.parentNode)card.parentNode.removeChild(card);
+    if(toggle&&toggle.parentNode)toggle.parentNode.removeChild(toggle);
   }
 
   function buildCard(info){
@@ -72,19 +78,28 @@ const SEARCH_ACTION_FIXES = String.raw`
     removeCard();
     hideGoogleInfo(info);
 
+    // Use a native label/checkbox pair for Close. This avoids map/global click handlers
+    // interfering with the close action on touch devices.
+    var toggle=document.createElement('input');
+    toggle.type='checkbox';
+    toggle.id='mancardoSearchLocationCloseToggle';
+    toggle.setAttribute('aria-hidden','true');
+    host.appendChild(toggle);
+
     var card=document.createElement('div');
     card.id='mancardoSearchLocationCard';
     card.setAttribute('role','dialog');
     card.setAttribute('aria-label','Selected search location');
 
-    var close=document.createElement('button');
-    close.type='button';
+    var close=document.createElement('label');
     close.className='mancardo-search-card-close';
+    close.setAttribute('for','mancardoSearchLocationCloseToggle');
+    close.setAttribute('role','button');
     close.setAttribute('aria-label','Close selected location');
     close.title='Close';
     close.textContent='×';
     close.addEventListener('pointerdown',function(ev){ev.stopPropagation();});
-    close.addEventListener('click',function(ev){ev.preventDefault();ev.stopPropagation();removeCard();});
+    close.addEventListener('click',function(ev){ev.stopPropagation();});
     card.appendChild(close);
 
     var t=document.createElement('div');
