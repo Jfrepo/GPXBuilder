@@ -4,6 +4,7 @@ compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
 
+# Preview redeploy marker: refresh runtime secrets after OPENAI_API_KEY was added.
 [assets]
 directory = "."
 binding = "ASSETS"
