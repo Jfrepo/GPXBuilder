@@ -1,10 +1,10 @@
 name = "mancardo"
-main = "worker-find-plan.js"
+main = "worker-preview-diagnostic.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
 
-# Preview redeploy marker: refresh runtime secrets after OPENAI_API_KEY was added.
+# Preview diagnostic wrapper confirms whether runtime secrets are actually bound.
 [assets]
 directory = "."
 binding = "ASSETS"
