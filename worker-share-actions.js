@@ -16,36 +16,57 @@ const SHARE_ACTIONS_FEATURE = String.raw`
     }catch(e){return [];}
   }
 
-  function waypointById(id){
-    return readWaypoints().find(function(w){return w&&w.id===id;})||null;
+  function writeWaypoints(items){
+    try{localStorage.setItem(WAYPOINT_KEY,JSON.stringify(items));}catch(e){}
   }
 
-  function shareWaypoint(id){
-    var w=waypointById(id);if(!w)return;
+  function escXml(value){
+    return String(value==null?'':value)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+  }
+
+  function buildWaypointGpx(w){
     var name=(w.name||'Waypoint').trim()||'Waypoint';
     var lat=Number(w.lat),lon=Number(w.lon);
-    if(!isFinite(lat)||!isFinite(lon))return;
-    var coords=lat.toFixed(6)+', '+lon.toFixed(6);
-    var url='https://maps.apple.com/?ll='+encodeURIComponent(lat+','+lon)+'&q='+encodeURIComponent(name);
-    var text=name+'\n'+coords;
-    var payload={title:name,text:text,url:url};
-
-    if(navigator.share){
-      navigator.share(payload).catch(function(err){
-        if(err&&err.name==='AbortError')return;
-        fallbackShare(text+'\n'+url);
-      });
-      return;
-    }
-    fallbackShare(text+'\n'+url);
+    var icon=(w.icon||'pin');
+    return '<?xml version="1.0" encoding="UTF-8"?>\n'+
+      '<gpx version="1.1" creator="ManCardo" xmlns="http://www.topografix.com/GPX/1/1">\n'+
+      '  <metadata><name>'+escXml(name)+'</name><desc>ManCardo waypoint</desc></metadata>\n'+
+      '  <wpt lat="'+lat.toFixed(6)+'" lon="'+lon.toFixed(6)+'"><name>'+escXml(name)+'</name><type>'+escXml(icon)+'</type></wpt>\n'+
+      '  <trk><name>'+escXml(name)+'</name><extensions><mancardoWaypoint>true</mancardoWaypoint><mancardoIcon>'+escXml(icon)+'</mancardoIcon></extensions><trkseg>\n'+
+      '    <trkpt lat="'+lat.toFixed(6)+'" lon="'+lon.toFixed(6)+'"></trkpt>\n'+
+      '  </trkseg></trk>\n'+
+      '</gpx>';
   }
 
-  function fallbackShare(text){
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(text).then(function(){window.alert('Waypoint share link copied.');}).catch(function(){window.prompt('Copy waypoint',text);});
-    }else{
-      window.prompt('Copy waypoint',text);
-    }
+  function shareWaypointToLibrary(id){
+    var all=readWaypoints();
+    var w=all.find(function(item){return item&&item.id===id;});
+    if(!w)return;
+    var lat=Number(w.lat),lon=Number(w.lon);
+    if(!isFinite(lat)||!isFinite(lon))return;
+
+    var who=(els&&els.sharedUserSelect&&els.sharedUserSelect.value)||'Justin';
+    var gpx=buildWaypointGpx(w);
+    var endpoint=w.sharedId?SHARED_API+'/api/tracks/'+encodeURIComponent(w.sharedId)+'/publish':SHARED_API+'/api/tracks';
+    var payload=w.sharedId?
+      {modifiedBy:who,gpx:gpx,basedOnVersion:w.sharedBaseVersion}:
+      {name:(w.name||'Waypoint'),modifiedBy:who,gpx:gpx};
+
+    fetch(endpoint,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+      .then(function(r){return r.json().catch(function(){return {};}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data;});})
+      .then(function(data){
+        w.sharedId=data.id||w.sharedId;
+        w.sharedBaseVersion=data.version||w.sharedBaseVersion;
+        w.sharedBaseModifiedAt=data.modifiedAt||w.sharedBaseModifiedAt;
+        w.sharedBaseModifiedBy=data.modifiedBy||w.sharedBaseModifiedBy;
+        w.updatedAt=new Date().toISOString();
+        writeWaypoints(all);
+        try{if(state&&state.libraryView==='shared'&&typeof loadSharedLibrary==='function')loadSharedLibrary();}catch(e){}
+        window.alert('Waypoint shared to Shared Library.');
+      })
+      .catch(function(e){window.alert('Could not share this waypoint to Shared Library. '+(e.message||''));});
   }
 
   function enhanceShareActions(){
@@ -63,8 +84,8 @@ const SHARE_ACTIONS_FEATURE = String.raw`
       var id=card.getAttribute('data-waypoint-id');
       if(!id)return;
       var share=document.createElement('button');
-      share.type='button';share.textContent='Share';share.className='mancardo-waypoint-share';share.title='Share this waypoint';
-      share.onclick=function(ev){ev.stopPropagation();shareWaypoint(id);};
+      share.type='button';share.textContent='Share';share.className='mancardo-waypoint-share';share.title='Share this waypoint to Shared Library';
+      share.onclick=function(ev){ev.stopPropagation();shareWaypointToLibrary(id);};
       var danger=menu.querySelector('button.danger');
       if(danger)menu.insertBefore(share,danger);else menu.appendChild(share);
     });
