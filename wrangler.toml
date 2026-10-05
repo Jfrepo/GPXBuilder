@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-waypoint-save.js"
+main = "worker-library-header-layout.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
