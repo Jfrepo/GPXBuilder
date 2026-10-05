@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-device-compatibility.js"
+main = "worker-private-library-sync.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
@@ -9,3 +9,9 @@ directory = "."
 binding = "ASSETS"
 run_worker_first = true
 not_found_handling = "single-page-application"
+
+# Private My Library cloud sync is intentionally not bound yet.
+# Provisioning steps before enabling cloud writes:
+# 1. Create a D1 database and apply migrations/0001_private_library.sql.
+# 2. Add a [[d1_databases]] binding named PRIVATE_LIBRARY_DB with the real database_id.
+# 3. Configure CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD for the protected private API.
