@@ -154,7 +154,7 @@ const MAP_SEARCH_FEATURE = String.raw`
         var content=document.createElement('div');
         var strong=document.createElement('strong');strong.textContent=item.name;content.appendChild(strong);
         if(item.address){var addr=document.createElement('div');addr.textContent=item.address;content.appendChild(addr);}
-        searchInfoWindow=new google.maps.InfoWindow({content:content});
+        searchInfoWindow=new google.maps.InfoWindow({content:content,disableAutoPan:true});
         try{searchInfoWindow.open({map:googleMap,anchor:searchMarker});}catch(e){try{searchInfoWindow.open(googleMap,searchMarker);}catch(_e){}}
       }
       return;
