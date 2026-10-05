@@ -168,7 +168,7 @@ const RESULT_RENDER_NEW = String.raw`    items.slice(0,8).forEach(function(item)
 
       var direct=document.createElement('a');
       direct.className='mancardo-map-direct-link';
-      direct.href='https://maps.apple.com/?daddr='+String(item.location.lat)+','+String(item.location.lng)+'&q='+encodeURIComponent(item.name||'Destination')+'&dirflg=d';
+      direct.href='https://maps.apple.com/?daddr='+String(item.location.lat)+','+String(item.location.lng)+'&dirflg=d';
       direct.target='_blank';
       direct.rel='noopener';
       direct.title='Direct to in Apple Maps';
@@ -204,7 +204,7 @@ const INFO_WINDOW_NEW = String.raw`        var content=document.createElement('d
         if(item.address){var addr=document.createElement('div');addr.className='mancardo-search-info-address';addr.textContent=item.address;content.appendChild(addr);}
         var directInfo=document.createElement('a');
         directInfo.className='mancardo-search-info-direct';
-        directInfo.href='https://maps.apple.com/?daddr='+String(ll.lat)+','+String(ll.lng)+'&q='+encodeURIComponent(item.name||'Destination')+'&dirflg=d';
+        directInfo.href='https://maps.apple.com/?daddr='+String(ll.lat)+','+String(ll.lng)+'&dirflg=d';
         directInfo.target='_blank';directInfo.rel='noopener';
         directInfo.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5M10 5h9v9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Direct to</span>';
         content.appendChild(directInfo);
