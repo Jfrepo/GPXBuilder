@@ -17,8 +17,8 @@ const SEARCH_LAYOUT_CSS = String.raw`
 .mancardo-search-info-direct svg{width:15px;height:15px}
 
 @media(max-width:767px){
-  #mancardoMapSearchBtn{left:.5rem!important;right:auto!important;bottom:.55rem!important}
-  #mancardoMapSearchPanel{left:.5rem!important;right:auto!important;bottom:3.35rem!important}
+  #mancardoMapSearchBtn{left:auto!important;right:.5rem!important;bottom:5.15rem!important}
+  #mancardoMapSearchPanel{left:auto!important;right:.5rem!important;bottom:7.9rem!important}
 }
 
 @media(min-width:768px){
