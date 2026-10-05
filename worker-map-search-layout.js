@@ -3,26 +3,99 @@ import baseWorker from './worker-map-search.js';
 const SEARCH_LAYOUT_CSS = String.raw`
 <style id="mancardo-map-search-layout-styles">
 @media(min-width:768px){
-  /* Place search in its own slot directly above the editing toolbar. */
-  #mancardoMapSearchBtn{
-    right:.7rem!important;
-    top:4.2rem!important;
+  /* Keep search out of the map-control stack and restore the editing toolbar height. */
+  #mancardoTopbarSearchHost{position:relative;display:flex;align-items:center;flex:none}
+  #mancardoTopbarSearchHost #mancardoMapSearchBtn{
+    position:static!important;
+    right:auto!important;
+    top:auto!important;
     bottom:auto!important;
+    width:36px!important;
+    height:34px!important;
+    min-height:34px!important;
+  }
+  #mancardoTopbarSearchHost #mancardoMapSearchPanel{
+    position:absolute!important;
+    right:0!important;
+    top:calc(100% + .45rem)!important;
+    bottom:auto!important;
+    z-index:1500!important;
   }
   #desktopToolbarHost{
-    top:6.85rem!important;
-  }
-  #mancardoMapSearchPanel{
-    right:5.35rem!important;
     top:4.2rem!important;
-    bottom:auto!important;
+    bottom:.7rem!important;
+    max-height:none!important;
+    overflow:hidden!important;
+  }
+  #desktopToolbarHost .toolbar{
+    max-height:100%!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    align-content:flex-start!important;
+    scrollbar-width:thin;
   }
 }
 </style>`;
 
+const SEARCH_LAYOUT_FEATURE = String.raw`
+<script id="mancardo-map-search-layout-feature">
+(function installMancardoSearchTopbarLayout(){
+  if(window.__mancardoSearchTopbarLayoutInstalled)return;
+  window.__mancardoSearchTopbarLayoutInstalled=true;
+
+  var resizeTimer=null;
+  var observer=null;
+
+  function moveSearch(){
+    var btn=document.getElementById('mancardoMapSearchBtn');
+    var panel=document.getElementById('mancardoMapSearchPanel');
+    var wrap=document.getElementById('mapWrap')||document.querySelector('.map-wrap');
+    var topbar=document.querySelector('.topbar');
+    if(!btn||!panel||!wrap||!topbar)return false;
+
+    var desktop=window.matchMedia('(min-width:768px)').matches;
+    if(desktop){
+      var host=document.getElementById('mancardoTopbarSearchHost');
+      if(!host){
+        host=document.createElement('div');
+        host.id='mancardoTopbarSearchHost';
+        var chip=topbar.querySelector('.local-chip');
+        if(chip)topbar.insertBefore(host,chip);
+        else topbar.appendChild(host);
+      }
+      if(btn.parentNode!==host)host.appendChild(btn);
+      if(panel.parentNode!==host)host.appendChild(panel);
+    }else{
+      var host=document.getElementById('mancardoTopbarSearchHost');
+      if(btn.parentNode!==wrap)wrap.appendChild(btn);
+      if(panel.parentNode!==wrap)wrap.appendChild(panel);
+      if(host&&host.parentNode)host.parentNode.removeChild(host);
+    }
+    return true;
+  }
+
+  if(!moveSearch()){
+    observer=new MutationObserver(function(){
+      if(moveSearch()&&observer){observer.disconnect();observer=null;}
+    });
+    observer.observe(document.documentElement,{childList:true,subtree:true});
+  }
+
+  window.addEventListener('resize',function(){
+    clearTimeout(resizeTimer);
+    resizeTimer=setTimeout(moveSearch,80);
+  });
+})();
+</script>`;
+
 function injectSearchLayout(html){
-  if(html.includes('mancardo-map-search-layout-styles')) return html;
-  return html.replace('</head>',SEARCH_LAYOUT_CSS+'\n</head>');
+  if(!html.includes('mancardo-map-search-layout-styles')){
+    html=html.replace('</head>',SEARCH_LAYOUT_CSS+'\n</head>');
+  }
+  if(!html.includes('mancardo-map-search-layout-feature')){
+    html=html.replace('</body>',SEARCH_LAYOUT_FEATURE+'\n</body>');
+  }
+  return html;
 }
 
 export default {
