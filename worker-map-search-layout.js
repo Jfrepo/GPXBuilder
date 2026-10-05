@@ -22,19 +22,50 @@ const SEARCH_LAYOUT_CSS = String.raw`
     z-index:1500!important;
   }
 
-  /* Restore the editing toolbar to its original start point and keep it inside the map. */
+  /* Reclaim the unused space above and below the desktop editing toolbar. */
   #desktopToolbarHost{
-    top:4.2rem!important;
-    bottom:.7rem!important;
+    top:3.25rem!important;
+    bottom:.35rem!important;
+    width:62px!important;
     max-height:none!important;
     overflow:hidden!important;
   }
+
+  /* Keep every desktop editing tool in one vertical column. */
   #desktopToolbarHost .toolbar{
+    display:flex!important;
+    flex-direction:column!important;
+    flex-wrap:nowrap!important;
+    align-items:stretch!important;
+    align-content:stretch!important;
+    gap:.22rem!important;
+    width:100%!important;
+    height:100%!important;
     max-height:100%!important;
+    padding:.35rem!important;
     overflow-y:auto!important;
     overflow-x:hidden!important;
-    align-content:flex-start!important;
     scrollbar-width:thin;
+  }
+  #desktopToolbarHost .toolbar .grp{
+    display:flex!important;
+    flex-direction:column!important;
+    flex-wrap:nowrap!important;
+    gap:.22rem!important;
+    width:100%!important;
+    margin:0!important;
+    padding:0 0 .28rem!important;
+    border-right:0!important;
+    border-bottom:1px solid var(--border)!important;
+  }
+  #desktopToolbarHost .toolbar .grp:last-child{
+    padding-bottom:0!important;
+    border-bottom:0!important;
+  }
+  #desktopToolbarHost .toolbar .icon-btn{
+    width:100%!important;
+    min-width:0!important;
+    flex:none!important;
   }
 }
 </style>`;
