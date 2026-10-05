@@ -2,10 +2,10 @@ import baseWorker from './worker-track-menu-cleanup.js';
 
 const MAP_SEARCH_CSS = String.raw`
 <style id="mancardo-map-search-styles">
-#mancardoMapSearchBtn{position:absolute;right:.7rem;top:3.55rem;z-index:910;width:36px;height:34px;min-height:34px;padding:0;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);box-shadow:0 1px 5px rgba(0,0,0,.20);display:flex;align-items:center;justify-content:center}
+#mancardoMapSearchBtn{position:absolute;right:.75rem;bottom:.8rem;z-index:910;width:38px;height:36px;min-height:36px;padding:0;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);box-shadow:0 1px 5px rgba(0,0,0,.20);display:flex;align-items:center;justify-content:center}
 #mancardoMapSearchBtn:hover,#mancardoMapSearchBtn.on{border-color:var(--accent);color:var(--accent)}
 #mancardoMapSearchBtn svg{width:18px;height:18px;display:block}
-#mancardoMapSearchPanel{position:absolute;right:.7rem;top:6rem;z-index:920;width:min(340px,calc(100vw - 24px));border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);box-shadow:0 3px 14px rgba(0,0,0,.22);overflow:hidden}
+#mancardoMapSearchPanel{position:absolute;right:.75rem;bottom:3.55rem;z-index:920;width:min(350px,calc(100vw - 24px));border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);box-shadow:0 3px 14px rgba(0,0,0,.22);overflow:hidden}
 #mancardoMapSearchPanel.hidden{display:none!important}
 .mancardo-map-search-head{display:flex;align-items:center;gap:.35rem;padding:.45rem;border-bottom:1px solid var(--border)}
 #mancardoMapSearchInput{flex:1;min-width:0;height:34px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);padding:0 .55rem;font:600 .78rem 'Source Sans 3',system-ui,sans-serif}
@@ -17,13 +17,14 @@ const MAP_SEARCH_CSS = String.raw`
 #mancardoMapSearchGo:hover,#mancardoMapSearchClose:hover{border-color:var(--accent)}
 #mancardoMapSearchResults{max-height:min(44vh,340px);overflow-y:auto;padding:.25rem}
 .mancardo-map-search-note{padding:.7rem .65rem;color:var(--text-muted);font-size:.74rem;line-height:1.35}
+.mancardo-map-search-note.error{color:var(--danger)}
 .mancardo-map-search-result{display:block;width:100%;text-align:left;border:0;border-radius:4px;background:transparent;color:var(--text);padding:.48rem .5rem;cursor:pointer}
 .mancardo-map-search-result:hover,.mancardo-map-search-result:focus{background:var(--surface-2);outline:none}
 .mancardo-map-search-name{display:block;font-weight:750;font-size:.8rem;line-height:1.2}
 .mancardo-map-search-address{display:block;margin-top:.12rem;color:var(--text-muted);font-size:.67rem;line-height:1.25}
 @media(max-width:767px){
-  #mancardoMapSearchBtn{right:.55rem;top:3.4rem;width:34px;height:32px;min-height:32px}
-  #mancardoMapSearchPanel{right:.5rem;top:5.75rem;width:min(330px,calc(100vw - 16px))}
+  #mancardoMapSearchBtn{right:.5rem;bottom:.55rem;width:38px;height:36px;min-height:36px}
+  #mancardoMapSearchPanel{right:.5rem;bottom:3.35rem;width:min(340px,calc(100vw - 16px))}
 }
 </style>`;
 
@@ -74,12 +75,19 @@ const MAP_SEARCH_FEATURE = String.raw`
     panel.classList.add('hidden');
     btn.classList.remove('on');
   }
-  function setNote(text){
+  function setNote(text,isError){
     results.innerHTML='';
     var note=document.createElement('div');
-    note.className='mancardo-map-search-note';
+    note.className='mancardo-map-search-note'+(isError?' error':'');
     note.textContent=text;
     results.appendChild(note);
+  }
+  function shortError(err){
+    var text='';
+    try{text=String((err&&err.message)||err||'Unknown error');}catch(e){text='Unknown error';}
+    text=text.replace(/\s+/g,' ').trim();
+    if(text.length>180)text=text.slice(0,177)+'...';
+    return text;
   }
   function normaliseLocation(loc){
     if(!loc)return null;
@@ -98,6 +106,13 @@ const MAP_SEARCH_FEATURE = String.raw`
   }
   function normaliseTypes(place){
     return Array.isArray(place&&place.types)?place.types.slice():[];
+  }
+  function currentBoundsLiteral(){
+    try{
+      var b=map.getBounds();
+      if(!b)return null;
+      return {north:b.getNorth(),south:b.getSouth(),east:b.getEast(),west:b.getWest()};
+    }catch(e){return null;}
   }
   function chooseZoom(types){
     types=types||[];
@@ -139,44 +154,53 @@ const MAP_SEARCH_FEATURE = String.raw`
       results.appendChild(row);
     });
   }
-  async function modernPlaces(query){
-    if(!(window.google&&google.maps))return null;
-    var lib=null;
-    try{if(typeof google.maps.importLibrary==='function')lib=await google.maps.importLibrary('places');}catch(e){return null;}
-    var Place=(lib&&lib.Place)||(google.maps.places&&google.maps.places.Place);
-    if(!Place||typeof Place.searchByText!=='function')return null;
+  async function searchPlacesNew(query){
+    if(!(window.google&&google.maps))return {items:[],error:'Google Maps has not finished loading'};
+    if(typeof google.maps.importLibrary!=='function')return {items:[],error:'Google Maps Places library is unavailable'};
     try{
-      var response=await Place.searchByText({
+      var lib=await google.maps.importLibrary('places');
+      var Place=(lib&&lib.Place)||(google.maps.places&&google.maps.places.Place);
+      if(!Place||typeof Place.searchByText!=='function')return {items:[],error:'Places API (New) search is unavailable'};
+      var request={
         textQuery:query,
         fields:['displayName','formattedAddress','location','types'],
-        maxResultCount:8
-      });
+        maxResultCount:8,
+        region:'au'
+      };
+      var bias=currentBoundsLiteral();
+      if(bias)request.locationBias=bias;
+      var response=await Place.searchByText(request);
       var places=response&&response.places||[];
-      return places.map(function(p){return {name:displayName(p),address:displayAddress(p),location:normaliseLocation(p.location),types:normaliseTypes(p)};}).filter(function(x){return x.location;});
-    }catch(e){return null;}
+      var items=places.map(function(p){return {name:displayName(p),address:displayAddress(p),location:normaliseLocation(p.location),types:normaliseTypes(p)};}).filter(function(x){return x.location;});
+      return {items:items,error:''};
+    }catch(err){
+      console.warn('ManCardo Places API (New) search failed',err);
+      return {items:[],error:shortError(err)};
+    }
   }
-  function legacyPlaces(query){
+  function geocodeGoogle(query){
     return new Promise(function(resolve){
-      if(!(window.google&&google.maps&&google.maps.places&&google.maps.places.PlacesService)){resolve(null);return;}
-      try{
-        var service=new google.maps.places.PlacesService(document.createElement('div'));
-        service.textSearch({query:query},function(found,status){
-          if(status!==google.maps.places.PlacesServiceStatus.OK){resolve(status===google.maps.places.PlacesServiceStatus.ZERO_RESULTS?[]:null);return;}
-          resolve((found||[]).slice(0,8).map(function(p){return {name:displayName(p),address:displayAddress(p),location:normaliseLocation(p.geometry&&p.geometry.location),types:normaliseTypes(p)};}).filter(function(x){return x.location;}));
-        });
-      }catch(e){resolve(null);}
-    });
-  }
-  function geocodeFallback(query){
-    return new Promise(function(resolve){
-      if(!(window.google&&google.maps&&google.maps.Geocoder)){resolve([]);return;}
+      if(!(window.google&&google.maps&&google.maps.Geocoder)){resolve({items:[],error:'Google Geocoding library is unavailable'});return;}
       try{
         var geocoder=new google.maps.Geocoder();
-        geocoder.geocode({address:query},function(found,status){
-          if(status!=='OK'){resolve([]);return;}
-          resolve((found||[]).slice(0,8).map(function(p){return {name:String((p.address_components&&p.address_components[0]&&p.address_components[0].long_name)||p.formatted_address||query),address:String(p.formatted_address||''),location:normaliseLocation(p.geometry&&p.geometry.location),types:normaliseTypes(p)};}).filter(function(x){return x.location;}));
+        var request={address:query,region:'au'};
+        geocoder.geocode(request,function(found,status){
+          var ok=status==='OK'||(google.maps.GeocoderStatus&&status===google.maps.GeocoderStatus.OK);
+          if(!ok){resolve({items:[],error:'Geocoding: '+String(status||'unknown status')});return;}
+          var items=(found||[]).slice(0,8).map(function(p){
+            return {
+              name:String((p.address_components&&p.address_components[0]&&p.address_components[0].long_name)||p.formatted_address||query),
+              address:String(p.formatted_address||''),
+              location:normaliseLocation(p.geometry&&p.geometry.location),
+              types:normaliseTypes(p)
+            };
+          }).filter(function(x){return x.location;});
+          resolve({items:items,error:''});
         });
-      }catch(e){resolve([]);}
+      }catch(err){
+        console.warn('ManCardo geocoding fallback failed',err);
+        resolve({items:[],error:shortError(err)});
+      }
     });
   }
   async function runSearch(){
@@ -184,11 +208,20 @@ const MAP_SEARCH_FEATURE = String.raw`
     if(!query){setNote('Enter a town, accommodation, landmark, business or address.');input.focus();return;}
     var token=++searchToken;
     setNote('Searching…');
-    var found=await modernPlaces(query);
-    if(found===null)found=await legacyPlaces(query);
-    if(found===null)found=await geocodeFallback(query);
+
+    var places=await searchPlacesNew(query);
     if(token!==searchToken)return;
-    renderResults(found||[]);
+    if(places.items.length){renderResults(places.items);return;}
+
+    var geocoded=await geocodeGoogle(query);
+    if(token!==searchToken)return;
+    if(geocoded.items.length){renderResults(geocoded.items);return;}
+
+    var detail=[];
+    if(places.error)detail.push('Places: '+places.error);
+    if(geocoded.error)detail.push(geocoded.error);
+    if(detail.length)setNote('Search could not return results. '+detail.join(' · '),true);
+    else setNote('No matching places found. Try a town, business name, accommodation, landmark or address.');
   }
 
   btn.onclick=function(ev){ev.stopPropagation();panel.classList.contains('hidden')?openPanel():closePanel();};
