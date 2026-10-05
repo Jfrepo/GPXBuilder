@@ -1,4 +1,4 @@
-import baseWorker from './worker-waypoint-save.js';
+import baseWorker from './worker-library-header-layout.js';
 
 const WAYPOINT_BULK_DELETE_FEATURE = String.raw`
 // ---------- bulk delete: include saved waypoints ----------
