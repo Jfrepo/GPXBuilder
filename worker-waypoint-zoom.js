@@ -117,7 +117,7 @@ function suppressZoomedOutTrackPoints(html){
         }`;
 
     const oldEvents = `    map.on('move zoom resize moveend zoomend',queueSync);`;
-    const newEvents = `    map.on('move zoom resize moveend zoomend',queueSync);\n    map.on('zoomend',syncGoogleTrackVisuals);`;
+    const newEvents = `    map.on('move zoom resize moveend zoomend',queueSync);\n    var __mancardoTrackPointsVisible=map.getZoom()>=${TRACK_POINT_MIN_ZOOM};\n    map.on('zoomend',function(){\n      var nextVisible=map.getZoom()>=${TRACK_POINT_MIN_ZOOM};\n      if(nextVisible===__mancardoTrackPointsVisible)return;\n      __mancardoTrackPointsVisible=nextVisible;\n      // Re-render only when crossing the point-visibility threshold. Calling\n      // syncGoogleTrackVisuals() directly here clears the Google track data after\n      // Leaflet's source layers have already been made transparent, which makes\n      // the route disappear until the Library row is selected again.\n      if(typeof render==='function')render();\n    });`;
 
     if(html.includes(oldBlock)&&html.includes(oldEvents)){
       html=html.replace(oldBlock,newBlock);
