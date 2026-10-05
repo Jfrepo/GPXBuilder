@@ -38,6 +38,8 @@ const MAP_SEARCH_FEATURE = String.raw`
   if(!wrap)return;
 
   var searchMarker=null;
+  var searchInfoWindow=null;
+  var searchMarkerMode='';
   var searchToken=0;
 
   var icon='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.2" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M15.2 15.2L20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>';
@@ -123,21 +125,57 @@ const MAP_SEARCH_FEATURE = String.raw`
     if(types.indexOf('lodging')>=0||types.indexOf('restaurant')>=0||types.indexOf('tourist_attraction')>=0||types.indexOf('point_of_interest')>=0||types.indexOf('establishment')>=0)return 16;
     return 14;
   }
+  function clearSearchMarker(){
+    if(searchInfoWindow){try{searchInfoWindow.close();}catch(e){}searchInfoWindow=null;}
+    if(!searchMarker)return;
+    if(searchMarkerMode==='google'){
+      try{searchMarker.setMap(null);}catch(e){}
+    }else{
+      try{map.removeLayer(searchMarker);}catch(e){}
+    }
+    searchMarker=null;
+    searchMarkerMode='';
+  }
+  function showSearchMarker(item){
+    var ll=item.location;
+    if(!ll)return;
+    clearSearchMarker();
+
+    var googleMap=window.__mancardoGoogleMap;
+    if(googleMap&&window.google&&google.maps&&typeof google.maps.Marker==='function'){
+      searchMarker=new google.maps.Marker({
+        position:{lat:ll.lat,lng:ll.lng},
+        map:googleMap,
+        title:item.name,
+        zIndex:999
+      });
+      searchMarkerMode='google';
+      if(typeof google.maps.InfoWindow==='function'){
+        var content=document.createElement('div');
+        var strong=document.createElement('strong');strong.textContent=item.name;content.appendChild(strong);
+        if(item.address){var addr=document.createElement('div');addr.textContent=item.address;content.appendChild(addr);}
+        searchInfoWindow=new google.maps.InfoWindow({content:content});
+        try{searchInfoWindow.open({map:googleMap,anchor:searchMarker});}catch(e){try{searchInfoWindow.open(googleMap,searchMarker);}catch(_e){}}
+      }
+      return;
+    }
+
+    if(window.L&&typeof L.marker==='function'){
+      searchMarker=L.marker([ll.lat,ll.lng],{title:item.name}).addTo(map);
+      searchMarkerMode='leaflet';
+      var popup=document.createElement('div');
+      var strong2=document.createElement('strong');strong2.textContent=item.name;popup.appendChild(strong2);
+      if(item.address){var addr2=document.createElement('div');addr2.textContent=item.address;popup.appendChild(addr2);}
+      searchMarker.bindPopup(popup).openPopup();
+    }
+  }
   function selectResult(item){
     var ll=item.location;
     if(!ll)return;
     var z=chooseZoom(item.types);
     if(typeof map.flyTo==='function')map.flyTo([ll.lat,ll.lng],z,{animate:true,duration:.45});
     else map.setView([ll.lat,ll.lng],z);
-
-    if(searchMarker){try{map.removeLayer(searchMarker);}catch(e){} searchMarker=null;}
-    if(window.L&&typeof L.marker==='function'){
-      searchMarker=L.marker([ll.lat,ll.lng],{title:item.name}).addTo(map);
-      var popup=document.createElement('div');
-      var strong=document.createElement('strong');strong.textContent=item.name;popup.appendChild(strong);
-      if(item.address){var addr=document.createElement('div');addr.textContent=item.address;popup.appendChild(addr);}
-      searchMarker.bindPopup(popup).openPopup();
-    }
+    showSearchMarker(item);
     closePanel();
   }
   function renderResults(items){
@@ -253,8 +291,16 @@ function ensurePlacesLibrary(html){
   });
 }
 
+function exposeGoogleMap(html){
+  if(html.includes('window.__mancardoGoogleMap=googleMap'))return html;
+  const needle="var googleTrackData=new google.maps.Data({map:googleMap});";
+  if(!html.includes(needle))return html;
+  return html.replace(needle,"window.__mancardoGoogleMap=googleMap;\n    "+needle);
+}
+
 function injectMapSearch(html){
   html=ensurePlacesLibrary(html);
+  html=exposeGoogleMap(html);
   if(!html.includes('mancardo-map-search-styles'))html=html.replace('</head>',MAP_SEARCH_CSS+'\n</head>');
   if(html.includes('installMancardoMapSearch'))return html;
   const close=html.lastIndexOf('})();');
