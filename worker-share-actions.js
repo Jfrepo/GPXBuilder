@@ -127,7 +127,15 @@ const SHARE_ACTIONS_FEATURE = String.raw`
 })();
 `;
 
+function patchSharedWaypointPreview(html){
+  const oldPreview='updateModeBanner();render();fitToTrack();renderSharedLibrary();';
+  const newPreview="updateModeBanner();render();var isWaypointPreview=gpx.indexOf('<mancardoWaypoint>true</mancardoWaypoint>')!==-1;var waypointPoint=item&&item.segments&&item.segments[0]&&item.segments[0][0];if(isWaypointPreview&&waypointPoint){map.setView([waypointPoint.lat,waypointPoint.lon],15);}else{fitToTrack();}renderSharedLibrary();";
+  if(html.includes(oldPreview))html=html.replace(oldPreview,newPreview);
+  return html;
+}
+
 function injectShareActions(html){
+  html=patchSharedWaypointPreview(html);
   if(html.includes('installMancardoShareActions'))return html;
   const marker='// ---------- boot ----------';
   if(html.includes(marker))return html.replace(marker,SHARE_ACTIONS_FEATURE+'\n'+marker);
