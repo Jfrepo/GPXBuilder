@@ -23,21 +23,33 @@ const SHARE_ACTIONS_FEATURE = String.raw`
   function escXml(value){
     return String(value==null?'':value)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+      .replace(/\"/g,'&quot;').replace(/'/g,'&apos;');
   }
 
+  // Build the waypoint with the same GPX serializer used by the existing
+  // working track publisher. A tiny two-point track keeps the Shared Library
+  // parser happy while the real waypoint is retained as a GPX <wpt> entry.
   function buildWaypointGpx(w){
     var name=(w.name||'Waypoint').trim()||'Waypoint';
     var lat=Number(w.lat),lon=Number(w.lon);
     var icon=(w.icon||'pin');
-    return '<?xml version="1.0" encoding="UTF-8"?>\n'+
-      '<gpx version="1.1" creator="ManCardo" xmlns="http://www.topografix.com/GPX/1/1">\n'+
-      '  <metadata><name>'+escXml(name)+'</name><desc>ManCardo waypoint</desc></metadata>\n'+
-      '  <wpt lat="'+lat.toFixed(6)+'" lon="'+lon.toFixed(6)+'"><name>'+escXml(name)+'</name><type>'+escXml(icon)+'</type></wpt>\n'+
-      '  <trk><name>'+escXml(name)+'</name><extensions><mancardoWaypoint>true</mancardoWaypoint><mancardoIcon>'+escXml(icon)+'</mancardoIcon></extensions><trkseg>\n'+
-      '    <trkpt lat="'+lat.toFixed(6)+'" lon="'+lon.toFixed(6)+'"></trkpt>\n'+
-      '  </trkseg></trk>\n'+
-      '</gpx>';
+    var lat2=lat<89.999999?lat+0.000001:lat-0.000001;
+    var temp={
+      name:name,
+      type:'track',
+      segments:[[
+        {lat:lat,lon:lon},
+        {lat:lat2,lon:lon}
+      ]]
+    };
+    var gpx=buildGpx(temp);
+    var wpt='  <wpt lat="'+lat.toFixed(6)+'" lon="'+lon.toFixed(6)+'"><name>'+escXml(name)+'</name><type>'+escXml(icon)+'</type><desc>ManCardo waypoint</desc></wpt>';
+    gpx=gpx.replace('  <trk>',wpt+'\\n  <trk>');
+    var trackName='    <name>'+escXml(name)+'</name>';
+    if(gpx.indexOf(trackName)!==-1){
+      gpx=gpx.replace(trackName,trackName+'\\n    <extensions><mancardoWaypoint>true</mancardoWaypoint><mancardoIcon>'+escXml(icon)+'</mancardoIcon></extensions>');
+    }
+    return gpx;
   }
 
   function shareWaypointToLibrary(id){
@@ -55,7 +67,12 @@ const SHARE_ACTIONS_FEATURE = String.raw`
       {name:(w.name||'Waypoint'),modifiedBy:who,gpx:gpx};
 
     fetch(endpoint,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-      .then(function(r){return r.json().catch(function(){return {};}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data;});})
+      .then(function(r){
+        return r.json().catch(function(){return {};}).then(function(data){
+          if(!r.ok){var err=new Error(data.error||('HTTP '+r.status));err.status=r.status;err.data=data;throw err;}
+          return data;
+        });
+      })
       .then(function(data){
         w.sharedId=data.id||w.sharedId;
         w.sharedBaseVersion=data.version||w.sharedBaseVersion;
@@ -63,10 +80,16 @@ const SHARE_ACTIONS_FEATURE = String.raw`
         w.sharedBaseModifiedBy=data.modifiedBy||w.sharedBaseModifiedBy;
         w.updatedAt=new Date().toISOString();
         writeWaypoints(all);
-        try{if(state&&state.libraryView==='shared'&&typeof loadSharedLibrary==='function')loadSharedLibrary();}catch(e){}
-        window.alert('Waypoint shared to Shared Library.');
+        try{if(typeof loadSharedLibrary==='function')loadSharedLibrary();}catch(e){}
+        window.alert('Shared to Shared Library as v'+(data.version||1)+' · '+(data.modifiedBy||who)+'.');
       })
-      .catch(function(e){window.alert('Could not share this waypoint to Shared Library. '+(e.message||''));});
+      .catch(function(e){
+        if(e&&e.status===409){
+          window.alert('A newer Shared version exists. Copy the latest Shared version before sharing this waypoint again.');
+          return;
+        }
+        window.alert('Could not share this waypoint to Shared Library. '+(e&&e.message?e.message:'Connection error'));
+      });
   }
 
   function enhanceShareActions(){
