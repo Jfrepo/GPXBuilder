@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-private-library-cloud.js"
+main = "worker-private-library-integrity.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
