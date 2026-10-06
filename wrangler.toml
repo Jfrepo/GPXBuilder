@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-private-library-sync.js"
+main = "worker-private-library-cloud.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 previews = { }
@@ -10,8 +10,18 @@ binding = "ASSETS"
 run_worker_first = true
 not_found_handling = "single-page-application"
 
-# Private My Library cloud sync is intentionally not bound yet.
-# Provisioning steps before enabling cloud writes:
-# 1. Create a D1 database and apply migrations/0001_private_library.sql.
-# 2. Add a [[d1_databases]] binding named PRIVATE_LIBRARY_DB with the real database_id.
-# 3. Configure CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD for the protected private API.
+# Private My Library cloud sync requires two Cloudflare-side resources before
+# uploads can be enabled safely:
+# 1. D1 database, migrated with migrations/0001_private_library.sql
+# 2. Cloudflare Access protection for /api/private-library/* using one-time PIN
+#    or another approved identity provider.
+#
+# Once the D1 database is created, add the real binding below:
+# [[d1_databases]]
+# binding = "PRIVATE_LIBRARY_DB"
+# database_name = "mancardo-private-library"
+# database_id = "<REAL_D1_DATABASE_ID>"
+#
+# Configure Worker variables in Cloudflare:
+# CF_ACCESS_TEAM_DOMAIN = "<your-team>.cloudflareaccess.com"
+# CF_ACCESS_AUD = "<Access application AUD tag>"
