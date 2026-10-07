@@ -2,7 +2,13 @@ name = "mancardo"
 main = "worker-private-library-integrity.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
-previews = { }
+
+[previews]
+
+[[previews.d1_databases]]
+binding = "PRIVATE_LIBRARY_DB"
+database_name = "mancardo-private-library"
+database_id = "6ada726b-aae6-441b-a698-69dc0789c7b7"
 
 [assets]
 directory = "."
@@ -17,6 +23,7 @@ database_id = "6ada726b-aae6-441b-a698-69dc0789c7b7"
 
 # Private My Library cloud sync also requires Cloudflare Access protection for
 # /api/private-library/* using one-time PIN or another approved identity provider.
-# Configure Worker variables in Cloudflare:
+# Configure Worker variables in Cloudflare for production, and matching preview
+# variables under the Preview environment when testing PR builds:
 # CF_ACCESS_TEAM_DOMAIN = "<your-team>.cloudflareaccess.com"
 # CF_ACCESS_AUD = "<Access application AUD tag>"
