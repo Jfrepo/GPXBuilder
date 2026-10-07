@@ -3,7 +3,15 @@ main = "worker-private-library-readiness-fix.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 
+[vars]
+CF_ACCESS_TEAM_DOMAIN = "sweet-scene-1f3f.cloudflareaccess.com"
+CF_ACCESS_AUD = "8fd751683d4297bd521f9ff1ee8884397d7b2342e445c1b9111684ec0702f72e"
+
 [previews]
+
+[previews.vars]
+CF_ACCESS_TEAM_DOMAIN = "sweet-scene-1f3f.cloudflareaccess.com"
+CF_ACCESS_AUD = "8fd751683d4297bd521f9ff1ee8884397d7b2342e445c1b9111684ec0702f72e"
 
 [[previews.d1_databases]]
 binding = "PRIVATE_LIBRARY_DB"
@@ -20,10 +28,3 @@ not_found_handling = "single-page-application"
 binding = "PRIVATE_LIBRARY_DB"
 database_name = "mancardo-private-library"
 database_id = "6ada726b-aae6-441b-a698-69dc0789c7b7"
-
-# Private My Library cloud sync also requires Cloudflare Access protection for
-# /api/private-library/* using one-time PIN or another approved identity provider.
-# Configure Worker variables in Cloudflare for production, and matching preview
-# variables under the Preview environment when testing PR builds:
-# CF_ACCESS_TEAM_DOMAIN = "<your-team>.cloudflareaccess.com"
-# CF_ACCESS_AUD = "<Access application AUD tag>"
