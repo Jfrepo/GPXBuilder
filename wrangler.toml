@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-private-library-readiness-fix.js"
+main = "worker-private-library-ui-fix.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 
