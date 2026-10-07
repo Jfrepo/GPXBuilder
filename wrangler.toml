@@ -10,18 +10,13 @@ binding = "ASSETS"
 run_worker_first = true
 not_found_handling = "single-page-application"
 
-# Private My Library cloud sync requires two Cloudflare-side resources before
-# uploads can be enabled safely:
-# 1. D1 database, migrated with migrations/0001_private_library.sql
-# 2. Cloudflare Access protection for /api/private-library/* using one-time PIN
-#    or another approved identity provider.
-#
-# Once the D1 database is created, add the real binding below:
-# [[d1_databases]]
-# binding = "PRIVATE_LIBRARY_DB"
-# database_name = "mancardo-private-library"
-# database_id = "<REAL_D1_DATABASE_ID>"
-#
+[[d1_databases]]
+binding = "PRIVATE_LIBRARY_DB"
+database_name = "mancardo-private-library"
+database_id = "6ada726b-aae6-441b-a698-69dc0789c7b7"
+
+# Private My Library cloud sync also requires Cloudflare Access protection for
+# /api/private-library/* using one-time PIN or another approved identity provider.
 # Configure Worker variables in Cloudflare:
 # CF_ACCESS_TEAM_DOMAIN = "<your-team>.cloudflareaccess.com"
 # CF_ACCESS_AUD = "<Access application AUD tag>"
