@@ -1,11 +1,30 @@
 name = "mancardo"
-main = "worker-device-compatibility.js"
+main = "worker-private-library-sync-button-fix.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
-previews = { }
+
+[vars]
+CF_ACCESS_TEAM_DOMAIN = "sweet-scene-1f3f.cloudflareaccess.com"
+CF_ACCESS_AUD = "8fd751683d4297bd521f9ff1ee8884397d7b2342e445c1b9111684ec0702f72e"
+
+[previews]
+
+[previews.vars]
+CF_ACCESS_TEAM_DOMAIN = "sweet-scene-1f3f.cloudflareaccess.com"
+CF_ACCESS_AUD = "8fd751683d4297bd521f9ff1ee8884397d7b2342e445c1b9111684ec0702f72e"
+
+[[previews.d1_databases]]
+binding = "PRIVATE_LIBRARY_DB"
+database_name = "mancardo-private-library"
+database_id = "6ada726b-aae6-441b-a698-69dc0789c7b7"
 
 [assets]
 directory = "."
 binding = "ASSETS"
 run_worker_first = true
 not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "PRIVATE_LIBRARY_DB"
+database_name = "mancardo-private-library"
+database_id = "6ada726b-aae6-441b-a698-69dc0789c7b7"

@@ -5,21 +5,22 @@ const DEVICE_COMPAT_CSS = String.raw`
 #mancardoDeviceCheckBtn{flex:none}
 #mancardoDeviceCompatOverlay{position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:1rem}
 #mancardoDeviceCompatOverlay.hidden{display:none!important}
-.mancardo-device-dialog{width:min(560px,96vw);max-height:88vh;overflow:auto;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:7px;box-shadow:0 8px 28px rgba(0,0,0,.3)}
-.mancardo-device-head{display:flex;align-items:center;gap:.5rem;padding:.8rem .9rem;border-bottom:1px solid var(--border)}
+.mancardo-device-dialog{width:min(780px,96vw);max-height:88vh;overflow:auto;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:7px;box-shadow:0 8px 28px rgba(0,0,0,.3)}
+.mancardo-device-head{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--border)}
 .mancardo-device-head h3{margin:0;flex:1;font-size:1.15rem}
-.mancardo-device-summary{padding:.7rem .9rem;font-size:.78rem;line-height:1.35;color:var(--text-muted);border-bottom:1px solid var(--border)}
-.mancardo-device-list{padding:.35rem .7rem .7rem}
-.mancardo-device-row{display:grid;grid-template-columns:28px minmax(0,1fr);gap:.4rem;padding:.55rem .2rem;border-bottom:1px solid var(--border)}
+.mancardo-device-summary{padding:.55rem .9rem;font-size:.75rem;line-height:1.3;color:var(--text-muted);border-bottom:1px solid var(--border)}
+.mancardo-device-list{padding:.2rem .7rem .35rem}
+.mancardo-device-row{display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:.45rem;padding:.38rem .2rem;border-bottom:1px solid var(--border);min-height:38px}
 .mancardo-device-row:last-child{border-bottom:0}
-.mancardo-device-icon{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.76rem}
+.mancardo-device-row>div:nth-child(2){display:flex;align-items:center;gap:.55rem;min-width:0}
+.mancardo-device-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.7rem}
 .mancardo-device-row.pass .mancardo-device-icon{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good);border:1px solid var(--good)}
 .mancardo-device-row.fail .mancardo-device-icon{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);border:1px solid var(--danger)}
 .mancardo-device-row.pending .mancardo-device-icon{background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border)}
-.mancardo-device-name{font-weight:700;font-size:.8rem}
-.mancardo-device-detail{font-size:.7rem;line-height:1.3;color:var(--text-muted);margin-top:.08rem}
-.mancardo-device-actions{display:flex;justify-content:flex-end;gap:.45rem;padding:.7rem .9rem;border-top:1px solid var(--border)}
-@media(max-width:767px){#mancardoDeviceCheckBtn{width:38px;padding:.4rem;font-size:0}#mancardoDeviceCheckBtn::after{content:'✓?';font-size:.72rem;font-weight:800}}
+.mancardo-device-name{font-weight:700;font-size:.76rem;white-space:nowrap;flex:none}
+.mancardo-device-detail{font-size:.7rem;line-height:1.2;color:var(--text-muted);margin:0;min-width:0}
+.mancardo-device-actions{display:flex;justify-content:flex-end;gap:.45rem;padding:.6rem .9rem;border-top:1px solid var(--border)}
+@media(max-width:767px){#mancardoDeviceCheckBtn{width:38px;padding:.4rem;font-size:0}#mancardoDeviceCheckBtn::after{content:'✓?';font-size:.72rem;font-weight:800}.mancardo-device-dialog{width:min(680px,98vw)}.mancardo-device-row>div:nth-child(2){gap:.38rem}.mancardo-device-name{font-size:.72rem}.mancardo-device-detail{font-size:.66rem}}
 </style>`;
 
 const DEVICE_COMPAT_FEATURE = String.raw`
