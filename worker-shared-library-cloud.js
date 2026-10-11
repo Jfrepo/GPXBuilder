@@ -1,4 +1,4 @@
-import baseWorker from './worker-private-library-syncnow-fix.js';
+import baseWorker from './worker-private-library-sync-button-fix.js';
 
 const SHARED_PREFIX='/api/tracks';
 const MAX_GPX_BYTES=1_500_000;
