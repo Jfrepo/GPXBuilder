@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-private-library-sync-button-fix.js"
+main = "worker-shared-library-cloud.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 
