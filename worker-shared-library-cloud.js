@@ -15,14 +15,33 @@ const SHARED_AUTH_UI=String.raw`
     btn.dataset.mancardoSharedAuthBypass='1';
     try{btn.click();}finally{setTimeout(function(){delete btn.dataset.mancardoSharedAuthBypass;},0);}
   }
+  function mobileLike(){
+    try{return window.matchMedia&&window.matchMedia('(pointer: coarse)').matches;}catch(e){}
+    return window.innerWidth<760;
+  }
+  function showSignIn(){
+    var overlay=document.getElementById('mancardoPrivateSyncOverlay');
+    var msg=document.getElementById('mancardoPrivateSyncMessage');
+    var chip=document.getElementById('mancardoPrivateSyncChip');
+    if(overlay){
+      overlay.classList.remove('hidden');
+      if(msg)msg.textContent='Sign in is required before publishing to Shared Library. Tap Sign in, complete the Cloudflare Access login, then return and tap Share again.';
+      return true;
+    }
+    if(chip){try{chip.click();return true;}catch(e){}}
+    return false;
+  }
   document.addEventListener('click',function(ev){
     var btn=ev.target&&ev.target.closest?ev.target.closest('button'):null;
     if(!isShareButton(btn))return;
     ev.preventDefault();
     ev.stopImmediatePropagation();
 
+    var isMobile=mobileLike();
     var popup=null;
-    try{popup=window.open('about:blank','mancardo-private-login','width=640,height=700');}catch(e){}
+    if(!isMobile){
+      try{popup=window.open('about:blank','mancardo-private-login','width=640,height=700');}catch(e){}
+    }
     fetch('/api/private-library/health',{credentials:'include',cache:'no-store',headers:{accept:'application/json'}})
       .then(function(r){return r.json().catch(function(){return {};});})
       .then(function(h){
@@ -31,16 +50,21 @@ const SHARED_AUTH_UI=String.raw`
           runOriginal(btn);
           return;
         }
+        if(isMobile){
+          if(popup&&!popup.closed)popup.close();
+          if(!showSignIn())alert('Sign in is required before publishing to Shared Library. Open the cloud sync control, choose Sign in, then try Share again.');
+          return;
+        }
         if(popup&&!popup.closed){
           popup.location='/api/private-library/login';
           try{popup.focus();}catch(e){}
-        }else{
+        }else if(!showSignIn()){
           alert('Sign in is required before publishing to Shared Library. Open the cloud sync control, choose Sign in, then try Share again.');
         }
       })
       .catch(function(){
         if(popup&&!popup.closed)popup.close();
-        alert('Could not verify your ManCardo account. Please sign in using the cloud sync control, then try Share again.');
+        if(!showSignIn())alert('Could not verify your ManCardo account. Please sign in using the cloud sync control, then try Share again.');
       });
   },true);
 })();
