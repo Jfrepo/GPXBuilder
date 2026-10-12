@@ -3,6 +3,49 @@ import baseWorker from './worker-private-library-sync-button-fix.js';
 const SHARED_PREFIX='/api/tracks';
 const MAX_GPX_BYTES=1_500_000;
 
+const SHARED_AUTH_UI=String.raw`
+<script id="mancardo-shared-auth-guard">
+(function(){
+  function isShareButton(btn){
+    if(!btn||btn.dataset.mancardoSharedAuthBypass==='1')return false;
+    var t=(btn.textContent||'').trim().toLowerCase();
+    return t==='share'||t==='publish'||t.indexOf('publish')===0;
+  }
+  function runOriginal(btn){
+    btn.dataset.mancardoSharedAuthBypass='1';
+    try{btn.click();}finally{setTimeout(function(){delete btn.dataset.mancardoSharedAuthBypass;},0);}
+  }
+  document.addEventListener('click',function(ev){
+    var btn=ev.target&&ev.target.closest?ev.target.closest('button'):null;
+    if(!isShareButton(btn))return;
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+
+    var popup=null;
+    try{popup=window.open('about:blank','mancardo-private-login','width=640,height=700');}catch(e){}
+    fetch('/api/private-library/health',{credentials:'include',cache:'no-store',headers:{accept:'application/json'}})
+      .then(function(r){return r.json().catch(function(){return {};});})
+      .then(function(h){
+        if(h&&h.authenticated&&h.accountKey){
+          if(popup&&!popup.closed)popup.close();
+          runOriginal(btn);
+          return;
+        }
+        if(popup&&!popup.closed){
+          popup.location='/api/private-library/login';
+          try{popup.focus();}catch(e){}
+        }else{
+          alert('Sign in is required before publishing to Shared Library. Open the cloud sync control, choose Sign in, then try Share again.');
+        }
+      })
+      .catch(function(){
+        if(popup&&!popup.closed)popup.close();
+        alert('Could not verify your ManCardo account. Please sign in using the cloud sync control, then try Share again.');
+      });
+  },true);
+})();
+</script>`;
+
 function json(data,status=200){
   return new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 }
@@ -102,6 +145,10 @@ export default {
     if(!type.includes('text/html'))return response;
     let html=await response.text();
     html=html.replace("var SHARED_API = 'https://api.mancardo.com';","var SHARED_API = '';");
+    if(!html.includes('mancardo-shared-auth-guard')){
+      const i=html.toLowerCase().lastIndexOf('</body>');
+      html=i>=0?html.slice(0,i)+SHARED_AUTH_UI+'\n'+html.slice(i):html+SHARED_AUTH_UI;
+    }
     const headers=new Headers(response.headers);headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store');
     return new Response(html,{status:response.status,statusText:response.statusText,headers});
   }
