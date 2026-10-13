@@ -1,6 +1,6 @@
 import baseWorker from './worker-location-accuracy.js';
 
-const HIDE_SAVE = String.raw`<style id="mancardo-hide-manual-save">#saveBtn{display:none!important}</style>`;
+const HIDE_LOCAL_ONLY = String.raw`<style id="mancardo-hide-local-only-indicator">.local-chip{display:none!important}</style>`;
 
 export default {
   async fetch(request,env,ctx){
@@ -8,9 +8,9 @@ export default {
     const type=response.headers.get('content-type')||'';
     if(!type.includes('text/html'))return response;
     let html=await response.text();
-    if(!html.includes('mancardo-hide-manual-save')){
+    if(!html.includes('mancardo-hide-local-only-indicator')){
       const i=html.toLowerCase().lastIndexOf('</head>');
-      html=i>=0?html.slice(0,i)+HIDE_SAVE+'\n'+html.slice(i):HIDE_SAVE+html;
+      html=i>=0?html.slice(0,i)+HIDE_LOCAL_ONLY+'\n'+html.slice(i):HIDE_LOCAL_ONLY+html;
     }
     const headers=new Headers(response.headers);
     headers.delete('content-length');
