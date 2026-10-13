@@ -1,4 +1,4 @@
-import baseWorker from './worker-location-accuracy.js';
+import baseWorker from './worker-hide-save.js';
 
 const MOBILE_SEARCH_LAYERING = String.raw`
 <style id="mancardo-mobile-search-layering">
