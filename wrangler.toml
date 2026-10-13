@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-mobile-auth-return.js"
+main = "worker-private-replication-fix.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 
