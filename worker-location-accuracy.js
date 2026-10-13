@@ -10,6 +10,12 @@ const LOCATION_PATCH=String.raw`
   var bestAt=0;
   var accuracyCircle=null;
   var freshRequestRunning=false;
+  var pendingFix=null;
+  var pendingSince=0;
+  var pendingTimer=null;
+  var GOOD_ACCURACY=60;
+  var ACCEPTABLE_ACCURACY=150;
+  var FIRST_FIX_WAIT_MS=12000;
 
   function finite(n){return typeof n==='number'&&isFinite(n);}
   function fmtAccuracy(a){
@@ -21,48 +27,33 @@ const LOCATION_PATCH=String.raw`
     if(!a||!b)return 0;
     try{return a.distanceTo(b);}catch(e){return 0;}
   }
-  function setLocationStatus(c,accepted){
+  function setButton(text,error){
     try{
       var b=locationControls&&locationControls._loc;
       if(!b)return;
-      var a=finite(c.accuracy)?c.accuracy:Infinity;
-      b.classList.add('on');
-      b.classList.toggle('error',a>500);
-      if(a>500){
-        b.title='Approximate location '+fmtAccuracy(a)+' — enable Precise Location in your browser/device settings';
-        b.setAttribute('aria-label','Approximate location '+fmtAccuracy(a)+'. Enable Precise Location in browser or device settings.');
-      }else{
-        b.classList.remove('error');
-        b.title='Current location '+fmtAccuracy(a);
-        b.setAttribute('aria-label','Current location '+fmtAccuracy(a));
-      }
+      b.title=text;b.setAttribute('aria-label',text);
+      b.classList.add('on');b.classList.toggle('error',!!error);
+    }catch(e){}
+  }
+  function setLocationStatus(c,accepted){
+    var a=finite(c&&c.accuracy)?c.accuracy:Infinity;
+    var approximate=a>ACCEPTABLE_ACCURACY;
+    var text=approximate
+      ? 'Approximate location '+fmtAccuracy(a)+' — enable Precise Location in browser/device settings'
+      : 'Current location '+fmtAccuracy(a);
+    setButton(text,approximate);
+    try{
+      var b=locationControls&&locationControls._loc;if(!b)return;
       b.dataset.locationAccuracy=finite(a)?String(Math.round(a)):'';
       if(!accepted)b.dataset.locationIgnored='1';else delete b.dataset.locationIgnored;
     }catch(e){}
   }
-
-  function shouldAccept(c,ll){
-    var a=finite(c.accuracy)&&c.accuracy>0?c.accuracy:Infinity;
-    var now=Date.now();
-    if(!lastUserLatLng)return true;
-    if(a<=100)return true;
-    if(now-bestAt>30000)return true;
-    if(a<bestAccuracy*0.8)return true;
-    var jump=distanceMeters(lastUserLatLng,ll);
-    // Reject a substantially worse, low-confidence fix that would jump the map.
-    if(bestAccuracy<=100 && a>Math.max(250,bestAccuracy*3) && jump>Math.max(500,a*1.5))return false;
-    return true;
-  }
-
-  window.updateUserLocation=function(pos){
-    if(!pos||!pos.coords)return;
+  function applyFix(pos,recenter){
+    if(!pos||!pos.coords)return false;
     var c=pos.coords;
-    if(!finite(c.latitude)||!finite(c.longitude))return;
+    if(!finite(c.latitude)||!finite(c.longitude))return false;
     var ll=L.latLng(c.latitude,c.longitude);
     var a=finite(c.accuracy)&&c.accuracy>0?c.accuracy:Infinity;
-    var accepted=shouldAccept(c,ll);
-    setLocationStatus(c,accepted);
-    if(!accepted)return;
 
     lastUserLatLng=ll;
     if(a<bestAccuracy||Date.now()-bestAt>30000){bestAccuracy=a;bestAt=Date.now();}
@@ -84,46 +75,86 @@ const LOCATION_PATCH=String.raw`
       }
     }catch(e){}
 
-    if(locationControls&&locationControls._loc){locationControls._loc.classList.add('on');}
-    map.panTo(ll,{animate:true});
+    setLocationStatus(c,true);
+    if(recenter)map.setView(ll,Math.max(map.getZoom(),a<=GOOD_ACCURACY?17:15));
+    else map.panTo(ll,{animate:true});
     if(headingUp&&lastHeading!=null)setMapBearing(lastHeading);
-  };
+    return true;
+  }
+  function considerFix(pos,recenter){
+    if(!pos||!pos.coords)return false;
+    var c=pos.coords;
+    if(!finite(c.latitude)||!finite(c.longitude))return false;
+    var ll=L.latLng(c.latitude,c.longitude);
+    var a=finite(c.accuracy)&&c.accuracy>0?c.accuracy:Infinity;
+    var now=Date.now();
+
+    if(lastUserLatLng){
+      var jump=distanceMeters(lastUserLatLng,ll);
+      if(a<=GOOD_ACCURACY)return applyFix(pos,recenter);
+      if(bestAccuracy<=GOOD_ACCURACY && a>Math.max(200,bestAccuracy*3) && jump>Math.max(300,a)){
+        setLocationStatus(c,false);return false;
+      }
+      if(a<=ACCEPTABLE_ACCURACY || now-bestAt>30000 || a<bestAccuracy*0.75)return applyFix(pos,recenter);
+      setLocationStatus(c,false);return false;
+    }
+
+    // Do not immediately centre on the browser's first coarse Wi‑Fi/IP fix.
+    if(a<=ACCEPTABLE_ACCURACY)return applyFix(pos,recenter);
+    if(!pendingFix || a<(pendingFix.coords.accuracy||Infinity))pendingFix=pos;
+    if(!pendingSince)pendingSince=now;
+    setButton('Improving GPS lock… '+fmtAccuracy(a),true);
+    if(!pendingTimer){
+      pendingTimer=setTimeout(function(){
+        pendingTimer=null;
+        if(!lastUserLatLng&&pendingFix){
+          applyFix(pendingFix,true);
+          setLocationStatus(pendingFix.coords,true);
+        }
+        pendingFix=null;pendingSince=0;
+      },FIRST_FIX_WAIT_MS);
+    }
+    return false;
+  }
+
+  window.updateUserLocation=function(pos){considerFix(pos,false);};
+
+  function startFreshLock(){
+    if(freshRequestRunning||!navigator.geolocation)return;
+    freshRequestRunning=true;
+    setButton('Getting precise GPS location…',false);
+    var started=Date.now(),best=null,tempWatch=null,done=false;
+    function finish(useBest){
+      if(done)return;done=true;freshRequestRunning=false;
+      if(tempWatch!=null)try{navigator.geolocation.clearWatch(tempWatch);}catch(e){}
+      if(useBest&&best){applyFix(best,true);setLocationStatus(best.coords,true);}
+      else if(lastUserLatLng)map.setView(lastUserLatLng,Math.max(map.getZoom(),15));
+    }
+    tempWatch=navigator.geolocation.watchPosition(function(pos){
+      var a=finite(pos.coords.accuracy)&&pos.coords.accuracy>0?pos.coords.accuracy:Infinity;
+      if(!best||a<(best.coords.accuracy||Infinity))best=pos;
+      setButton('Getting precise GPS location… '+fmtAccuracy(a),a>ACCEPTABLE_ACCURACY);
+      if(a<=GOOD_ACCURACY){finish(true);return;}
+      if(a<=ACCEPTABLE_ACCURACY && Date.now()-started>2500){finish(true);return;}
+      if(Date.now()-started>=FIRST_FIX_WAIT_MS)finish(true);
+    },function(err){
+      freshRequestRunning=false;
+      if(tempWatch!=null)try{navigator.geolocation.clearWatch(tempWatch);}catch(e){}
+      if(best)applyFix(best,true);
+      else setButton(err&&err.code===1?'Location permission blocked':'Unable to obtain precise location',true);
+    },{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+    setTimeout(function(){if(!done)finish(!!best);},FIRST_FIX_WAIT_MS+1000);
+  }
 
   window.startLocationFollow=function(recenter){
-    if(!navigator.geolocation){
-      if(locationControls&&locationControls._loc){locationControls._loc.title='Location unavailable';locationControls._loc.setAttribute('aria-label','Location unavailable');locationControls._loc.classList.add('error');}
-      return;
-    }
+    if(!navigator.geolocation){setButton('Location unavailable',true);return;}
     var opts={enableHighAccuracy:true,maximumAge:0,timeout:20000};
     if(locationWatchId==null){
       locationWatchId=navigator.geolocation.watchPosition(window.updateUserLocation,function(err){
-        if(locationControls&&locationControls._loc){
-          locationControls._loc.title=err&&err.code===1?'Location permission blocked':'Unable to get a fresh location';
-          locationControls._loc.setAttribute('aria-label',locationControls._loc.title);
-          locationControls._loc.classList.add('error');
-        }
+        setButton(err&&err.code===1?'Location permission blocked':'Unable to get current location',true);
       },opts);
     }
-    // A tap on My Location must request a fresh GPS fix, not simply reuse a cached fix.
-    if(recenter&&!freshRequestRunning){
-      freshRequestRunning=true;
-      if(locationControls&&locationControls._loc){locationControls._loc.title='Getting precise location…';locationControls._loc.setAttribute('aria-label','Getting precise location');}
-      navigator.geolocation.getCurrentPosition(function(pos){
-        freshRequestRunning=false;
-        window.updateUserLocation(pos);
-        if(lastUserLatLng)map.setView(lastUserLatLng,Math.max(map.getZoom(),16));
-      },function(err){
-        freshRequestRunning=false;
-        if(lastUserLatLng)map.setView(lastUserLatLng,Math.max(map.getZoom(),15));
-        if(locationControls&&locationControls._loc){
-          locationControls._loc.title=err&&err.code===1?'Location permission blocked':'Could not get a fresh precise fix';
-          locationControls._loc.setAttribute('aria-label',locationControls._loc.title);
-          locationControls._loc.classList.add('error');
-        }
-      },opts);
-    }else if(recenter&&lastUserLatLng){
-      map.setView(lastUserLatLng,Math.max(map.getZoom(),15));
-    }
+    if(recenter)startFreshLock();
   };
 })();
 </script>`;
