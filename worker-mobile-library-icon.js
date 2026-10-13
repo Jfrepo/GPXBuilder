@@ -3,15 +3,21 @@ import baseWorker from './worker-private-waypoint-sync.js';
 const PATCH=String.raw`
 <script id="mancardo-mobile-library-panel-icon">
 (function(){
+  function layersSvg(){
+    return '<svg aria-hidden="true" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z"></path><path d="m3.5 12 8.5 4.5 8.5-4.5"></path><path d="m3.5 16.5 8.5 4.5 8.5-4.5"></path></svg>';
+  }
   function apply(){
-    var b=document.getElementById('mobileLibraryToggle');
-    if(!b)return;
-    b.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path></svg>';
-    b.setAttribute('aria-label','Open track library panel');
-    b.setAttribute('title','Track library');
+    var overlay=document.querySelector('.overlay-control-btn');
+    if(overlay){
+      overlay.innerHTML=layersSvg();
+      overlay.setAttribute('aria-label','Show or hide map overlays');
+      overlay.setAttribute('title','Map overlays');
+    }
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
   new MutationObserver(apply).observe(document.documentElement,{subtree:true,childList:true});
+  setTimeout(apply,250);
+  setTimeout(apply,1000);
 })();
 </script>`;
 
