@@ -71,10 +71,19 @@ const CLIENT=String.raw`
     var w=loadLocal().find(function(x){return x&&String(x.id)===String(id);});if(!w)return;
     api('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({waypoint:w,modifiedBy:modifiedBy()})}).then(function(r){return r.json().catch(function(){return {};}).then(function(d){if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;});}).then(function(){alert('Waypoint published to Shared Library.');try{if(window.loadSharedLibrary&&document.getElementById('sharedLibraryPanel')&&!document.getElementById('sharedLibraryPanel').classList.contains('hidden'))window.loadSharedLibrary();}catch(e){}}).catch(function(e){alert('Could not share waypoint. '+(e.message||''));});
   }
-  function injectShareButtons(){
+  function wireShareButtons(){
     document.querySelectorAll('.mancardo-waypoint-item').forEach(function(card){
-      var id=card.getAttribute('data-waypoint-id'),menu=card.querySelector('.track-menu');if(!id||!menu||menu.querySelector('[data-share-waypoint]'))return;
-      var b=document.createElement('button');b.type='button';b.textContent='Share';b.setAttribute('data-share-waypoint','1');b.onclick=function(ev){ev.stopPropagation();publishWaypoint(id);};menu.insertBefore(b,menu.firstChild);
+      var id=card.getAttribute('data-waypoint-id'),menu=card.querySelector('.track-menu');if(!id||!menu)return;
+      var buttons=Array.prototype.filter.call(menu.querySelectorAll('button'),function(btn){return (btn.textContent||'').trim()==='Share'||btn.classList.contains('mancardo-waypoint-share')||btn.hasAttribute('data-share-waypoint');});
+      var b=buttons[0];
+      if(!b){b=document.createElement('button');b.type='button';b.textContent='Share';menu.insertBefore(b,menu.firstChild);}
+      for(var i=1;i<buttons.length;i++)buttons[i].remove();
+      if(b.getAttribute('data-shared-waypoint-wired')==='1')return;
+      b.setAttribute('data-shared-waypoint-wired','1');
+      b.setAttribute('data-share-waypoint','1');
+      b.classList.add('mancardo-waypoint-share');
+      b.title='Share this waypoint to Shared Library';
+      b.onclick=function(ev){ev.preventDefault();ev.stopPropagation();publishWaypoint(id);};
     });
   }
   function copyShared(w){
@@ -101,9 +110,9 @@ const CLIENT=String.raw`
   function loadSharedWaypoints(){return api('').then(function(r){return r.json().catch(function(){return {};}).then(function(d){if(!r.ok)throw new Error(d.error||('HTTP '+r.status));shared=Array.isArray(d.waypoints)?d.waypoints:[];renderSharedWaypoints();});}).catch(function(e){console.warn('shared waypoint load failed',e);});}
   var origRender=window.renderSharedLibrary;window.renderSharedLibrary=function(){var r=origRender&&origRender.apply(this,arguments);setTimeout(function(){renderSharedWaypoints();},0);return r;};
   var origLoad=window.loadSharedLibrary;window.loadSharedLibrary=function(){var r=origLoad&&origLoad.apply(this,arguments);setTimeout(loadSharedWaypoints,120);return r;};
-  document.addEventListener('click',function(){setTimeout(injectShareButtons,0);},true);
-  new MutationObserver(function(){injectShareButtons();}).observe(document.documentElement,{subtree:true,childList:true});
-  setTimeout(function(){injectShareButtons();loadSharedWaypoints();},1200);
+  document.addEventListener('click',function(){setTimeout(wireShareButtons,0);},true);
+  new MutationObserver(function(){wireShareButtons();}).observe(document.documentElement,{subtree:true,childList:true});
+  setTimeout(function(){wireShareButtons();loadSharedWaypoints();},1200);
 })();
 </script>`;
 
