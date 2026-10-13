@@ -117,24 +117,22 @@ const LOCATION_PATCH=String.raw`
     else if(pos&&pos.coords)updateStatus(pos.coords);
   };
 
+  function requestFromUserTap(){
+    if(!navigator.geolocation){setButton('Location unavailable',true);return;}
+    setButton('Getting current location…',false);
+    navigator.geolocation.getCurrentPosition(function(pos){
+      renderPosition(pos,true);
+      startRefine(true);
+    },function(err){
+      if(err&&err.code===1){setButton(locationError(err),true);return;}
+      setButton('Trying GPS location…',false);
+      startRefine(true);
+    },{enableHighAccuracy:false,maximumAge:0,timeout:8000});
+  }
+
   window.startLocationFollow=function(recenter){
     if(!navigator.geolocation){setButton('Location unavailable',true);return;}
-
-    // Safari can stall or fail when the first request is high-accuracy only.
-    // Request a fast coarse fix first, then refine with a separate GPS watch.
-    if(recenter){
-      setButton('Getting current location…',false);
-      navigator.geolocation.getCurrentPosition(function(pos){
-        renderPosition(pos,true);
-        startRefine(true);
-      },function(err){
-        if(err&&err.code===1){setButton(locationError(err),true);return;}
-        // Even if Safari's quick request times out, still try the high-accuracy watch.
-        setButton('Trying GPS location…',false);
-        startRefine(true);
-      },{enableHighAccuracy:false,maximumAge:30000,timeout:6000});
-    }
-
+    if(recenter)requestFromUserTap();
     if(locationWatchId==null){
       locationWatchId=navigator.geolocation.watchPosition(window.updateUserLocation,function(err){
         if(err&&err.code===1)setButton(locationError(err),true);
@@ -142,6 +140,34 @@ const LOCATION_PATCH=String.raw`
       },{enableHighAccuracy:true,maximumAge:5000,timeout:30000});
     }
   };
+
+  // Safari is strict about geolocation prompts being triggered directly from a user gesture.
+  // Bind the actual location button in capture phase so the geolocation request runs in the tap itself.
+  function bindDirectTap(){
+    try{
+      var b=locationControls&&locationControls._loc;
+      if(!b||b.dataset.safariLocationBound==='1')return false;
+      b.dataset.safariLocationBound='1';
+      b.addEventListener('click',function(ev){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        requestFromUserTap();
+        if(locationWatchId==null){
+          locationWatchId=navigator.geolocation.watchPosition(window.updateUserLocation,function(err){
+            if(err&&err.code===1)setButton(locationError(err),true);
+            else if(!lastUserLatLng)setButton(locationError(err),true);
+          },{enableHighAccuracy:true,maximumAge:5000,timeout:30000});
+        }
+      },true);
+      return true;
+    }catch(e){return false;}
+  }
+  if(!bindDirectTap()){
+    var tries=0,bindTimer=setInterval(function(){
+      tries++;
+      if(bindDirectTap()||tries>80)clearInterval(bindTimer);
+    },250);
+  }
 })();
 </script>`;
 
