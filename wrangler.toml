@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-private-waypoint-sync.js"
+main = "worker-shared-waypoint-cloud.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 
