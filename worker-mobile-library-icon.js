@@ -1,26 +1,73 @@
 import baseWorker from './worker-private-waypoint-sync.js';
 
-const LAYERS_SVG='<svg aria-hidden="true" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z"></path><path d="m3.5 12 8.5 4.5 8.5-4.5"></path><path d="m3.5 16.5 8.5 4.5 8.5-4.5"></path></svg>';
+const PATCH=String.raw`
+<style id="mancardo-mobile-overlay-icon-force">
+@media (max-width:899px){
+  #mancardoMobileBottomTools button[data-mancardo-overlay-icon="1"],
+  #mancardoMobileBottomTools .overlay-control-btn,
+  button[title="Map overlays"],
+  button[aria-label="Show or hide map overlays"]{
+    font-size:0!important;
+    line-height:0!important;
+    position:relative!important;
+  }
+  #mancardoMobileBottomTools button[data-mancardo-overlay-icon="1"]::before,
+  #mancardoMobileBottomTools .overlay-control-btn::before,
+  button[title="Map overlays"]::before,
+  button[aria-label="Show or hide map overlays"]::before{
+    content:"◆"!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    width:26px!important;
+    height:26px!important;
+    font:700 22px/1 system-ui,sans-serif!important;
+    color:currentColor!important;
+    transform:rotate(45deg)!important;
+  }
+}
+</style>
+<script id="mancardo-mobile-overlay-icon-force-script">
+(function(){
+  function mark(){
+    var candidates=[].slice.call(document.querySelectorAll('.overlay-control-btn,button[title*="overlay" i],button[aria-label*="overlay" i]'));
+    var tray=document.getElementById('mancardoMobileBottomTools');
+    if(tray){
+      [].slice.call(tray.querySelectorAll('button')).forEach(function(b){
+        var txt=(b.textContent||'').trim().toLowerCase();
+        if(!b.classList.contains('fuel-control-btn') && txt!=='fuel') candidates.push(b);
+      });
+    }
+    candidates.forEach(function(b){
+      if(!b||b.id==='hamburgerBtn')return;
+      b.dataset.mancardoOverlayIcon='1';
+      b.setAttribute('title','Map overlays');
+      b.setAttribute('aria-label','Show or hide map overlays');
+      b.innerHTML='';
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mark,{once:true});else mark();
+  new MutationObserver(mark).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','title','aria-label']});
+  setInterval(mark,500);
+})();
+</script>`;
 
 export default {
   async fetch(request,env,ctx){
     const response=await baseWorker.fetch(request,env,ctx);
-    const type=response.headers.get('content-type')||'';
-    if(!type.includes('text/html'))return response;
+    const url=new URL(request.url);
+    if(request.method!=='GET'||url.pathname.startsWith('/api/'))return response;
     let html=await response.text();
-
-    // Replace the actual map-overlays control at source. This avoids late mobile-layout
-    // scripts or browser caching restoring the original hamburger glyph.
-    html=html.replace(
-      "btn.type='button'; btn.title='Show / hide map overlays'; btn.setAttribute('aria-label','Show or hide map overlays'); btn.innerHTML='&#9776;';",
-      "btn.type='button'; btn.title='Map overlays'; btn.setAttribute('aria-label','Show or hide map overlays'); btn.innerHTML='"+LAYERS_SVG+"';"
-    );
-
+    if(!html.includes('mancardo-mobile-overlay-icon-force')){
+      const i=html.toLowerCase().lastIndexOf('</body>');
+      html=i>=0?html.slice(0,i)+PATCH+'\n'+html.slice(i):html+PATCH;
+    }
     const headers=new Headers(response.headers);
     headers.delete('content-length');
     headers.delete('etag');
     headers.set('cache-control','no-store, max-age=0');
     headers.set('pragma','no-cache');
+    headers.set('x-mancardo-overlay-icon','force-v1');
     return new Response(html,{status:response.status,statusText:response.statusText,headers});
   }
 };
