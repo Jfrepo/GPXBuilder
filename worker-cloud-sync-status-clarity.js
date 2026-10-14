@@ -43,7 +43,7 @@ const CLOUD_STATUS_CLARITY = String.raw`
     if(state==='signedin'){
       banner.innerHTML='<span class="mancardo-cloud-banner-title">✓ Signed in</span><span class="mancardo-cloud-banner-detail">Private My Library cloud sync is active and your library is synced.</span>';
     }else if(state==='checking'){
-      banner.innerHTML='<span class="mancardo-cloud-banner-title">Checking account…</span><span class="mancardo-cloud-banner-detail">Verifying your private ManCardo sign-in and cloud sync status.</span>';
+      banner.innerHTML='<span class="mancardo-cloud-banner-title">Connecting…</span><span class="mancardo-cloud-banner-detail">Verifying your private ManCardo sign-in and cloud sync status.</span>';
     }else if(state==='signin'){
       banner.innerHTML='<span class="mancardo-cloud-banner-title">Not signed in</span><span class="mancardo-cloud-banner-detail">Sign in to enable private My Library cloud sync across your devices.</span>';
     }else if(state==='error'){
@@ -60,8 +60,8 @@ const CLOUD_STATUS_CLARITY = String.raw`
     if(low.indexOf('checking')>=0){
       state='checking';
       chip.dataset.clarityState=state;
-      setText(chip,'☁ Checking account…');
-      chip.title='Checking whether your private ManCardo account is signed in';
+      setText(chip,'☁ Connecting…');
+      chip.title='Connecting to your private ManCardo account';
       chip.setAttribute('aria-label',chip.title);
     }else if(low.indexOf('synced')>=0){
       state='signedin';
