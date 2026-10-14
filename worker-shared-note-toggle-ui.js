@@ -1,4 +1,4 @@
-import baseWorker from './worker-shared-notes-stable.js';
+import baseWorker from './worker-shared-auth-safe.js';
 
 const CLIENT=String.raw`
 <style id="mancardo-shared-note-toggle-styles">
@@ -20,10 +20,10 @@ const CLIENT=String.raw`
       if(!icon||!note)return;
       if(!icon.hasAttribute('role'))icon.setAttribute('role','button');
       if(!icon.hasAttribute('tabindex'))icon.setAttribute('tabindex','0');
-      icon.setAttribute('aria-label','Show track note');
       var open=card.dataset.mancardoNoteOpen==='1';
       note.classList.toggle('mancardo-note-open',open);
       icon.setAttribute('aria-expanded',open?'true':'false');
+      icon.setAttribute('aria-label',open?'Hide track note':'Show track note');
       icon.title=open?'Hide note':'Show note';
     });
   }
