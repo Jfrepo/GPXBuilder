@@ -104,6 +104,13 @@ async function authContext(request,env,ctx){
   if(!h.authenticated)return {error:json({error:'Sign in is required for Shared Library.',code:'authentication_required'},401)};
   return {accountKey:String(h.accountKey||''),accountLabel:String(h.accountLabel||'Private account')};
 }
+function authenticatedDisplayName(auth){
+  const raw=String(auth&&auth.accountLabel||'').trim().toLowerCase();
+  const local=(raw.split('@')[0]||raw).replace(/[^a-z0-9]+/g,' ');
+  if(/\bpaul\b/.test(local))return 'Paul';
+  if(/\bjustin\b|\bjay\b|fenno/.test(local))return 'Justin';
+  return 'Shared user';
+}
 async function schemaReady(env){
   if(!env.PRIVATE_LIBRARY_DB)return false;
   try{
@@ -116,7 +123,7 @@ async function bodyJson(request){
   const raw=await request.text();if(bytes(raw)>MAX_GPX_BYTES+65536)throw Object.assign(new Error('Request is too large.'),{status:413});
   try{return JSON.parse(raw||'{}');}catch(e){throw Object.assign(new Error('Request body is not valid JSON.'),{status:400});}
 }
-function identityLabel(auth,payload){return cleanLabel(payload&&payload.modifiedBy)||cleanLabel(auth.accountLabel)||'Shared user';}
+function identityLabel(auth){return authenticatedDisplayName(auth);}
 async function listTracks(db){
   const r=await db.prepare('SELECT track_id,name,current_version,created_at,modified_at,modified_by FROM shared_library_tracks WHERE deleted=0 ORDER BY modified_at DESC, track_id ASC').all();
   return json({tracks:(r.results||[]).map(x=>({id:x.track_id,name:x.name,version:x.current_version,createdAt:new Date(Number(x.created_at)).toISOString(),modifiedAt:new Date(Number(x.modified_at)).toISOString(),modifiedBy:x.modified_by}))});
@@ -131,12 +138,12 @@ async function createTrack(request,db,auth){
   if(!name)return json({error:'Track name is required.',code:'invalid_name'},400);
   if(!gpx.trim())return json({error:'GPX data is required.',code:'invalid_gpx'},400);
   if(bytes(gpx)>MAX_GPX_BYTES)return json({error:'Shared track exceeds the cloud storage limit.',code:'track_too_large'},413);
-  const id=crypto.randomUUID(),now=Date.now(),who=identityLabel(auth,b);
+  const id=crypto.randomUUID(),now=Date.now(),who=identityLabel(auth);
   await db.prepare('INSERT INTO shared_library_tracks (track_id,name,current_version,gpx,created_at,modified_at,created_by,modified_by,deleted) VALUES (?1,?2,1,?3,?4,?4,?5,?5,0)').bind(id,name,gpx,now,who).run();
   return json({id,version:1,modifiedAt:new Date(now).toISOString(),modifiedBy:who},201);
 }
 async function publishTrack(request,db,auth,id){
-  const b=await bodyJson(request),gpx=String(b.gpx||''),base=Number(b.basedOnVersion),who=identityLabel(auth,b);
+  const b=await bodyJson(request),gpx=String(b.gpx||''),base=Number(b.basedOnVersion),who=identityLabel(auth);
   if(!Number.isInteger(base)||base<1)return json({error:'basedOnVersion must identify the Shared version being edited.',code:'invalid_version'},400);
   if(!gpx.trim())return json({error:'GPX data is required.',code:'invalid_gpx'},400);
   if(bytes(gpx)>MAX_GPX_BYTES)return json({error:'Shared track exceeds the cloud storage limit.',code:'track_too_large'},413);

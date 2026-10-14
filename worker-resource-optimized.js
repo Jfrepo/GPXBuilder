@@ -3,15 +3,71 @@ import baseWorker from './worker-location-accuracy.js';
 const STATIC_ASSET_RE=/\.(?:css|js|mjs|map|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|txt|xml|gpx)$/i;
 const CONSOLIDATED_HEAD=String.raw`<style id="mancardo-consolidated-final-ui">
 .local-chip[title="Saved on this device only"],.local-chip[aria-label="Saved on this device only"]{display:none!important}
-@media(max-width:767px){#mancardoMapSearchBtn{z-index:760!important}#mancardoMapSearchPanel{z-index:770!important}}
+.drawer-head>div{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.drawer-head #newRouteBtn,.drawer-head #importBtn,.drawer-head #exportSelectedBtn,.drawer-head #deleteSelectedBtn{width:100%!important;min-width:0!important;min-height:32px!important;height:32px!important;padding:.18rem .28rem!important;font-size:.68rem!important;line-height:1!important}
+.drawer-head #newRouteBtn::before,.drawer-head #newRouteBtn::after,.drawer-head #exportSelectedBtn::before,.drawer-head #exportSelectedBtn::after{content:none!important;display:none!important}
+@media(max-width:767px){#mancardoMapSearchBtn{z-index:760!important}#mancardoMapSearchPanel{z-index:770!important}.drawer-head>div{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
 </style>`;
 
+const CONSOLIDATED_BODY=String.raw`<script id="mancardo-final-ui-behaviour">
+(function(){
+  function accountDisplayName(label){
+    var raw=String(label||'').trim().toLowerCase();
+    var local=(raw.split('@')[0]||raw).replace(/[^a-z0-9]+/g,' ');
+    if(/\bpaul\b/.test(local))return 'Paul';
+    if(/\bjustin\b|\bjay\b|fenno/.test(local))return 'Justin';
+    return '';
+  }
+  function install(){
+    var createBtn=document.getElementById('newRouteBtn');
+    if(createBtn){
+      createBtn.textContent='Create';
+      createBtn.setAttribute('aria-label','Create track');
+      createBtn.title='Create track';
+    }
+    var exportBtn=document.getElementById('exportSelectedBtn');
+    if(exportBtn){
+      exportBtn.textContent='Export';
+      exportBtn.setAttribute('aria-label','Export selected tracks');
+      exportBtn.title='Export selected tracks';
+    }
+    var deleteBtn=document.getElementById('deleteSelectedBtn');
+    if(deleteBtn)deleteBtn.textContent='Delete';
+    var importBtn=document.getElementById('importBtn');
+    var actions=document.querySelector('.drawer-head>div');
+    if(importBtn&&actions&&importBtn.parentNode!==actions){
+      actions.insertBefore(importBtn,exportBtn||actions.lastChild);
+    }
+    if(importBtn)importBtn.textContent='Import';
+    var userSelect=document.getElementById('sharedUserSelect');
+    if(userSelect){
+      fetch('/api/private-library/health',{credentials:'include',cache:'no-store',headers:{accept:'application/json'}})
+        .then(function(r){return r.json().catch(function(){return {};});})
+        .then(function(h){
+          if(!h||!h.authenticated)return;
+          var name=accountDisplayName(h.accountLabel);
+          if(!name)return;
+          userSelect.value=name;
+          userSelect.disabled=true;
+          userSelect.title='Shared Library identity follows the signed-in account';
+          try{localStorage.setItem('mancardo.sharedUser',name);}catch(e){}
+        }).catch(function(){});
+    }
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+})();
+</script>`;
+
 function optimizeSyncClient(html){
-  // Fold the two tiny final CSS-only Worker wrappers into this already-required
-  // final HTML pass. This removes two full response.text()/Response rebuild cycles.
+  // Fold the tiny final CSS-only Worker wrappers into this already-required final
+  // HTML pass. This avoids extra response.text()/Response rebuild cycles.
   if(!html.includes('mancardo-consolidated-final-ui')){
     const i=html.toLowerCase().lastIndexOf('</head>');
     html=i>=0?html.slice(0,i)+CONSOLIDATED_HEAD+'\n'+html.slice(i):CONSOLIDATED_HEAD+html;
+  }
+  if(!html.includes('mancardo-final-ui-behaviour')){
+    const i=html.toLowerCase().lastIndexOf('</body>');
+    html=i>=0?html.slice(0,i)+CONSOLIDATED_BODY+'\n'+html.slice(i):html+CONSOLIDATED_BODY;
   }
 
   // The private track and waypoint clients used to poll every five seconds even
