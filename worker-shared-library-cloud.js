@@ -79,6 +79,13 @@ function text(data,status=200,type='text/plain; charset=utf-8'){
 function bytes(s){return new TextEncoder().encode(String(s||'')).byteLength;}
 function cleanName(v){const s=String(v||'').trim();return s&&s.length<=240?s:'';}
 function cleanLabel(v){const s=String(v||'').trim();return s&&s.length<=120?s:'';}
+function decodeXmlText(v){return String(v||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&').trim();}
+function gpxItemName(gpx){
+  const s=String(gpx||'');
+  let m=s.match(/<trk\b[^>]*>[\s\S]*?<name>([\s\S]*?)<\/name>/i);
+  if(!m)m=s.match(/<rte\b[^>]*>[\s\S]*?<name>([\s\S]*?)<\/name>/i);
+  return cleanName(m?decodeXmlText(m[1]):'');
+}
 function cookieValue(header,name){
   const parts=String(header||'').split(';');
   for(const p of parts){const i=p.indexOf('=');if(i<0)continue;if(p.slice(0,i).trim()===name)return decodeURIComponent(p.slice(i+1).trim());}
@@ -135,6 +142,17 @@ async function publishTrack(request,db,auth,id){
   if(bytes(gpx)>MAX_GPX_BYTES)return json({error:'Shared track exceeds the cloud storage limit.',code:'track_too_large'},413);
   const current=await db.prepare('SELECT current_version,name,deleted FROM shared_library_tracks WHERE track_id=?1').bind(id).first();
   if(!current||current.deleted)return json({error:'Shared track not found.',code:'not_found'},404);
+
+  // A copy taken from Shared Library keeps the original sharedId so ordinary edits can
+  // publish a new version. If the user renames that copy, it is a new track and should
+  // be published as a separate Shared Library item rather than overwrite the source.
+  const incomingName=gpxItemName(gpx);
+  if(incomingName&&incomingName!==String(current.name||'')){
+    const newId=crypto.randomUUID(),now=Date.now();
+    await db.prepare('INSERT INTO shared_library_tracks (track_id,name,current_version,gpx,created_at,modified_at,created_by,modified_by,deleted) VALUES (?1,?2,1,?3,?4,?4,?5,?5,0)').bind(newId,incomingName,gpx,now,who).run();
+    return json({id:newId,version:1,modifiedAt:new Date(now).toISOString(),modifiedBy:who,forkedFrom:id},201);
+  }
+
   if(Number(current.current_version)!==base)return json({error:'A newer Shared version exists.',code:'revision_conflict',currentVersion:Number(current.current_version)},409);
   const next=base+1,now=Date.now();
   const result=await db.prepare('UPDATE shared_library_tracks SET current_version=?2,gpx=?3,modified_at=?4,modified_by=?5 WHERE track_id=?1 AND current_version=?6 AND deleted=0').bind(id,next,gpx,now,who,base).run();
