@@ -143,9 +143,6 @@ async function publishTrack(request,db,auth,id){
   const current=await db.prepare('SELECT current_version,name,deleted FROM shared_library_tracks WHERE track_id=?1').bind(id).first();
   if(!current||current.deleted)return json({error:'Shared track not found.',code:'not_found'},404);
 
-  // A copy taken from Shared Library keeps the original sharedId so ordinary edits can
-  // publish a new version. If the user renames that copy, it is a new track and should
-  // be published as a separate Shared Library item rather than overwrite the source.
   const incomingName=gpxItemName(gpx);
   if(incomingName&&incomingName!==String(current.name||'')){
     const newId=crypto.randomUUID(),now=Date.now();
@@ -161,8 +158,8 @@ async function publishTrack(request,db,auth,id){
 }
 async function deleteTrack(db,id){
   const result=await db.prepare('DELETE FROM shared_library_tracks WHERE track_id=?1').bind(id).run();
-  if(Number(result.meta&&result.meta.changes)!==1)return json({error:'Shared track not found.',code:'not_found'},404);
-  return json({ok:true,id});
+  const deleted=Number(result.meta&&result.meta.changes)===1;
+  return json({ok:true,id,deleted,alreadyDeleted:!deleted});
 }
 async function handleShared(request,env,ctx){
   if(!(await schemaReady(env)))return json({error:'Shared Library cloud schema is not ready yet.',code:'storage_not_configured'},503);
