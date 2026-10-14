@@ -1,8 +1,19 @@
-import baseWorker from './worker-mobile-search-layering.js';
+import baseWorker from './worker-location-accuracy.js';
 
 const STATIC_ASSET_RE=/\.(?:css|js|mjs|map|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|txt|xml|gpx)$/i;
+const CONSOLIDATED_HEAD=String.raw`<style id="mancardo-consolidated-final-ui">
+.local-chip[title="Saved on this device only"],.local-chip[aria-label="Saved on this device only"]{display:none!important}
+@media(max-width:767px){#mancardoMapSearchBtn{z-index:760!important}#mancardoMapSearchPanel{z-index:770!important}}
+</style>`;
 
 function optimizeSyncClient(html){
+  // Fold the two tiny final CSS-only Worker wrappers into this already-required
+  // final HTML pass. This removes two full response.text()/Response rebuild cycles.
+  if(!html.includes('mancardo-consolidated-final-ui')){
+    const i=html.toLowerCase().lastIndexOf('</head>');
+    html=i>=0?html.slice(0,i)+CONSOLIDATED_HEAD+'\n'+html.slice(i):CONSOLIDATED_HEAD+html;
+  }
+
   // The private track and waypoint clients used to poll every five seconds even
   // while nothing had changed. Keep explicit Sync, focus/online/visibility sync,
   // but reduce the idle poll to once per minute.
@@ -23,6 +34,32 @@ function optimizeSyncClient(html){
   return html;
 }
 
+function migrationBackedWaypointDb(env,url){
+  const db=env&&env.PRIVATE_LIBRARY_DB;
+  if(!db||!url.pathname.startsWith('/api/private-library/canonical/waypoints'))return env;
+
+  // migrations/0004_private_waypoints.sql already owns this schema. The waypoint
+  // Worker historically re-ran the same CREATE TABLE/INDEX/TRIGGER statements on
+  // every request. Suppress only those exact additive schema statements here;
+  // normal SELECT/INSERT/UPDATE/DELETE queries still go directly to D1.
+  const schemaDdl=/^\s*CREATE\s+(?:TABLE|INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS\s+(?:private_library_waypoints|private_library_waypoint_revisions|idx_private_library_waypoints_owner_updated|trg_private_library_waypoints_after_insert|trg_private_library_waypoints_after_update)\b/i;
+  const proxy=new Proxy(db,{
+    get(target,prop){
+      if(prop!=='prepare'){
+        const v=target[prop];
+        return typeof v==='function'?v.bind(target):v;
+      }
+      return function(sql){
+        if(schemaDdl.test(String(sql||''))){
+          return {run:async function(){return {success:true,meta:{skipped_migration_backed_ddl:true}};}};
+        }
+        return target.prepare(sql);
+      };
+    }
+  });
+  return Object.assign({},env,{PRIVATE_LIBRARY_DB:proxy});
+}
+
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
@@ -37,7 +74,8 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    const response=await baseWorker.fetch(request,env,ctx);
+    const effectiveEnv=migrationBackedWaypointDb(env,url);
+    const response=await baseWorker.fetch(request,effectiveEnv,ctx);
     const type=response.headers.get('content-type')||'';
     if(!type.includes('text/html'))return response;
 
