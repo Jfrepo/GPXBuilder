@@ -5,6 +5,7 @@ const CONSOLIDATED_HEAD=String.raw`<style id="mancardo-consolidated-final-ui">
 .local-chip[title="Saved on this device only"],.local-chip[aria-label="Saved on this device only"]{display:none!important}
 .drawer-head>div{grid-template-columns:repeat(4,minmax(0,1fr))!important}
 .drawer-head #newRouteBtn,.drawer-head #importBtn,.drawer-head #exportSelectedBtn,.drawer-head #deleteSelectedBtn{width:100%!important;min-width:0!important;min-height:32px!important;height:32px!important;padding:.18rem .28rem!important;font-size:.68rem!important;line-height:1!important}
+.drawer-head #newRouteBtn::before,.drawer-head #newRouteBtn::after,.drawer-head #exportSelectedBtn::before,.drawer-head #exportSelectedBtn::after{content:none!important;display:none!important}
 @media(max-width:767px){#mancardoMapSearchBtn{z-index:760!important}#mancardoMapSearchPanel{z-index:770!important}.drawer-head>div{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
 </style>`;
 
@@ -24,12 +25,20 @@ const CONSOLIDATED_BODY=String.raw`<script id="mancardo-final-ui-behaviour">
       createBtn.setAttribute('aria-label','Create track');
       createBtn.title='Create track';
     }
+    var exportBtn=document.getElementById('exportSelectedBtn');
+    if(exportBtn){
+      exportBtn.textContent='Export';
+      exportBtn.setAttribute('aria-label','Export selected tracks');
+      exportBtn.title='Export selected tracks';
+    }
+    var deleteBtn=document.getElementById('deleteSelectedBtn');
+    if(deleteBtn)deleteBtn.textContent='Delete';
     var importBtn=document.getElementById('importBtn');
     var actions=document.querySelector('.drawer-head>div');
     if(importBtn&&actions&&importBtn.parentNode!==actions){
-      var exportBtn=document.getElementById('exportSelectedBtn');
       actions.insertBefore(importBtn,exportBtn||actions.lastChild);
     }
+    if(importBtn)importBtn.textContent='Import';
     var userSelect=document.getElementById('sharedUserSelect');
     if(userSelect){
       fetch('/api/private-library/health',{credentials:'include',cache:'no-store',headers:{accept:'application/json'}})
