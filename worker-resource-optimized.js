@@ -4,8 +4,8 @@ const STATIC_ASSET_RE=/\.(?:css|js|mjs|map|png|jpe?g|webp|gif|svg|ico|woff2?|ttf
 const CONSOLIDATED_HEAD=String.raw`<style id="mancardo-consolidated-final-ui">
 .local-chip[title="Saved on this device only"],.local-chip[aria-label="Saved on this device only"]{display:none!important}
 .drawer-head>div{grid-template-columns:repeat(4,minmax(0,1fr))!important}
-.drawer-head #importBtn{width:100%!important;min-width:0!important}
-@media(max-width:767px){#mancardoMapSearchBtn{z-index:760!important}#mancardoMapSearchPanel{z-index:770!important}.drawer-head>div{grid-template-columns:repeat(4,minmax(0,1fr))!important}.drawer-head #importBtn{min-height:32px!important;height:32px!important;padding:.18rem .28rem!important;font-size:.68rem!important;line-height:1!important}}
+.drawer-head #newRouteBtn,.drawer-head #importBtn,.drawer-head #exportSelectedBtn,.drawer-head #deleteSelectedBtn{width:100%!important;min-width:0!important;min-height:32px!important;height:32px!important;padding:.18rem .28rem!important;font-size:.68rem!important;line-height:1!important}
+@media(max-width:767px){#mancardoMapSearchBtn{z-index:760!important}#mancardoMapSearchPanel{z-index:770!important}.drawer-head>div{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
 </style>`;
 
 const CONSOLIDATED_BODY=String.raw`<script id="mancardo-final-ui-behaviour">
@@ -18,6 +18,12 @@ const CONSOLIDATED_BODY=String.raw`<script id="mancardo-final-ui-behaviour">
     return '';
   }
   function install(){
+    var createBtn=document.getElementById('newRouteBtn');
+    if(createBtn){
+      createBtn.textContent='Create';
+      createBtn.setAttribute('aria-label','Create track');
+      createBtn.title='Create track';
+    }
     var importBtn=document.getElementById('importBtn');
     var actions=document.querySelector('.drawer-head>div');
     if(importBtn&&actions&&importBtn.parentNode!==actions){
