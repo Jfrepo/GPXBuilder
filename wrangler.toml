@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-shared-note-toggle-ui.js"
+main = "worker-shared-stale-link-recovery.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 
