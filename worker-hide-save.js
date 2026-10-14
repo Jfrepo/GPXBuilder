@@ -1,6 +1,6 @@
 import baseWorker from './worker-location-accuracy.js';
 
-const HIDE_LOCAL_ONLY = String.raw`<style id="mancardo-hide-local-only-indicator">.local-chip{display:none!important}</style>`;
+const HIDE_LOCAL_ONLY = String.raw`<style id="mancardo-hide-local-only-indicator">.local-chip[title="Saved on this device only"],.local-chip[aria-label="Saved on this device only"]{display:none!important}</style>`;
 
 export default {
   async fetch(request,env,ctx){
