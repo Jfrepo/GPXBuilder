@@ -26,16 +26,104 @@ function writeNoteToGpx(gpx,note){
 const CLIENT=String.raw`
 <style id="mancardo-shared-track-note-styles">
 .shared-item-note{margin:.08rem 0 .34rem;padding:.28rem .38rem;border-left:3px solid var(--accent);background:var(--surface-2);font-size:.72rem;line-height:1.3;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
+.mancardo-note-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;min-width:18px;margin-left:.28rem;vertical-align:middle;color:var(--text);opacity:.9;pointer-events:none}
+.mancardo-note-icon svg{display:block;width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.track-row>.mancardo-note-icon{margin-left:.05rem;margin-right:.12rem}
+.shared-item-name .mancardo-note-icon{width:16px;height:16px;min-width:16px;margin-left:.3rem}
+.shared-item-name .mancardo-note-icon svg{width:16px;height:16px}
 </style>
 <script id="mancardo-shared-track-notes">
 (function(){
   if(window.__mancardoSharedTrackNotesInstalled)return;window.__mancardoSharedTrackNotesInstalled=true;
   var rawFetch=window.fetch.bind(window);
-  function localTracks(){try{var x=JSON.parse(localStorage.getItem('switchback_local_tracks_v1')||'[]');return Array.isArray(x)?x:[];}catch(e){return [];}}
+  var NOTE_KEY='switchback_local_tracks_v1';
+  var pendingNotes=Object.create(null),noteTimers=Object.create(null),pullingNotes=false;
+  var noteSvg='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M16 3v5h5"></path><path d="M7 10h7"></path><path d="M7 14h5"></path></svg>';
+
+  function clean(v){return String(v==null?'':v).trim().slice(0,40);}
+  function localTracks(){try{var x=JSON.parse(localStorage.getItem(NOTE_KEY)||'[]');return Array.isArray(x)?x:[];}catch(e){return [];}}
+  function getLocalTrack(id){
+    var sid=String(id||'');
+    try{if(window.state&&Array.isArray(state.library)){for(var i=0;i<state.library.length;i++){if(state.library[i]&&String(state.library[i].id)===sid)return state.library[i];}}}catch(e){}
+    var lib=localTracks();for(var j=0;j<lib.length;j++){if(lib[j]&&String(lib[j].id)===sid)return lib[j];}
+    return null;
+  }
+  function persistNoteLocally(id,note){
+    var sid=String(id||''),changed=false,cleaned=clean(note);
+    try{
+      if(window.state&&Array.isArray(state.library)){
+        for(var i=0;i<state.library.length;i++)if(state.library[i]&&String(state.library[i].id)===sid){if(String(state.library[i].note||'')!==cleaned){state.library[i].note=cleaned;changed=true;}break;}
+      }
+      if(changed&&typeof window.persistLibrary==='function')window.persistLibrary();
+      else if(changed)localStorage.setItem(NOTE_KEY,JSON.stringify(state.library));
+      if(changed&&typeof window.renderLibrary==='function')window.renderLibrary();
+    }catch(e){}
+    return changed;
+  }
+  function api(url,opts){var o=Object.assign({credentials:'include',cache:'no-store',headers:{accept:'application/json'}},opts||{});return rawFetch(url,o);}
+  function getRemote(id){
+    return api('/api/private-library/tracks/'+encodeURIComponent(id)).then(function(r){
+      if(r.status===404)return {response:r,data:null};
+      return r.json().catch(function(){return {};}).then(function(d){return {response:r,data:d};});
+    });
+  }
+  function putRemote(id,base,track){
+    return api('/api/private-library/tracks/'+encodeURIComponent(id),{method:'PUT',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({base_revision:base,track:track})}).then(function(r){return r.json().catch(function(){return {};}).then(function(d){return {response:r,data:d};});});
+  }
+  function syncNoteNow(id,note,retry){
+    var sid=String(id||'');if(!sid||!navigator.onLine)return Promise.resolve(false);
+    var local=getLocalTrack(sid);if(!local)return Promise.resolve(false);
+    var wanted=clean(note);
+    pendingNotes[sid]=wanted;
+    return getRemote(sid).then(function(x){
+      if(x.response.status===401||x.response.status===503){delete pendingNotes[sid];return false;}
+      var base=0,remoteTrack=null;
+      if(x.response.ok&&x.data){base=Number(x.data.revision)||0;remoteTrack=x.data.track||null;}
+      else if(x.response.status!==404)throw new Error('Note cloud read failed');
+      var merged=remoteTrack&&typeof remoteTrack==='object'?JSON.parse(JSON.stringify(remoteTrack)):JSON.parse(JSON.stringify(local));
+      merged.id=local.id;merged.type=local.type;merged.name=local.name;merged.note=wanted;
+      return putRemote(sid,base,merged).then(function(y){
+        if(y.response.ok){delete pendingNotes[sid];return true;}
+        if(y.response.status===409&&!retry)return syncNoteNow(sid,wanted,true);
+        if(y.response.status===401||y.response.status===503){delete pendingNotes[sid];return false;}
+        throw new Error((y.data&&y.data.error)||'Note cloud write failed');
+      });
+    }).catch(function(e){console.warn('track note replication failed',e);return false;});
+  }
+  function queueNoteSync(id,note){
+    var sid=String(id||'');if(!sid)return;
+    pendingNotes[sid]=clean(note);
+    clearTimeout(noteTimers[sid]);
+    noteTimers[sid]=setTimeout(function(){syncNoteNow(sid,pendingNotes[sid],false);},650);
+  }
+  function pullNotes(){
+    if(pullingNotes||!navigator.onLine)return Promise.resolve(false);pullingNotes=true;
+    return api('/api/private-library/tracks?since=0&limit=500').then(function(r){if(!r.ok)return null;return r.json().catch(function(){return null;});}).then(function(data){
+      if(!data||!Array.isArray(data.items))return false;
+      var any=false;
+      data.items.forEach(function(item){
+        if(!item||item.deleted||!item.track||!Object.prototype.hasOwnProperty.call(item.track,'note'))return;
+        var id=String(item.track_id||item.track.id||'');if(!id||Object.prototype.hasOwnProperty.call(pendingNotes,id))return;
+        if(persistNoteLocally(id,item.track.note))any=true;
+      });
+      return any;
+    }).catch(function(e){return false;}).finally(function(){pullingNotes=false;});
+  }
+  function icon(title){var s=document.createElement('span');s.className='mancardo-note-icon';s.title=title||'Track note';s.innerHTML=noteSvg;return s;}
+  function decorateLocalNotes(){
+    var cards=document.querySelectorAll('#trackList .track-item[data-track-id]:not(.mancardo-waypoint-item)');
+    Array.prototype.forEach.call(cards,function(card){
+      var id=String(card.getAttribute('data-track-id')||''),item=getLocalTrack(id),row=card.querySelector('.track-row'),nameEl=card.querySelector('.ti-name');
+      var old=card.querySelector('.track-row>.mancardo-note-icon');
+      if(!item||!clean(item.note)){if(old)old.remove();return;}
+      if(!old&&row&&nameEl)nameEl.insertAdjacentElement('afterend',icon('Note: '+clean(item.note)));
+      else if(old)old.title='Note: '+clean(item.note);
+    });
+  }
   function xmlName(gpx){var m=String(gpx||'').match(/<(?:trk|rte)\b[^>]*>[\s\S]*?<name>([\s\S]*?)<\/name>/i);if(!m)return '';var d=document.createElement('textarea');d.innerHTML=m[1];return String(d.value||'').trim();}
   function noteForBody(body){
     var name=String((body&&body.name)||xmlName(body&&body.gpx)||'').trim();if(!name)return '';
-    var lib=localTracks();for(var i=0;i<lib.length;i++){var t=lib[i];if(t&&String(t.name||'').trim()===name)return String(t.note||'').trim().slice(0,40);}return '';
+    var lib=localTracks();for(var i=0;i<lib.length;i++){var t=lib[i];if(t&&String(t.name||'').trim()===name)return clean(t.note);}return '';
   }
   window.fetch=function(input,init){
     try{
@@ -49,20 +137,35 @@ const CLIENT=String.raw`
   function applyNotes(){
     var cards=document.querySelectorAll('#sharedTrackList .shared-item:not(.mancardo-shared-waypoint-item)');
     Array.prototype.forEach.call(cards,function(card){
-      if(card.querySelector('.shared-item-note'))return;
       var nameEl=card.querySelector('.shared-item-name'),metaEl=card.querySelector('.shared-item-meta');if(!nameEl)return;
-      var name=String(nameEl.textContent||'').trim();var meta=String(metaEl&&metaEl.textContent||'');var item=null;
+      var plainName='';for(var n=nameEl.firstChild;n;n=n.nextSibling){if(n.nodeType===3)plainName+=n.nodeValue||'';}
+      var name=String(plainName||nameEl.textContent||'').trim(),meta=String(metaEl&&metaEl.textContent||''),item=null;
       var list=(window.state&&Array.isArray(state.sharedLibrary))?state.sharedLibrary:[];
       for(var i=0;i<list.length;i++){var x=list[i];if(x&&String(x.name||'').trim()===name&&(!meta||meta.indexOf('v'+(x.version||1))!==-1)){item=x;break;}}
-      if(!item||!item.note)return;
-      var n=document.createElement('div');n.className='shared-item-note';n.textContent=item.note;
-      if(metaEl&&metaEl.nextSibling)card.insertBefore(n,metaEl.nextSibling);else card.appendChild(n);
+      var oldNote=card.querySelector('.shared-item-note'),oldIcon=nameEl.querySelector('.mancardo-note-icon');
+      if(!item||!item.note){if(oldNote)oldNote.remove();if(oldIcon)oldIcon.remove();return;}
+      if(!oldIcon)nameEl.appendChild(icon('Note: '+clean(item.note)));else oldIcon.title='Note: '+clean(item.note);
+      if(!oldNote){var d=document.createElement('div');d.className='shared-item-note';d.textContent=item.note;if(metaEl&&metaEl.nextSibling)card.insertBefore(d,metaEl.nextSibling);else card.appendChild(d);}else oldNote.textContent=item.note;
     });
   }
+  function refreshDecorations(){decorateLocalNotes();applyNotes();}
+  document.addEventListener('input',function(ev){
+    var ta=ev.target;if(!ta||ta.tagName!=='TEXTAREA'||!ta.closest('.track-note'))return;
+    var card=ta.closest('.track-item[data-track-id]');if(!card)return;
+    queueNoteSync(card.getAttribute('data-track-id'),ta.value);setTimeout(decorateLocalNotes,0);
+  },true);
+  document.addEventListener('change',function(ev){
+    var ta=ev.target;if(!ta||ta.tagName!=='TEXTAREA'||!ta.closest('.track-note'))return;
+    var card=ta.closest('.track-item[data-track-id]');if(card)queueNoteSync(card.getAttribute('data-track-id'),ta.value);
+  },true);
   var orig=window.renderSharedLibrary;
-  if(typeof orig==='function')window.renderSharedLibrary=function(){var r=orig.apply(this,arguments);setTimeout(applyNotes,0);return r;};
-  new MutationObserver(function(){setTimeout(applyNotes,0);}).observe(document.documentElement,{subtree:true,childList:true});
-  setTimeout(applyNotes,500);
+  if(typeof orig==='function')window.renderSharedLibrary=function(){var r=orig.apply(this,arguments);setTimeout(refreshDecorations,0);return r;};
+  new MutationObserver(function(){setTimeout(refreshDecorations,0);}).observe(document.documentElement,{subtree:true,childList:true});
+  window.addEventListener('focus',function(){setTimeout(pullNotes,450);});
+  window.addEventListener('online',function(){setTimeout(pullNotes,450);});
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(pullNotes,500);});
+  setInterval(function(){if(document.visibilityState==='visible'&&navigator.onLine)pullNotes();},60000);
+  setTimeout(function(){pullNotes();refreshDecorations();},900);
 })();
 </script>`;
 
