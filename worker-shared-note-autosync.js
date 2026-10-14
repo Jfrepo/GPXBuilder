@@ -5,21 +5,22 @@ const CLIENT=String.raw`
 (function(){
   if(window.__mancardoSharedNoteAutosyncInstalled)return;
   window.__mancardoSharedNoteAutosyncInstalled=true;
-  var timers=Object.create(null),running=Object.create(null),queued=Object.create(null);
+  var timers=Object.create(null),running=Object.create(null),queued=Object.create(null),KEY='switchback_local_tracks_v1';
 
   function clean(v){return String(v==null?'':v).trim().slice(0,40);}
+  function localTracks(){try{var x=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(x)?x:[];}catch(e){return [];}}
   function getTrack(id){
-    var sid=String(id||'');
-    try{
-      if(window.state&&Array.isArray(state.library)){
-        for(var i=0;i<state.library.length;i++){
-          var t=state.library[i];if(t&&String(t.id)===sid)return t;
-        }
-      }
-    }catch(e){}
+    var sid=String(id||''),list=localTracks();
+    for(var i=0;i<list.length;i++){var t=list[i];if(t&&String(t.id)===sid)return t;}
     return null;
   }
-  function persist(){try{if(typeof window.persistLibrary==='function')window.persistLibrary();}catch(e){}}
+  function persistTrack(item){
+    try{
+      var list=localTracks(),sid=String(item&&item.id||''),changed=false;
+      for(var i=0;i<list.length;i++)if(list[i]&&String(list[i].id)===sid){list[i]=item;changed=true;break;}
+      if(changed)localStorage.setItem(KEY,JSON.stringify(list));
+    }catch(e){}
+  }
   function refreshShared(){try{if(typeof window.loadSharedLibrary==='function')window.loadSharedLibrary();}catch(e){}}
 
   function publishNote(id){
@@ -28,18 +29,18 @@ const CLIENT=String.raw`
     if(running[sid]){queued[sid]=true;return Promise.resolve(false);}
     running[sid]=true;
     var endpoint='/api/tracks/'+encodeURIComponent(item.sharedId)+'/publish';
-    var payload={basedOnVersion:Number(item.sharedBaseVersion),gpx:window.buildGpx(item)};
+    var payload={basedOnVersion:Number(item.sharedBaseVersion),gpx:window.buildGpx(item),note:clean(item.note)};
     return fetch(endpoint,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
       .then(function(r){return r.json().catch(function(){return {};}).then(function(d){return {r:r,d:d};});})
       .then(function(x){
         if(!x.r.ok){
-          if(x.r.status===409&&x.d&&x.d.currentVersion){item.sharedBaseVersion=Number(x.d.currentVersion);persist();return false;}
+          if(x.r.status===409&&x.d&&x.d.currentVersion){item.sharedBaseVersion=Number(x.d.currentVersion);persistTrack(item);return false;}
           throw new Error((x.d&&x.d.error)||('HTTP '+x.r.status));
         }
         if(x.d&&x.d.id)item.sharedId=x.d.id;
         if(x.d&&x.d.version)item.sharedBaseVersion=Number(x.d.version);
         if(x.d&&x.d.modifiedAt)item.sharedBaseModifiedAt=x.d.modifiedAt;
-        persist();refreshShared();return true;
+        persistTrack(item);refreshShared();return true;
       })
       .catch(function(e){console.warn('shared note autosync failed',e);return false;})
       .finally(function(){

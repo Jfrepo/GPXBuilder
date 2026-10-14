@@ -15,11 +15,12 @@ const CLIENT=String.raw`
 (function(){
   if(window.__mancardoSharedNoteIntegrityInstalled)return;
   window.__mancardoSharedNoteIntegrityInstalled=true;
-  var previousFetch=window.fetch.bind(window);
+  var previousFetch=window.fetch.bind(window),KEY='switchback_local_tracks_v1';
   function clean(v){return String(v==null?'':v).trim().slice(0,40);}
   function xmlName(gpx){var m=String(gpx||'').match(/<(?:trk|rte)\b[^>]*>[\s\S]*?<name>([\s\S]*?)<\/name>/i);if(!m)return '';var d=document.createElement('textarea');d.innerHTML=m[1];return String(d.value||'').trim();}
+  function localTracks(){try{var x=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(x)?x:[];}catch(e){return [];}}
   function trackFor(url,body){
-    var list=[];try{if(window.state&&Array.isArray(state.library))list=state.library;}catch(e){}
+    var list=localTracks();
     var m=String(url||'').match(/\/api\/tracks\/([^/?]+)\/publish(?:\?|$)/);
     if(m){var sharedId='';try{sharedId=decodeURIComponent(m[1]);}catch(e){sharedId=m[1];}for(var i=0;i<list.length;i++){var t=list[i];if(t&&String(t.sharedId||'')===sharedId)return t;}}
     var name=String((body&&body.name)||xmlName(body&&body.gpx)||'').trim();
@@ -32,9 +33,11 @@ const CLIENT=String.raw`
       var method=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase();
       var parsed=new URL(url,location.href);
       if(method==='POST'&&(parsed.pathname==='/api/tracks'||/^\/api\/tracks\/[^/]+\/publish$/.test(parsed.pathname))&&init&&typeof init.body==='string'){
-        var body=JSON.parse(init.body||'{}'),track=trackFor(parsed.pathname,body),note=track?clean(track.note):'';
-        var headers=new Headers(init.headers||{});headers.set('X-ManCardo-Track-Note',encodeURIComponent(note));
-        init=Object.assign({},init,{headers:headers});
+        var body=JSON.parse(init.body||'{}'),track=trackFor(parsed.pathname,body);
+        if(track){
+          var headers=new Headers(init.headers||{});headers.set('X-ManCardo-Track-Note',encodeURIComponent(clean(track.note)));
+          init=Object.assign({},init,{headers:headers});
+        }
       }
     }catch(e){}
     return previousFetch(input,init);
