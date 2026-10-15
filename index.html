@@ -1208,7 +1208,14 @@ function renderSharedLibrary(){
   if(!state.sharedLibrary.length){wrap.innerHTML='<div class="empty-note">No shared tracks have been published yet.</div>';return;}
   state.sharedLibrary.slice().sort(function(a,b){return String(b.modifiedAt||'').localeCompare(String(a.modifiedAt||''));}).forEach(function(item){
     var d=document.createElement('div');d.className='shared-item'+(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===item.id?' active':'');d.style.cursor='pointer';d.title='Preview this shared track on the map';d.onclick=function(){previewSharedTrack(item);};
-    var n=document.createElement('div');n.className='shared-item-name';n.textContent=item.name||'Unnamed track';d.appendChild(n);
+    var n=document.createElement('div');n.className='shared-item-name';
+    n.style.display='flex';n.style.alignItems='center';n.style.gap='7px';
+    var localMatch=state.library.find(function(t){return t.id===item.id||t.sharedId===item.id;})||state.library.find(function(t){return t.name===item.name;});
+    var colour=localMatch&&(localMatch.color||localMatch.colour);
+    if(colour&&/^#[0-9a-f]{3,8}$/i.test(colour)){
+      var swatch=document.createElement('span');swatch.title='Track colour';swatch.style.cssText='display:inline-block;flex:0 0 12px;width:12px;height:12px;border:1px solid rgba(0,0,0,.25);border-radius:2px;background:'+colour;n.appendChild(swatch);
+    }
+    var nameText=document.createElement('span');nameText.textContent=item.name||'Unnamed track';n.appendChild(nameText);d.appendChild(n);
     var m=document.createElement('div');m.className='shared-item-meta';m.textContent='v'+(item.version||1)+' · '+(item.modifiedBy||'Unknown')+' · '+fmtSharedDate(item.modifiedAt);d.appendChild(m);
     var a=document.createElement('div');a.className='shared-item-actions';
     var preview=document.createElement('button');preview.type='button';preview.className='icon-btn';preview.textContent=(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===item.id)?'Previewing':'Preview';preview.onclick=function(ev){ev.preventDefault();ev.stopPropagation();previewSharedTrack(item);};a.appendChild(preview);
