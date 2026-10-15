@@ -157,6 +157,16 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   document.getElementById('mancardoPrivateSyncClose').onclick=function(){overlay.classList.add('hidden');};document.getElementById('mancardoPrivateSyncDone').onclick=function(){overlay.classList.add('hidden');};document.getElementById('mancardoPrivateSyncNow').onclick=syncNow;document.getElementById('mancardoPrivateSyncSignIn').onclick=function(){window.open(API_PREFIX+'/login','mancardo-private-login','width=640,height=700');};chip.onclick=function(){overlay.classList.remove('hidden');msgEl.textContent=lastMessage;updatePending();};overlay.addEventListener('click',function(ev){if(ev.target===overlay)overlay.classList.add('hidden');});
 
   if(els&&els.saveBtn){var baseSaveClick=els.saveBtn.onclick;els.saveBtn.onclick=function(){var r=baseSaveClick&&baseSaveClick.apply(this,arguments);setTimeout(function(){queueScan().then(flushOutbox);},30);return r;};}
+  window.addEventListener('mancardo:track-renamed',function(){
+    // A rename is a cloud write, even when the user never presses Save.
+    // Wait for an in-flight upload to finish rather than silently skipping it.
+    function uploadRename(attempt){
+      if(!ready){syncNow();return;}
+      if(syncing){if(attempt<20)setTimeout(function(){uploadRename(attempt+1);},350);return;}
+      queueScan().then(flushOutbox).catch(function(e){console.warn('track rename cloud upload failed',e);setStatus('offline','Sync pending','Track rename is saved locally but its cloud upload has not completed.');});
+    }
+    uploadRename(0);
+  });
   window.addEventListener('online',function(){setTimeout(syncNow,250);});window.addEventListener('offline',function(){setStatus('offline','Offline','Changes remain saved locally and will sync when the network returns.');});document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(syncNow,400);});
   setInterval(function(){if(document.visibilityState==='visible'&&navigator.onLine)syncNow();},60000);
   setTimeout(syncNow,900);
