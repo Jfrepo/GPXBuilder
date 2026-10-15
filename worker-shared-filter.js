@@ -52,27 +52,8 @@ const SHARED_FILTER_FEATURE = String.raw`
 
   // Never rewrite the selected filter to impersonate a publishing owner.
   // The API derives modifiedBy from the authenticated Cloudflare Access identity.
-  function decorateSharedColours(){
-    var list=els.sharedTrackList;
-    if(!list)return;
-    var local=state.library||[];
-    var shared=state.sharedLibrary||[];
-    var rows=list.children;
-    Array.prototype.forEach.call(rows,function(row){
-      if(row.dataset&&row.dataset.mancardoColourDecorated)return;
-      var label=(row.textContent||'').toLowerCase();
-      var match=shared.find(function(s){return s.name&&label.indexOf(String(s.name).toLowerCase())!==-1;});
-      if(!match)return;
-      var own=local.find(function(t){return t.id===match.id;})||local.find(function(t){return t.name===match.name;});
-      var colour=own&&(own.color||own.colour);
-      if(!colour||!/^#[0-9a-f]{3,8}$/i.test(colour))return;
-      var dot=document.createElement('span');dot.title='Track colour';dot.setAttribute('aria-label','Track colour');
-      dot.style.cssText='display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,.25);background:'+colour;
-      row.insertBefore(dot,row.firstChild);row.dataset.mancardoColourDecorated='1';
-    });
-  }
-  var renderWithColours=renderSharedLibrary;
-  renderSharedLibrary=function(){renderWithColours();decorateSharedColours();};
+  // Track colour is rendered once, inside .shared-item-name by index.html.
+  // Do not inject a second swatch at the shared-item row level.
 
   renderSharedLibrary();
 })();
