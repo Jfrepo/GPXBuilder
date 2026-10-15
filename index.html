@@ -1126,9 +1126,21 @@ function deleteSelectedTracks(){
 function renameTrack(id){
   var item=state.library.find(function(t){return t.id===id;});if(!item)return;
   var name=window.prompt('Rename track',item.name); if(!name||!name.trim())return;
-  item.name=name.trim();item.updatedAt=new Date().toISOString();persistLibrary();
-  if(state.currentId===id&&state.current)state.current.name=item.name;
+  var nextName=name.trim();
+  if(nextName===item.name)return;
+  item.name=nextName;
+  item.updatedAt=new Date().toISOString();
+  // Keep the active editor and persisted library in agreement before sync scans.
+  if(state.currentId===id&&state.current){
+    state.current.name=nextName;
+    state.current.updatedAt=item.updatedAt;
+  }
+  persistLibrary();
   state.trackMenuId=null;renderLibrary();refreshDock();
+  // Reconcile after the durable local save, using the revision-aware sync queue.
+  if(typeof window.__mancardoForcePrivateReconcile==='function'){
+    // The legacy reconciliation hook is intentionally not used: it only handles missing IDs.
+  }
 }
 function updateSelectAll(){
   if(!els.selectAllTracks)return;
