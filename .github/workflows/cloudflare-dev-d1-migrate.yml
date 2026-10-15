@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   migrate:
+    if: github.ref == 'refs/heads/mancardo-dev'
     runs-on: ubuntu-latest
     environment: development
     timeout-minutes: 15
