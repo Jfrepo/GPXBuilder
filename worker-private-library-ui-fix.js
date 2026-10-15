@@ -26,7 +26,7 @@ const UI_FIX=String.raw`
     var signin=document.getElementById('mancardoPrivateSyncSignIn');
     if(signin)signin.addEventListener('click',function(ev){
       ev.preventDefault();ev.stopPropagation();
-      window.open('/api/private-library/login','mancardo-private-login','width=640,height=700');
+      window.location.assign('/api/private-library/login');
     },true);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire,{once:true});else wire();
