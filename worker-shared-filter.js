@@ -8,10 +8,12 @@ const SHARED_FILTER_FEATURE = String.raw`
   var select=els.sharedUserSelect;
   var saved=null;
   try{saved=localStorage.getItem(SHARED_USER_KEY);}catch(e){}
-  var publishUser=(saved==='Paul'||saved==='Justin')?saved:'Justin';
+  // Publishing identity is verified server-side, never inferred from this filter.
 
   select.innerHTML='<option value="all">All Tracks</option><option value="Justin">Justin</option><option value="Paul">Paul</option>';
-  select.title='Filter Shared Library tracks by user';
+  select.title='Filter Shared Library tracks by user (not the publishing owner)';
+  select.disabled=false;
+  select.removeAttribute('disabled');
   select.value=(saved==='Paul'||saved==='Justin'||saved==='all')?saved:'all';
 
   function normaliseSharedUser(value){return String(value||'').trim().toLowerCase();}
@@ -44,21 +46,33 @@ const SHARED_FILTER_FEATURE = String.raw`
   };
 
   select.onchange=function(){
-    if(select.value==='Justin'||select.value==='Paul') publishUser=select.value;
     try{localStorage.setItem(SHARED_USER_KEY,select.value);}catch(e){}
     renderSharedLibrary();
   };
 
-  // The dropdown is now a view filter. Keep the previous named identity for
-  // publishing so choosing All Tracks can never publish a modifier named "all".
-  var basePublishTrackToShared=publishTrackToShared;
-  publishTrackToShared=function(id){
-    if(select.value!=='all') return basePublishTrackToShared(id);
-    var viewValue=select.value;
-    select.value=publishUser;
-    try{return basePublishTrackToShared(id);}
-    finally{select.value=viewValue;}
-  };
+  // Never rewrite the selected filter to impersonate a publishing owner.
+  // The API derives modifiedBy from the authenticated Cloudflare Access identity.
+  function decorateSharedColours(){
+    var list=els.sharedTrackList;
+    if(!list)return;
+    var local=state.library||[];
+    var shared=state.sharedLibrary||[];
+    var rows=list.children;
+    Array.prototype.forEach.call(rows,function(row){
+      if(row.dataset&&row.dataset.mancardoColourDecorated)return;
+      var label=(row.textContent||'').toLowerCase();
+      var match=shared.find(function(s){return s.name&&label.indexOf(String(s.name).toLowerCase())!==-1;});
+      if(!match)return;
+      var own=local.find(function(t){return t.id===match.id;})||local.find(function(t){return t.name===match.name;});
+      var colour=own&&(own.color||own.colour);
+      if(!colour||!/^#[0-9a-f]{3,8}$/i.test(colour))return;
+      var dot=document.createElement('span');dot.title='Track colour';dot.setAttribute('aria-label','Track colour');
+      dot.style.cssText='display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,.25);background:'+colour;
+      row.insertBefore(dot,row.firstChild);row.dataset.mancardoColourDecorated='1';
+    });
+  }
+  var renderWithColours=renderSharedLibrary;
+  renderSharedLibrary=function(){renderWithColours();decorateSharedColours();};
 
   renderSharedLibrary();
 })();
