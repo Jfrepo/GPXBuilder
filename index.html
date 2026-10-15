@@ -1136,6 +1136,8 @@ function renameTrack(id){
     state.current.updatedAt=item.updatedAt;
   }
   persistLibrary();
+  // Notify the cloud-sync layer directly; do not depend on save-button handlers.
+  window.dispatchEvent(new CustomEvent('mancardo:track-renamed',{detail:{id:id}}));
   state.trackMenuId=null;renderLibrary();refreshDock();
   // Reconcile after the durable local save, using the revision-aware sync queue.
   if(typeof window.__mancardoForcePrivateReconcile==='function'){
