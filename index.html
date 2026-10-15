@@ -1162,6 +1162,21 @@ function loadSharedLibrary(){
     els.sharedTrackList.innerHTML='<div class="empty-note">Shared Library is unavailable. '+esc(e.message||'Connection error')+'</div>';
   });
 }
+var sharedPreviewPulseLayer=null,sharedPreviewPulseTimer=null;
+function pulseSharedPreviewTrack(){
+  if(sharedPreviewPulseTimer){clearInterval(sharedPreviewPulseTimer);sharedPreviewPulseTimer=null;}
+  if(sharedPreviewPulseLayer){try{map.removeLayer(sharedPreviewPulseLayer);}catch(e){}sharedPreviewPulseLayer=null;}
+  if(!state.sharedPreview||!state.current||!window.L||!window.map)return;
+  var lines=(state.current.segments||[]).filter(function(seg){return seg.length>1;}).map(function(seg){return seg.map(function(p){return [p.lat,p.lon];});});
+  if(!lines.length)return;
+  sharedPreviewPulseLayer=L.polyline(lines,{color:defaultTrackColour(state.current),weight:9,opacity:.95,interactive:false}).addTo(map);
+  var visible=true,steps=0;
+  sharedPreviewPulseTimer=setInterval(function(){
+    if(!state.sharedPreview||!sharedPreviewPulseLayer||steps++>=12){clearInterval(sharedPreviewPulseTimer);sharedPreviewPulseTimer=null;if(sharedPreviewPulseLayer){map.removeLayer(sharedPreviewPulseLayer);sharedPreviewPulseLayer=null;}return;}
+    visible=!visible;sharedPreviewPulseLayer.setStyle({opacity:visible?.95:.08});
+  },350);
+}
+window.__mancardoSharedPreviewPulse=pulseSharedPreviewTrack;
 function previewSharedTrack(meta){
   fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
@@ -1171,6 +1186,7 @@ function previewSharedTrack(meta){
     state.current=item;state.currentId=null;state.sharedPreview=true;state.sharedPreviewMeta=meta;
     state.selection=null;state.history=[];state.future=[];state.extend=null;state.mode='view';
     updateModeBanner();render();fitToTrack();renderSharedLibrary();
+    if(window.__mancardoSharedPreviewPulse)window.__mancardoSharedPreviewPulse();
   }).catch(function(e){alert('Could not preview this shared GPX. '+(e.message||''));});
 }
 function renderSharedLibrary(){
