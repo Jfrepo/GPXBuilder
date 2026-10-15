@@ -1,4 +1,4 @@
-import baseWorker from './worker-mobile-search-layering.js';
+import baseWorker from './worker-shared-stale-link-recovery.js';
 
 const CLOUD_STATUS_CLARITY = String.raw`
 <style id="mancardo-cloud-status-clarity-styles">
