@@ -1,4 +1,4 @@
-import baseWorker from './worker-shared-stale-link-recovery.js';
+import baseWorker from './worker-private-library-readiness-fix.js';
 
 const UI_FIX=String.raw`
 <script id="mancardo-private-sync-ui-fix">
