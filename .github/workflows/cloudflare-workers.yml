@@ -2,7 +2,7 @@ name: Deploy Mancardo to Cloudflare Workers
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,7 @@ jobs:
   deploy:
     name: Deploy ${{ github.ref_name }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    environment: production
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -35,15 +35,8 @@ jobs:
           test -n "$CF_ACCOUNT" || { echo "::error::Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
 
       - name: Deploy production Worker
-        if: github.ref_name == 'main'
         run: npx --yes wrangler@4 deploy --config wrangler.toml
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Deploy development Worker
-        if: github.ref_name == 'dev'
-        run: npx --yes wrangler@4 deploy --config wrangler.toml --name mancardo-dev
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
