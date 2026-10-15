@@ -532,6 +532,10 @@ function buildGpx(item){
   var lines = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
   lines.push('<gpx version="1.1" creator="ManCardo" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
+  // Preserve Mancardo's track colour inside the shared GPX document.
+  if(item.color&&/^#[0-9a-f]{3,8}$/i.test(item.color)){
+    lines.push('  <extensions><mancardo:color xmlns:mancardo="https://mancardo.com/gpx">'+item.color+'</mancardo:color></extensions>');
+  }
   var corners=cornerWaypoints(item);
   corners.forEach(function(w,i){
     lines.push('  <wpt lat="'+w.p.lat+'" lon="'+w.p.lon+'">');
@@ -1191,12 +1195,32 @@ function pulseSharedPreviewTrack(){
   },350);
 }
 window.__mancardoSharedPreviewPulse=pulseSharedPreviewTrack;
+var sharedGpxCache=new Map();
+var sharedPreviewRequest=0;
+function sharedGpxColour(gpx){
+  var m=String(gpx).match(/<(?:[a-zA-Z0-9_-]+:)?color\\b[^>]*>\\s*(#[0-9a-f]{3,8})\\s*<\\/(?:[a-zA-Z0-9_-]+:)?color>/i);
+  return m?m[1]:null;
+}
+function fetchSharedGpx(meta){
+  var key=String(meta.id)+':'+String(meta.version||1);
+  if(sharedGpxCache.has(key))return sharedGpxCache.get(key);
+  var task=fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'})
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})
+    .then(function(gpx){meta.color=sharedGpxColour(gpx)||meta.color;return gpx;});
+  sharedGpxCache.set(key,task);
+  task.catch(function(){sharedGpxCache.delete(key);});
+  if(sharedGpxCache.size>40)sharedGpxCache.delete(sharedGpxCache.keys().next().value);
+  return task;
+}
 function previewSharedTrack(meta){
-  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+  var requestId=++sharedPreviewRequest;
+  fetchSharedGpx(meta).then(function(gpx){
+    if(requestId!==sharedPreviewRequest)return;
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
     if(!parsed.length)throw new Error('No track data');
     var item=parsed[0];
     item.name=meta.name||item.name;item.visible=true;item.sharedId=meta.id;item.sharedBaseVersion=meta.version||1;
+    item.color=sharedGpxColour(gpx)||meta.color||(state.library.find(function(t){return t.sharedId===meta.id;})||{}).color||item.color;
     state.current=item;state.currentId=null;state.sharedPreview=true;state.sharedPreviewMeta=meta;
     state.selection=null;state.history=[];state.future=[];state.extend=null;state.mode='view';
     updateModeBanner();render();fitToTrack();renderSharedLibrary();
@@ -1211,7 +1235,7 @@ function renderSharedLibrary(){
     var n=document.createElement('div');n.className='shared-item-name';
     n.style.display='flex';n.style.alignItems='center';n.style.gap='7px';
     var localMatch=state.library.find(function(t){return t.id===item.id||t.sharedId===item.id;})||state.library.find(function(t){return t.name===item.name;});
-    var colour=localMatch&&(localMatch.color||localMatch.colour);
+    var colour=item.color||(localMatch&&(localMatch.color||localMatch.colour));
     if(colour&&/^#[0-9a-f]{3,8}$/i.test(colour)){
       var swatch=document.createElement('span');swatch.title='Track colour';swatch.style.cssText='display:inline-block;flex:0 0 12px;width:12px;height:12px;border:1px solid rgba(0,0,0,.25);border-radius:2px;background:'+colour;n.appendChild(swatch);
     }
@@ -1237,10 +1261,11 @@ function deleteSharedTrack(meta){
   }).catch(function(e){alert('Could not delete this Shared track. '+(e.message||''));});
 }
 function copySharedToLocal(meta){
-  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+  fetchSharedGpx(meta).then(function(gpx){
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
     if(!parsed.length)throw new Error('No track data');
     parsed.forEach(function(item){
+      item.color=sharedGpxColour(gpx)||meta.color||item.color;
       item.sharedId=meta.id;
       item.sharedBaseVersion=meta.version||1;
       item.sharedBaseModifiedAt=meta.modifiedAt||null;
