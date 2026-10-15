@@ -1198,7 +1198,7 @@ window.__mancardoSharedPreviewPulse=pulseSharedPreviewTrack;
 var sharedGpxCache=new Map();
 var sharedPreviewRequest=0;
 function sharedGpxColour(gpx){
-  var m=String(gpx).match(/<(?:[a-zA-Z0-9_-]+:)?color\\b[^>]*>\\s*(#[0-9a-f]{3,8})\\s*<\\/(?:[a-zA-Z0-9_-]+:)?color>/i);
+  var m=String(gpx).match(/<(?:[a-zA-Z0-9_-]+:)?color\b[^>]*>\s*(#[0-9a-f]{3,8})\s*<\/(?:[a-zA-Z0-9_-]+:)?color>/i);
   return m?m[1]:null;
 }
 function fetchSharedGpx(meta){
