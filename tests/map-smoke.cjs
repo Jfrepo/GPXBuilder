@@ -11,7 +11,7 @@ const assert=require('node:assert/strict');
       const response=await page.goto(process.env.MANCARDO_TEST_URL||'https://mancardo-dev-test.jayfenno.workers.dev/',{waitUntil:'domcontentloaded',timeout:30000});
       assert.ok(response&&response.ok(),'Development URL must return HTTP 2xx');
       await page.locator('#mapDiv').waitFor({state:'visible',timeout:20000});
-      await page.waitForFunction(()=>document.querySelector('#mapDiv')?.clientWidth>100&&document.querySelector('#mapDiv')?.clientHeight>100,{timeout:10000});
+      await page.waitForFunction(()=>document.querySelector('#mapDiv')?.clientWidth>100&&document.querySelector('#mapDiv')?.clientHeight>100,null,{timeout:10000});
       const renderMs=Date.now()-start;
       assert.ok(renderMs<30000,'Map initial render exceeded 30 seconds: '+renderMs);
       const box=await page.locator('#mapDiv').boundingBox();
