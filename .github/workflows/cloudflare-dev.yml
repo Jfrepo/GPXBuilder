@@ -15,6 +15,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/mancardo-dev' || github.ref == 'refs/heads/release/accelerated-stability-20261016'
     environment: development
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +39,9 @@ jobs:
           DEV_DB: ${{ secrets.CLOUDFLARE_DEV_D1_DATABASE_ID }}
         run: |
           node -e 'const fs=require("fs"); const id=process.env.DEV_DB; if(!/^[0-9a-f-]{36}$/i.test(id))process.exit(1); const p="wrangler.dev.toml";fs.writeFileSync(p,fs.readFileSync(p,"utf8").replace("DEV_DATABASE_ID_REQUIRED",id))'
+      - name: Verify exact Development deployment target
+        run: |
+          node -e 'const fs=require("fs");const t=fs.readFileSync("wrangler.dev.toml","utf8");if(!/^name = "mancardo-dev-test"$/m.test(t)||!/^database_name = "mancardo-private-library-dev"$/m.test(t)||/DEV_DATABASE_ID_REQUIRED/.test(t)||t.includes("6ada726b-aae6-441b-a698-69dc0789c7b7"))process.exit(1);console.log("Confirmed isolated Development Worker and D1 configuration")'
       - name: Deploy development Worker
         run: npx --yes wrangler@4 deploy --config wrangler.dev.toml
         env:
