@@ -2,14 +2,18 @@ const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 (async()=>{
   const browser=await chromium.launch({headless:true});
+  const accessClientId=process.env.CF_ACCESS_CLIENT_ID||'';
+  const accessClientSecret=process.env.CF_ACCESS_CLIENT_SECRET||'';
+  if(!accessClientId||!accessClientSecret)throw new Error('Missing CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET GitHub Actions secrets for Cloudflare Access service token.');
   try {
     for(const viewport of [{width:1440,height:900},{width:390,height:844}]) {
-      const page=await browser.newPage({viewport});
+      const page=await browser.newPage({viewport,extraHTTPHeaders:{'CF-Access-Client-Id':accessClientId,'CF-Access-Client-Secret':accessClientSecret}});
       const errors=[];
       page.on('pageerror',e=>errors.push(e.message));
       const start=Date.now();
       const response=await page.goto(process.env.MANCARDO_TEST_URL||'https://mancardo-dev-test.jayfenno.workers.dev/',{waitUntil:'domcontentloaded',timeout:30000});
       assert.ok(response&&response.ok(),'Development URL must return HTTP 2xx');
+      if(page.url().includes('/cdn-cgi/access/login/'))throw new Error('Cloudflare Access still requires interactive login. Authorize the service token in the development Access application policy.');
       const pageInfo=await page.evaluate(()=>({title:document.title,heading:document.querySelector('h1')?.textContent||'',body:document.body?.innerText?.slice(0,600)||'',mapPresent:!!document.querySelector('#mapDiv')}));
       console.log('PAGE_DIAGNOSTIC',JSON.stringify({url:page.url(),httpStatus:response.status(),...pageInfo}));
       if(!pageInfo.mapPresent){
