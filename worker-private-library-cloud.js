@@ -110,7 +110,7 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   var basePersistLibrary=persistLibrary;
   persistLibrary=function(){var r=basePersistLibrary.apply(this,arguments);if(!suppressScan)scheduleScan();return r;};
 
-  function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});return fetch(API_PREFIX+path,opts);}
+  function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});return fetch('/api/private-library'+path,opts);}
   function jsonOrEmpty(r){return r.json().catch(function(){return {};}).then(function(d){return {response:r,data:d};});}
 
   function health(){return api('/health').then(function(r){return jsonOrEmpty(r);}).then(function(x){lastHealth=x.data||{};if(!x.response.ok&&x.response.status!==401&&x.response.status!==503)throw new Error('Health check HTTP '+x.response.status);return x.data||{};});}
