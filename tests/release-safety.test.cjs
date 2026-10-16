@@ -30,3 +30,8 @@ test('development autosave triggers cloud reconciliation', () => {
   assert.match(html, /mancardo:track-autosaved/);
   assert.match(cloud, /addEventListener\('mancardo:track-autosaved'/);
 });
+
+test('production preview URLs cannot access production D1', () => {
+  assert.match(prod, /preview_urls = false/);
+  assert.doesNotMatch(prod, /\[\[previews\.d1_databases\]\]/);
+});
