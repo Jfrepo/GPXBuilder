@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const html = fs.readFileSync('index.html','utf8');
 const cloud = fs.readFileSync('worker-private-library-cloud.js','utf8');
+const guard = fs.readFileSync('worker-track-size-guard.js','utf8');
 const dev = fs.readFileSync('wrangler.dev.toml','utf8');
 const prod = fs.readFileSync('wrangler.toml','utf8');
 const deploy = fs.readFileSync('.github/workflows/cloudflare-dev.yml','utf8');
@@ -34,4 +35,13 @@ test('development autosave triggers cloud reconciliation', () => {
 test('production preview URLs cannot access production D1', () => {
   assert.match(prod, /preview_urls = false/);
   assert.doesNotMatch(prod, /\[\[previews\.d1_databases\]\]/);
+});
+
+test('track cloud sync has a safety margin below the D1 hard limit', () => {
+  assert.match(guard, /SAFE_TRACK_BYTES = Math\.floor\(1\.8 \* 1024 \* 1024\)/);
+  assert.match(guard, /WARN_TRACK_BYTES = Math\.floor\(1\.6 \* 1024 \* 1024\)/);
+  assert.match(guard, /code:'track_safety_limit'/);
+  assert.match(guard, /x-mancardo-track-size-warning/);
+  assert.match(prod, /main = "worker-track-size-guard\.js"/);
+  assert.match(dev, /main = "worker-track-size-guard\.js"/);
 });
