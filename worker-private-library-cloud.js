@@ -157,6 +157,14 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   document.getElementById('mancardoPrivateSyncClose').onclick=function(){overlay.classList.add('hidden');};document.getElementById('mancardoPrivateSyncDone').onclick=function(){overlay.classList.add('hidden');};document.getElementById('mancardoPrivateSyncNow').onclick=syncNow;document.getElementById('mancardoPrivateSyncSignIn').onclick=function(){window.open(API_PREFIX+'/login','mancardo-private-login','width=640,height=700');};chip.onclick=function(){overlay.classList.remove('hidden');msgEl.textContent=lastMessage;updatePending();};overlay.addEventListener('click',function(ev){if(ev.target===overlay)overlay.classList.add('hidden');});
 
   if(els&&els.saveBtn){var baseSaveClick=els.saveBtn.onclick;els.saveBtn.onclick=function(){var r=baseSaveClick&&baseSaveClick.apply(this,arguments);setTimeout(function(){queueScan().then(flushOutbox);},30);return r;};}
+  window.addEventListener('mancardo:track-autosaved',function(){
+    if(!ready){syncNow();return;}
+    function upload(attempt){
+      if(syncing){if(attempt<25)setTimeout(function(){upload(attempt+1);},350);return;}
+      queueScan().then(flushOutbox).catch(function(e){console.warn('Track autosave upload pending',e);setStatus('offline','Sync pending','Track changes are saved locally and will retry cloud sync.');});
+    }
+    upload(0);
+  });
   window.addEventListener('mancardo:track-renamed',function(){
     // A rename is a cloud write, even when the user never presses Save.
     // Wait for an in-flight upload to finish rather than silently skipping it.
