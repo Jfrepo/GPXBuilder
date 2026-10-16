@@ -2,6 +2,9 @@ name: Verify Production D1 Backup (Read Only)
 
 on:
   workflow_dispatch:
+  push:
+    branches: ['release/accelerated-stability-20261016']
+    paths: ['.github/workflows/production-d1-backup-verify.yml']
 
 permissions:
   contents: read
@@ -10,6 +13,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     environment: development
+    if: github.ref == 'refs/heads/release/accelerated-stability-20261016'
     timeout-minutes: 15
     steps:
       - name: Verify production backup without writing to production
