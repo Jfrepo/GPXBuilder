@@ -32,4 +32,6 @@ jobs:
       - name: Run live development map smoke test
         env:
           MANCARDO_TEST_URL: https://mancardo-dev-test.jayfenno.workers.dev/
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: node tests/map-smoke.cjs
