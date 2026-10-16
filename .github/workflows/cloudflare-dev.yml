@@ -2,7 +2,7 @@ name: Deploy Mancardo Development Worker
 
 on:
   push:
-    branches: [mancardo-dev]
+    branches: [mancardo-dev, 'release/accelerated-stability-20261016']
   workflow_dispatch:
 
 permissions:
