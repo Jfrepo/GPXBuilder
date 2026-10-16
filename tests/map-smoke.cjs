@@ -9,7 +9,7 @@ const assert=require('node:assert/strict');
     for(const viewport of [{width:1440,height:900},{width:390,height:844}]) {
       const page=await browser.newPage({viewport,extraHTTPHeaders:{'CF-Access-Client-Id':accessClientId,'CF-Access-Client-Secret':accessClientSecret}});
       const errors=[];
-      page.on('pageerror',e=>errors.push(e.message));
+      page.on('pageerror',e=>errors.push(e.stack||e.message));
       const start=Date.now();
       const response=await page.goto(process.env.MANCARDO_TEST_URL||'https://mancardo-dev-test.jayfenno.workers.dev/',{waitUntil:'domcontentloaded',timeout:30000});
       assert.ok(response&&response.ok(),'Development URL must return HTTP 2xx');
