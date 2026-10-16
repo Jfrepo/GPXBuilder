@@ -10,6 +10,11 @@ const assert=require('node:assert/strict');
       const start=Date.now();
       const response=await page.goto(process.env.MANCARDO_TEST_URL||'https://mancardo-dev-test.jayfenno.workers.dev/',{waitUntil:'domcontentloaded',timeout:30000});
       assert.ok(response&&response.ok(),'Development URL must return HTTP 2xx');
+      const pageInfo=await page.evaluate(()=>({title:document.title,heading:document.querySelector('h1')?.textContent||'',body:document.body?.innerText?.slice(0,600)||'',mapPresent:!!document.querySelector('#mapDiv')}));
+      console.log('PAGE_DIAGNOSTIC',JSON.stringify({url:page.url(),httpStatus:response.status(),...pageInfo}));
+      if(!pageInfo.mapPresent){
+        throw new Error('Mancardo map DOM absent. Likely auth gate, redirect, or wrong deployment. See PAGE_DIAGNOSTIC.');
+      }
       await page.locator('#mapDiv').waitFor({state:'visible',timeout:20000});
       await page.waitForFunction(()=>document.querySelector('#mapDiv')?.clientWidth>100&&document.querySelector('#mapDiv')?.clientHeight>100,null,{timeout:10000});
       const renderMs=Date.now()-start;
