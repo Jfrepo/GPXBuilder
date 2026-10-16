@@ -1419,7 +1419,50 @@ function activateTrackFromMap(id){
   if(id!==state.currentId)loadItem(id);
   highlightTrackInLibrary(true);
 }
+// Development autosave: persist changed geometry before a browser refresh.
+var AUTO_DRAFT_KEY='mancardo_unnamed_draft_recovery_v1';
+var autoCloudTimer=null;
+function scheduleCloudAutosave(){
+  clearTimeout(autoCloudTimer);
+  autoCloudTimer=setTimeout(function(){
+    window.dispatchEvent(new CustomEvent('mancardo:track-autosaved'));
+  },5000);
+}
+function autosaveEditor(){
+  if(!state.current||state.sharedPreview)return;
+  var item=state.current;
+  if(!Array.isArray(item.segments))return;
+  if(!state.currentId){
+    // Unnamed routes stay private to this browser until the user names them.
+    try {
+      if(item.segments.some(function(seg){return seg.length;}))
+        localStorage.setItem(AUTO_DRAFT_KEY,JSON.stringify(item));
+    }catch(e){console.warn('Draft recovery storage unavailable',e);}
+    return;
+  }
+  var existing=state.library.find(function(t){return t.id===state.currentId;});
+  if(!existing)return;
+  if(JSON.stringify(existing.segments)===JSON.stringify(item.segments))return;
+  item.updatedAt=new Date().toISOString();
+  item.stats=computeStats(item);
+  upsertLocal(deepClone(item));
+  scheduleCloudAutosave();
+}
+function recoverUnnamedDraft(){
+  try{
+    var raw=localStorage.getItem(AUTO_DRAFT_KEY);
+    if(!raw)return;
+    var draft=JSON.parse(raw);
+    if(!draft||!Array.isArray(draft.segments)||!draft.segments.some(function(seg){return seg.length;}))return;
+    if(state.library.some(function(t){return t.id===draft.id;})){localStorage.removeItem(AUTO_DRAFT_KEY);return;}
+    if(window.confirm('An unsaved route draft was found on this device. Restore it now?')){
+      state.current=draft;state.currentId=null;state.mode='view';
+      render();fitToTrack();
+    }
+  }catch(e){console.warn('Draft recovery failed',e);}
+}
 function render(){
+  autosaveEditor();
   trackLayerGroup.clearLayers();
   state.library.forEach(function(item){
     if(item.visible===false||item.id===state.currentId||(state.current&&item.id===state.current.id))return;
@@ -1752,6 +1795,8 @@ els.nameSaveBtn.onclick = function(){
   state.current.updatedAt = new Date().toISOString();
   state.current.stats = computeStats(state.current);
   upsertLocal(deepClone(state.current));
+  try{localStorage.removeItem(AUTO_DRAFT_KEY);}catch(e){}
+  scheduleCloudAutosave();
   refreshDock();
 };
 function upsertLocal(item){
@@ -1819,6 +1864,7 @@ els.saveBtn.onclick = function(){
     state.current.updatedAt = new Date().toISOString();
     state.current.stats = computeStats(state.current);
     upsertLocal(deepClone(state.current));
+    scheduleCloudAutosave();
   } else {
     openNameDialog({title:'Save to library', value:state.current.name, help:'Saved in this browser on this device.', mode:'save'});
   }
@@ -1886,6 +1932,7 @@ window.addEventListener('resize', function(){ map.invalidateSize(); });
 
 // ---------- boot ----------
 loadLibrary();
+recoverUnnamedDraft();
 renderLibrary();
 loadSharedLibrary();
 refreshDock();
