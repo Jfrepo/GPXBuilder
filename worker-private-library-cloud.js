@@ -122,7 +122,7 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   function applyCloudItem(item){var id=item.track_id,local=localById(id);return getSyncMeta(id).then(function(meta){if(!local){if(!item.deleted)replaceLocal(id,item.track);return putSyncMeta(id,{revision:item.revision,sha256:item.sha256||'',deleted:!!item.deleted,updatedAt:item.updated_at||0,deviceId:item.device_id||null});}
     return hashTrack(local).then(function(localHash){
       if(item.deleted){
-        if(!(meta&&localHash===meta.sha256))preserveConflictCopy(local,'Local copy kept after cloud delete');
+        preserveConflictCopy(local,'Recovery snapshot before cloud delete');
         replaceLocal(id,null);
         return putSyncMeta(id,{revision:item.revision,sha256:item.sha256||'',deleted:true,updatedAt:item.updated_at||0,deviceId:item.device_id||null});
       }
@@ -136,10 +136,10 @@ const ACTIVE_SYNC_FEATURE=String.raw`
 
   function mergeCloud(items){var chain=Promise.resolve(),changed=false;items.forEach(function(item){chain=chain.then(function(){var before=JSON.stringify(state.library);return applyCloudItem(item).then(function(){if(JSON.stringify(state.library)!==before)changed=true;});});});return chain.then(function(){if(changed)persistRemoteChanges();return items;});}
 
-  function queueScan(){if(!ready||!accountKey)return Promise.resolve();return allSyncMeta().then(function(metaList){var metaMap={};metaList.forEach(function(m){metaMap[m.id]=m;});var localIds={};var p=Promise.resolve();state.library.forEach(function(track){if(!track||!track.id)return;localIds[track.id]=true;p=p.then(function(){return hashTrack(track).then(function(h){var m=metaMap[track.id];if(!m||m.deleted||m.sha256!==h){return putOutbox({id:track.id,op:'put',baseRevision:m?Number(m.revision)||0:0,track:clone(track),localHash:h});}return delOutbox(track.id);});});});metaList.forEach(function(m){if(!m.deleted&&!localIds[m.id]){p=p.then(function(){return putOutbox({id:m.id,op:'delete',baseRevision:Number(m.revision)||0});});}});return p.then(updatePending);});}
+  function queueScan(){if(!ready||!accountKey)return Promise.resolve();return allSyncMeta().then(function(metaList){var metaMap={};metaList.forEach(function(m){metaMap[m.id]=m;});var localIds={};var p=Promise.resolve();state.library.forEach(function(track){if(!track||!track.id)return;localIds[track.id]=true;p=p.then(function(){return hashTrack(track).then(function(h){var m=metaMap[track.id];if(!m||m.deleted||m.sha256!==h){return putOutbox({id:track.id,op:'put',baseRevision:m?Number(m.revision)||0:0,track:clone(track),localHash:h});}return delOutbox(track.id);});});});/* Missing local entries are NOT evidence of intentional deletion. Never infer cloud deletes from a scan. */return p.then(updatePending);});}
   function scheduleScan(){clearTimeout(scanTimer);scanTimer=setTimeout(function(){queueScan().then(function(){if(navigator.onLine)flushOutbox();}).catch(function(e){console.warn('private sync queue scan failed',e);});},1200);}
 
-  function acceptPutSuccess(id,track,data,hash){return putSyncMeta(id,{revision:Number(data.revision)||1,sha256:String(data.sha256||hash||''),deleted:false,updatedAt:Number(data.updated_at)||Date.now(),deviceId:deviceId}).then(function(){return delOutbox(id);});}
+  function acceptPutSuccess(id,track,data,hash){return putSyncMeta(id,{revision:Number(data.revision)||1,sha256:String(data.sha256||hash||''),deleted:false,updatedAt:Number(data.updated_at)||Date.now(),deviceId:deviceId}).then(function(){return hashTrack(localById(id)||track).then(function(latestHash){if(latestHash!==hash){return putOutbox({id:id,op:'put',baseRevision:Number(data.revision)||1,track:clone(localById(id)||track),localHash:latestHash});}return delOutbox(id);});});}
   function acceptDeleteSuccess(id,data){return putSyncMeta(id,{revision:Number(data.revision)||1,sha256:'',deleted:true,updatedAt:Number(data.updated_at)||Date.now(),deviceId:deviceId}).then(function(){return delOutbox(id);});}
 
   function resolvePutConflict(op,conflict){var local=localById(op.id);if(conflict&&conflict.current&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash){return putSyncMeta(op.id,{revision:Number(conflict.current.revision)||1,sha256:op.localHash,deleted:false,updatedAt:Number(conflict.current.updated_at)||Date.now(),deviceId:null}).then(function(){return delOutbox(op.id);});}
