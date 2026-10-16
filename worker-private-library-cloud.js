@@ -184,7 +184,9 @@ const ACTIVE_SYNC_FEATURE=String.raw`
 function injectActiveSync(html){
   if(html.includes('installMancardoPrivateCloudSync'))return html;
   html=html.replace('</head>',ACTIVE_SYNC_CSS+'\n</head>');
-  const close=html.lastIndexOf('})();');
+  const scriptEnd=html.lastIndexOf('</script>');
+  if(scriptEnd===-1)return html;
+  const close=html.lastIndexOf('})();',scriptEnd);
   if(close===-1)return html;
   return html.slice(0,close)+ACTIVE_SYNC_FEATURE+'\n'+html.slice(close);
 }
