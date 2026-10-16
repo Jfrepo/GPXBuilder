@@ -63,6 +63,7 @@ const ACTIVE_SYNC_CSS=String.raw`
 const ACTIVE_SYNC_FEATURE=String.raw`
 // ---------- Active private My Library cloud sync ----------
 (function installMancardoPrivateCloudSync(){
+  const API_PREFIX='/api/private-library';
   if(window.__mancardoPrivateCloudSyncInstalled)return;
   window.__mancardoPrivateCloudSyncInstalled=true;
 
