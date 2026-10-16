@@ -26,3 +26,8 @@ Release branch: `release/accelerated-stability-20261016`. Production is **not** 
 - Block release for reproducible silent deletion, lost saved revisions, cross-account data access, wrong D1 binding, or broken map loading.
 - Accepted residual risk: historical one-off track-loss incident root cause remains unproven, subject to the data protection and backup checks above.
 - Report measured browser load/render timings; do not claim performance targets passed without a run log.
+
+
+## Manual Development acceptance — 2026-10-16
+
+User confirmed all six track safety checks passed on Development: create and name a test track, save and refresh, confirm My Library persistence, add a point and refresh without Save, confirm autosaved point, and export GPX. Fresh automated acceptance is required before Production rollout.
