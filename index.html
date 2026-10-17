@@ -532,6 +532,10 @@ function buildGpx(item){
   var lines = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
   lines.push('<gpx version="1.1" creator="ManCardo" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
+  // Preserve Mancardo's track colour inside the shared GPX document.
+  if(item.color&&/^#[0-9a-f]{3,8}$/i.test(item.color)){
+    lines.push('  <extensions><mancardo:color xmlns:mancardo="https://mancardo.com/gpx">'+item.color+'</mancardo:color></extensions>');
+  }
   var corners=cornerWaypoints(item);
   corners.forEach(function(w,i){
     lines.push('  <wpt lat="'+w.p.lat+'" lon="'+w.p.lon+'">');
@@ -1126,9 +1130,23 @@ function deleteSelectedTracks(){
 function renameTrack(id){
   var item=state.library.find(function(t){return t.id===id;});if(!item)return;
   var name=window.prompt('Rename track',item.name); if(!name||!name.trim())return;
-  item.name=name.trim();item.updatedAt=new Date().toISOString();persistLibrary();
-  if(state.currentId===id&&state.current)state.current.name=item.name;
+  var nextName=name.trim();
+  if(nextName===item.name)return;
+  item.name=nextName;
+  item.updatedAt=new Date().toISOString();
+  // Keep the active editor and persisted library in agreement before sync scans.
+  if(state.currentId===id&&state.current){
+    state.current.name=nextName;
+    state.current.updatedAt=item.updatedAt;
+  }
+  persistLibrary();
+  // Notify the cloud-sync layer directly; do not depend on save-button handlers.
+  window.dispatchEvent(new CustomEvent('mancardo:track-renamed',{detail:{id:id}}));
   state.trackMenuId=null;renderLibrary();refreshDock();
+  // Reconcile after the durable local save, using the revision-aware sync queue.
+  if(typeof window.__mancardoForcePrivateReconcile==='function'){
+    // The legacy reconciliation hook is intentionally not used: it only handles missing IDs.
+  }
 }
 function updateSelectAll(){
   if(!els.selectAllTracks)return;
@@ -1177,12 +1195,32 @@ function pulseSharedPreviewTrack(){
   },350);
 }
 window.__mancardoSharedPreviewPulse=pulseSharedPreviewTrack;
+var sharedGpxCache=new Map();
+var sharedPreviewRequest=0;
+function sharedGpxColour(gpx){
+  var m=String(gpx).match(/<(?:[a-zA-Z0-9_-]+:)?color\b[^>]*>\s*(#[0-9a-f]{3,8})\s*<\/(?:[a-zA-Z0-9_-]+:)?color>/i);
+  return m?m[1]:null;
+}
+function fetchSharedGpx(meta){
+  var key=String(meta.id)+':'+String(meta.version||1);
+  if(sharedGpxCache.has(key))return sharedGpxCache.get(key);
+  var task=fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'})
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})
+    .then(function(gpx){meta.color=sharedGpxColour(gpx)||meta.color;return gpx;});
+  sharedGpxCache.set(key,task);
+  task.catch(function(){sharedGpxCache.delete(key);});
+  if(sharedGpxCache.size>40)sharedGpxCache.delete(sharedGpxCache.keys().next().value);
+  return task;
+}
 function previewSharedTrack(meta){
-  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+  var requestId=++sharedPreviewRequest;
+  fetchSharedGpx(meta).then(function(gpx){
+    if(requestId!==sharedPreviewRequest)return;
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
     if(!parsed.length)throw new Error('No track data');
     var item=parsed[0];
     item.name=meta.name||item.name;item.visible=true;item.sharedId=meta.id;item.sharedBaseVersion=meta.version||1;
+    item.color=sharedGpxColour(gpx)||meta.color||(state.library.find(function(t){return t.sharedId===meta.id;})||{}).color||item.color;
     state.current=item;state.currentId=null;state.sharedPreview=true;state.sharedPreviewMeta=meta;
     state.selection=null;state.history=[];state.future=[];state.extend=null;state.mode='view';
     updateModeBanner();render();fitToTrack();renderSharedLibrary();
@@ -1194,7 +1232,14 @@ function renderSharedLibrary(){
   if(!state.sharedLibrary.length){wrap.innerHTML='<div class="empty-note">No shared tracks have been published yet.</div>';return;}
   state.sharedLibrary.slice().sort(function(a,b){return String(b.modifiedAt||'').localeCompare(String(a.modifiedAt||''));}).forEach(function(item){
     var d=document.createElement('div');d.className='shared-item'+(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===item.id?' active':'');d.style.cursor='pointer';d.title='Preview this shared track on the map';d.onclick=function(){previewSharedTrack(item);};
-    var n=document.createElement('div');n.className='shared-item-name';n.textContent=item.name||'Unnamed track';d.appendChild(n);
+    var n=document.createElement('div');n.className='shared-item-name';
+    n.style.display='flex';n.style.alignItems='center';n.style.gap='7px';
+    var localMatch=state.library.find(function(t){return t.id===item.id||t.sharedId===item.id;})||state.library.find(function(t){return t.name===item.name;});
+    var colour=item.color||(localMatch&&(localMatch.color||localMatch.colour));
+    if(colour&&/^#[0-9a-f]{3,8}$/i.test(colour)){
+      var swatch=document.createElement('span');swatch.title='Track colour';swatch.style.cssText='display:inline-block;flex:0 0 12px;width:12px;height:12px;border:1px solid rgba(0,0,0,.25);border-radius:2px;background:'+colour;n.appendChild(swatch);
+    }
+    var nameText=document.createElement('span');nameText.textContent=item.name||'Unnamed track';n.appendChild(nameText);d.appendChild(n);
     var m=document.createElement('div');m.className='shared-item-meta';m.textContent='v'+(item.version||1)+' · '+(item.modifiedBy||'Unknown')+' · '+fmtSharedDate(item.modifiedAt);d.appendChild(m);
     var a=document.createElement('div');a.className='shared-item-actions';
     var preview=document.createElement('button');preview.type='button';preview.className='icon-btn';preview.textContent=(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===item.id)?'Previewing':'Preview';preview.onclick=function(ev){ev.preventDefault();ev.stopPropagation();previewSharedTrack(item);};a.appendChild(preview);
@@ -1216,10 +1261,11 @@ function deleteSharedTrack(meta){
   }).catch(function(e){alert('Could not delete this Shared track. '+(e.message||''));});
 }
 function copySharedToLocal(meta){
-  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(gpx){
+  fetchSharedGpx(meta).then(function(gpx){
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
     if(!parsed.length)throw new Error('No track data');
     parsed.forEach(function(item){
+      item.color=sharedGpxColour(gpx)||meta.color||item.color;
       item.sharedId=meta.id;
       item.sharedBaseVersion=meta.version||1;
       item.sharedBaseModifiedAt=meta.modifiedAt||null;
@@ -1373,7 +1419,50 @@ function activateTrackFromMap(id){
   if(id!==state.currentId)loadItem(id);
   highlightTrackInLibrary(true);
 }
+// Development autosave: persist changed geometry before a browser refresh.
+var AUTO_DRAFT_KEY='mancardo_unnamed_draft_recovery_v1';
+var autoCloudTimer=null;
+function scheduleCloudAutosave(){
+  clearTimeout(autoCloudTimer);
+  autoCloudTimer=setTimeout(function(){
+    window.dispatchEvent(new CustomEvent('mancardo:track-autosaved'));
+  },5000);
+}
+function autosaveEditor(){
+  if(!state.current||state.sharedPreview)return;
+  var item=state.current;
+  if(!Array.isArray(item.segments))return;
+  if(!state.currentId){
+    // Unnamed routes stay private to this browser until the user names them.
+    try {
+      if(item.segments.some(function(seg){return seg.length;}))
+        localStorage.setItem(AUTO_DRAFT_KEY,JSON.stringify(item));
+    }catch(e){console.warn('Draft recovery storage unavailable',e);}
+    return;
+  }
+  var existing=state.library.find(function(t){return t.id===state.currentId;});
+  if(!existing)return;
+  if(JSON.stringify(existing.segments)===JSON.stringify(item.segments))return;
+  item.updatedAt=new Date().toISOString();
+  item.stats=computeStats(item);
+  upsertLocal(deepClone(item));
+  scheduleCloudAutosave();
+}
+function recoverUnnamedDraft(){
+  try{
+    var raw=localStorage.getItem(AUTO_DRAFT_KEY);
+    if(!raw)return;
+    var draft=JSON.parse(raw);
+    if(!draft||!Array.isArray(draft.segments)||!draft.segments.some(function(seg){return seg.length;}))return;
+    if(state.library.some(function(t){return t.id===draft.id;})){localStorage.removeItem(AUTO_DRAFT_KEY);return;}
+    if(window.confirm('An unsaved route draft was found on this device. Restore it now?')){
+      state.current=draft;state.currentId=null;state.mode='view';
+      render();fitToTrack();
+    }
+  }catch(e){console.warn('Draft recovery failed',e);}
+}
 function render(){
+  autosaveEditor();
   trackLayerGroup.clearLayers();
   state.library.forEach(function(item){
     if(item.visible===false||item.id===state.currentId||(state.current&&item.id===state.current.id))return;
@@ -1706,6 +1795,8 @@ els.nameSaveBtn.onclick = function(){
   state.current.updatedAt = new Date().toISOString();
   state.current.stats = computeStats(state.current);
   upsertLocal(deepClone(state.current));
+  try{localStorage.removeItem(AUTO_DRAFT_KEY);}catch(e){}
+  scheduleCloudAutosave();
   refreshDock();
 };
 function upsertLocal(item){
@@ -1773,6 +1864,7 @@ els.saveBtn.onclick = function(){
     state.current.updatedAt = new Date().toISOString();
     state.current.stats = computeStats(state.current);
     upsertLocal(deepClone(state.current));
+    scheduleCloudAutosave();
   } else {
     openNameDialog({title:'Save to library', value:state.current.name, help:'Saved in this browser on this device.', mode:'save'});
   }
@@ -1840,6 +1932,7 @@ window.addEventListener('resize', function(){ map.invalidateSize(); });
 
 // ---------- boot ----------
 loadLibrary();
+recoverUnnamedDraft();
 renderLibrary();
 loadSharedLibrary();
 refreshDock();

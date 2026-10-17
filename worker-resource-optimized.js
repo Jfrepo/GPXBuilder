@@ -47,10 +47,19 @@ const CONSOLIDATED_BODY=String.raw`<script id="mancardo-final-ui-behaviour">
           if(!h||!h.authenticated)return;
           var name=accountDisplayName(h.accountLabel);
           if(!name)return;
-          userSelect.value=name;
-          userSelect.disabled=true;
-          userSelect.title='Shared Library identity follows the signed-in account';
-          try{localStorage.setItem('mancardo.sharedUser',name);}catch(e){}
+          // This control filters Shared Library results; it must not be locked
+          // to the signed-in user's publishing identity.
+          userSelect.disabled=false;
+          userSelect.removeAttribute('disabled');
+          userSelect.title='Filter Shared Library tracks by user';
+          var accountNote=document.getElementById('mancardo-shared-account-note');
+          if(!accountNote){
+            accountNote=document.createElement('span');
+            accountNote.id='mancardo-shared-account-note';
+            accountNote.style.cssText='font-size:10px;opacity:.8;margin-left:4px';
+            userSelect.parentNode.appendChild(accountNote);
+          }
+          accountNote.textContent='Signed in: '+name;
         }).catch(function(){});
     }
   }
