@@ -123,15 +123,7 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
     var buttons={roadmap:els.layerStreetsBtn,terrain:els.layerTerrainBtn,satellite:satelliteBtn,hybrid:hybridBtn};
 
     function hideLeafletBase(){if(map.hasLayer(streetsLayer))map.removeLayer(streetsLayer);if(map.hasLayer(terrainLayer))map.removeLayer(terrainLayer);var pane=map.getPane('tilePane');if(pane)pane.style.display='none';}
-    // Persist the user's last settled view, not intermediate animation frames.
-    var viewSaveTimer=null;
-    function saveView(){
-      clearTimeout(viewSaveTimer);
-      viewSaveTimer=setTimeout(function(){
-        try{var p=map.getCenter();localStorage.setItem('mancardo_map_view_v1',JSON.stringify({lat:p.lat,lng:p.lng,zoom:map.getZoom()}));}catch(e){}
-      },650);
-    }
-    function sync(){var c=map.getCenter();var g=googleMap.getCenter();if(!g||Math.abs(g.lat()-c.lat)>0.000001||Math.abs(g.lng()-c.lng)>0.000001)googleMap.setCenter({lat:c.lat,lng:c.lng});if(googleMap.getZoom()!==map.getZoom())googleMap.setZoom(map.getZoom());}
+    function sync(){var c=map.getCenter();googleMap.setCenter({lat:c.lat,lng:c.lng});if(googleMap.getZoom()!==map.getZoom())googleMap.setZoom(map.getZoom());}
     var frame=null;function queueSync(){if(frame)cancelAnimationFrame(frame);frame=requestAnimationFrame(function(){frame=null;sync();});}
     function setType(type){if(!buttons[type])type='roadmap';hideLeafletBase();googleMap.setMapTypeId(type);Object.keys(buttons).forEach(function(k){buttons[k].classList.toggle('on',k===type);});try{localStorage.setItem('mancardo_google_map_type_v1',type);}catch(e){}queueSync();}
 
@@ -140,18 +132,6 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
     satelliteBtn.onclick=function(){setType('satellite');};
     hybridBtn.onclick=function(){setType('hybrid');};
     map.on('move zoom resize moveend zoomend',queueSync);
-    map.on('moveend zoomend',saveView);
-    // Restore after the application's initial fitBounds has completed.
-    try{
-      var stored=JSON.parse(localStorage.getItem('mancardo_map_view_v1')||'null');
-      if(stored&&Number.isFinite(stored.lat)&&Number.isFinite(stored.lng)&&Number.isFinite(stored.zoom)&&stored.zoom>=2&&stored.zoom<=22){
-        map.setView([stored.lat,stored.lng],stored.zoom,{animate:false});
-      }
-    }catch(e){}
-    if(typeof ResizeObserver==='function'){
-      var resizeObserver=new ResizeObserver(function(){map.invalidateSize({pan:false});queueSync();});
-      resizeObserver.observe(mapWrap);
-    }
     var initial='roadmap';try{var saved=localStorage.getItem('mancardo_google_map_type_v1');if(buttons[saved])initial=saved;}catch(e){}
     setType(initial);
     syncGoogleTrackVisuals();

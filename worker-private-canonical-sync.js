@@ -139,8 +139,7 @@ export default {
     const type=response.headers.get('content-type')||'';
     if(!type.includes('text/html'))return response;
     let html=await response.text();
-    // P0: canonical endpoint remains for compatibility; disable its competing browser sync loop.
-    if(false && !html.includes('mancardo-canonical-private-sync')){
+    if(!html.includes('mancardo-canonical-private-sync')){
       const i=html.toLowerCase().lastIndexOf('</body>');html=i>=0?html.slice(0,i)+CLIENT+'\n'+html.slice(i):html+CLIENT;
     }
     const headers=new Headers(response.headers);headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store');

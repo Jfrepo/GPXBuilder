@@ -88,8 +88,7 @@ export default {
     const response=await baseWorker.fetch(request,env,ctx);
     const type=response.headers.get('content-type')||'';
     if(!type.includes('text/html'))return response;
-    // P0: rely on the revision-aware private-library sync; do not inject competing hard reconciliation.
-    const html=await response.text();
+    const html=patchHtml(await response.text());
     const headers=new Headers(response.headers);
     headers.delete('content-length');
     headers.delete('etag');
