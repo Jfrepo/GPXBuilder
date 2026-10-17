@@ -1,0 +1,43 @@
+name: Accelerated Release Acceptance
+on:
+  push:
+    branches:
+      - 'release/accelerated-stability-*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run release regression tests
+        run: node --test tests/release-safety.test.cjs
+  map-browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser testing tools
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Run live development map smoke test
+        env:
+          MANCARDO_TEST_URL: https://mancardo-dev-test.jayfenno.workers.dev/
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node tests/map-smoke.cjs
+      - name: Run live sync resilience checks
+        env:
+          MANCARDO_TEST_URL: https://mancardo-dev-test.jayfenno.workers.dev/
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node tests/sync-resilience-live.cjs

@@ -128,7 +128,7 @@ export default {
       const i=html.toLowerCase().lastIndexOf('</body>');
       html=i>=0?html.slice(0,i)+MOBILE_AUTH_SCRIPT+'\n'+html.slice(i):html+MOBILE_AUTH_SCRIPT;
     }
-    if(!html.includes('mancardo-private-cross-device-reconcile')){
+    if(false && !html.includes('mancardo-private-cross-device-reconcile')){
       const i=html.toLowerCase().lastIndexOf('</body>');
       html=i>=0?html.slice(0,i)+CROSS_DEVICE_RECONCILE_SCRIPT+'\n'+html.slice(i):html+CROSS_DEVICE_RECONCILE_SCRIPT;
     }

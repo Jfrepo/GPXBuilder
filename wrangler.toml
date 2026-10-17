@@ -1,22 +1,13 @@
 name = "mancardo"
-main = "worker-shared-stale-link-recovery.js"
+main = "worker-autosave-stability.js"
 compatibility_date = "2026-10-02"
-preview_urls = true
+preview_urls = false
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "sweet-scene-1f3f.cloudflareaccess.com"
 CF_ACCESS_AUD = "b8dc5883e95174caac1d2c997fca5a9419dc852fffb0e43f4c59fa85ddf0adad"
 
-[previews]
-
-[previews.vars]
-CF_ACCESS_TEAM_DOMAIN = "sweet-scene-1f3f.cloudflareaccess.com"
-CF_ACCESS_AUD = "b8dc5883e95174caac1d2c997fca5a9419dc852fffb0e43f4c59fa85ddf0adad"
-
-[[previews.d1_databases]]
-binding = "PRIVATE_LIBRARY_DB"
-database_name = "mancardo-private-library"
-database_id = "6ada726b-aae6-441b-a698-69dc0789c7b7"
+# Production previews disabled: prevent preview URLs from reaching production D1.
 
 [assets]
 directory = "."

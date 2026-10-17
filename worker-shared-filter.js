@@ -8,10 +8,12 @@ const SHARED_FILTER_FEATURE = String.raw`
   var select=els.sharedUserSelect;
   var saved=null;
   try{saved=localStorage.getItem(SHARED_USER_KEY);}catch(e){}
-  var publishUser=(saved==='Paul'||saved==='Justin')?saved:'Justin';
+  // Publishing identity is verified server-side, never inferred from this filter.
 
   select.innerHTML='<option value="all">All Tracks</option><option value="Justin">Justin</option><option value="Paul">Paul</option>';
-  select.title='Filter Shared Library tracks by user';
+  select.title='Filter Shared Library tracks by user (not the publishing owner)';
+  select.disabled=false;
+  select.removeAttribute('disabled');
   select.value=(saved==='Paul'||saved==='Justin'||saved==='all')?saved:'all';
 
   function normaliseSharedUser(value){return String(value||'').trim().toLowerCase();}
@@ -44,21 +46,14 @@ const SHARED_FILTER_FEATURE = String.raw`
   };
 
   select.onchange=function(){
-    if(select.value==='Justin'||select.value==='Paul') publishUser=select.value;
     try{localStorage.setItem(SHARED_USER_KEY,select.value);}catch(e){}
     renderSharedLibrary();
   };
 
-  // The dropdown is now a view filter. Keep the previous named identity for
-  // publishing so choosing All Tracks can never publish a modifier named "all".
-  var basePublishTrackToShared=publishTrackToShared;
-  publishTrackToShared=function(id){
-    if(select.value!=='all') return basePublishTrackToShared(id);
-    var viewValue=select.value;
-    select.value=publishUser;
-    try{return basePublishTrackToShared(id);}
-    finally{select.value=viewValue;}
-  };
+  // Never rewrite the selected filter to impersonate a publishing owner.
+  // The API derives modifiedBy from the authenticated Cloudflare Access identity.
+  // Track colour is rendered once, inside .shared-item-name by index.html.
+  // Do not inject a second swatch at the shared-item row level.
 
   renderSharedLibrary();
 })();
