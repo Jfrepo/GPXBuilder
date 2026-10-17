@@ -51,10 +51,10 @@ test('authorised My Library deletes are recorded before local removal and surviv
 });
 
 test('delete client executes inside the editor IIFE rather than an out-of-scope body script', () => {
-  assert.match(durableDelete, /const boot=html\\.indexOf\\('\\/\\/ ---------- boot ----------'\\)/);
-  assert.match(durableDelete, /DURABLE_DELETE_BRIDGE\\.replace\\(/);
-  assert.match(durableDelete, /html=html\\.slice\\(0,boot\\)/);
-  assert.doesNotMatch(durableDelete, /lastIndexOf\\('<\\/body>'\\)/);
+  assert.ok(durableDelete.includes("const boot=html.indexOf('// ---------- boot ----------')"));
+  assert.ok(durableDelete.includes("DURABLE_DELETE_BRIDGE.replace("));
+  assert.ok(durableDelete.includes("html=html.slice(0,boot)"));
+  assert.ok(!durableDelete.includes("lastIndexOf('</body>')"));
 });
 
 test('shared attribution recognises Paul account labels', () => {
