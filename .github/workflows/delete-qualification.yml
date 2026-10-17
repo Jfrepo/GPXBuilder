@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '22'
       - name: Run source, delivered-HTML and deterministic client checks
-        run: node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs
+        run: node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs
 
   isolated-chromium-fixtures:
     runs-on: ubuntu-latest
