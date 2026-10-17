@@ -37,13 +37,16 @@ test('cloud sync never infers a deletion from missing local IDs', () => {
   assert.match(cloud, /if\(op\.op==='delete'&&!op\.explicitUserDelete\)/);
 });
 
-test('explicit My Library deletes are durable across refresh', () => {
-  assert.match(durableDelete, /mancardo_explicit_delete_pending_v2/);
-  assert.match(durableDelete, /#deleteTrackBtn,#deleteSelectedBtn/);
+test('authorised My Library deletes are recorded before local removal and survive refresh', () => {
+  assert.match(durableDelete, /mancardo_authorized_delete_pending_v3/);
+  assert.match(durableDelete, /authorizedUserDelete:true/);
+  assert.match(durableDelete, /authorized_user_delete:true/);
+  assert.match(durableDelete, /delete_intent:'explicit-ui-delete'/);
+  assert.match(durableDelete, /\.mancardo-menu-delete,#deleteTrackBtn,#deleteSelectedBtn/);
+  assert.match(durableDelete, /authorize\(ids\);\s*removeLocal\(ids\)/);
   assert.match(durableDelete, /method:'DELETE'/);
   assert.match(durableDelete, /base_revision:revision/);
-  assert.match(durableDelete, /hidePendingLocally\(\);retryPending\(\)/);
-  assert.match(durableDelete, /setInterval\(function\(\)\{if\(document\.visibilityState==='visible'\)\{hidePendingLocally\(\);retryPending\(\);\}\},2000\)/);
+  assert.match(durableDelete, /setInterval\(function\(\)\{if\(document\.visibilityState==='visible'\)\{hidePendingLocally\(\);retryPending\(\);\}\},1500\)/);
   assert.match(durableDelete, /window\.addEventListener\('online'/);
 });
 
