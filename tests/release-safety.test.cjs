@@ -81,3 +81,12 @@ test('autosave stability wrapper preserves the track-size safety guard', () => {
   assert.match(prod, /main = "worker-autosave-stability\.js"/);
   assert.match(dev, /main = "worker-delete-durable-fix\.js"/);
 });
+
+test('explicit cloud deletion fails closed on concurrent revision conflict', () => {
+  const wrapper = fs.readFileSync('worker-autosave-stability.js','utf8');
+  assert.match(wrapper, /function deleteCloudTrack\(id\)/);
+  assert.match(wrapper, /if\(y\.r\.status===409\)throw new Error\('Delete conflict:/);
+  assert.doesNotMatch(wrapper, /if\(y\.r\.status===409&&attempt<1\)/);
+  assert.match(wrapper, /method:'DELETE'/);
+  assert.match(wrapper, /base_revision:revision/);
+});
