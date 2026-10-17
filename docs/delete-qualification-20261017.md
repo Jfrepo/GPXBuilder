@@ -1,4 +1,4 @@
-# Mancardo deletion correction: local candidate, not release-qualified
+# Mancardo deletion correction: draft candidate, not release-qualified
 
 ## Baseline and scope
 
@@ -36,14 +36,16 @@ Executed locally on Node v24.19.0:
 
 `git diff --check`: passed.
 
-The 13 real Chromium/localStorage/IndexedDB fixture cases in `tests/delete-behavior.test.cjs` are **not executed successfully**: Chromium launch was blocked by this execution environment's Unix-socket sandbox. The permitted escalation failed during environment initialization before browser startup. The fixture suite is retained for a usable CI/browser environment; this is not evidence of a product failure or a browser pass.
+Local Chromium launch was blocked by this execution environment's Unix-socket sandbox; the permitted escalation failed before browser startup. After authorized publication as [draft PR #80](https://github.com/Jfrepo/GPXBuilder/pull/80), [CI run 39031795479](https://github.com/Jfrepo/GPXBuilder/actions/runs/39031795479) successfully executed **35 nonbrowser checks and all 13 initial Chromium/localStorage/IndexedDB fixtures** on candidate `760e393fdcb0f182b2409393318c9e75d5a44805`. The tested PR merge tree was verified identical to that candidate tree. These fixtures use a routed synthetic API, not a live account or D1.
+
+The current browser suite adds two focused confirmed main-button and selected-delete fixtures, for **15 cases**. It exercises the injected capture handlers with minimal fixture DOM, including the base editor's confirmation CSS state supplied by the fixture; it does not claim the entire editor confirmation flow is integrated. Require the new exact-SHA CI run to pass before crediting these two additions.
 
 No authenticated browser, real D1, mobile-device, two-live-account, or deployment checks were performed. No claim of full map rendering is made from script compilation alone. Current Production, Development, and live records were not modified.
 
 ## Known limitations and required qualification
 
 - This draft deliberately refuses deletion of unsynced/local-only tracks, tracks without a known reconciled revision, and tracks edited while delete authorization is pending. It preserves the local copy and requests sync/review instead. Visibility-only changes are now accepted by checking the stored exact hash against true/false/null/absent variants of the visible field; substantive edits remain protected. This is a temporary UX limitation and must be resolved or explicitly accepted before release; do not call this a comprehensive deletion fix.
-- Browser UX, all three UI deletion entrypoints, offline reload in real browsers, account switching, and existing outbox/in-flight PUT interactions still require the Chromium and authenticated Development tests.
+- Full-editor browser UX, all three integrated UI deletion entrypoints, authenticated account switching, and existing outbox/in-flight PUT interactions still require Development tests. Isolated browser fixtures do not establish these live-system properties.
 - A missing sync record is not proof of a never-uploaded track: PUT may have committed while its success response was lost, or still be in flight. Safe local-only deletion needs positive never-uploaded provenance plus serialization/cancellation against the uploader; this patch does not invent that invariant.
 - Persistent confirmed watermarks are retained locally for safety. Storage growth/retention requires review before a long-lived release.
 - Actual automatic refresh and manual refresh must both be exercised after an authorized Development deployment, including another device seeing the same tombstone, and cloud-side records inspected without modifying unrelated data.

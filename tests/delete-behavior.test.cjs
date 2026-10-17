@@ -162,6 +162,35 @@ test('main delete first click and cancellation do nothing; confirmed menu click 
   await f.page.waitForTimeout(200);assert.equal(f.model.requests.length,1);
 });
 
+test('confirmed main delete targets only the current track and repeated clicks do not duplicate it',async t=>{
+  const f=await fixture(t);
+  await f.page.evaluate(()=>{
+    const button=document.createElement('button');button.id='deleteTrackBtn';button.dataset.label='Delete track';document.body.appendChild(button);
+    button.click();
+  });
+  assert.equal(f.model.requests.length,0);assert.deepEqual(await f.ids(),['one','two']);
+  // The base editor owns first-click confirmation styling. Exercise the exact
+  // injected capture handler once that existing confirmation state is present.
+  await f.page.evaluate(()=>{const button=document.getElementById('deleteTrackBtn');button.classList.add('confirming');button.click();button.click();});
+  await f.page.waitForFunction(key=>JSON.parse(localStorage.getItem(key)||'[]')[0]?.confirmedRevision===5,key);
+  assert.deepEqual(await f.ids(),['two']);assert.equal(f.model.rows.two.deleted,false);
+  assert.deepEqual(f.model.requests.map(x=>[x.id,x.data.base_revision]),[['one',4]]);assert.deepEqual(f.errors,[]);
+});
+
+test('selected delete requires confirmation and never deletes a hidden track',async t=>{
+  const f=await fixture(t);
+  await f.page.evaluate(()=>{
+    state.library[1].visible=false;
+    const button=document.createElement('button');button.id='deleteSelectedBtn';document.body.appendChild(button);
+    window.confirm=()=>false;button.click();
+  });
+  assert.equal(f.model.requests.length,0);assert.deepEqual(await f.ids(),['one','two']);
+  await f.page.evaluate(()=>{window.confirm=()=>true;document.getElementById('deleteSelectedBtn').click();});
+  await f.page.waitForFunction(key=>JSON.parse(localStorage.getItem(key)||'[]')[0]?.confirmedRevision===5,key);
+  assert.deepEqual(await f.ids(),['two']);assert.equal(f.model.rows.two.deleted,false);
+  assert.deepEqual(f.model.requests.map(x=>[x.id,x.data.base_revision]),[['one',4]]);assert.deepEqual(f.errors,[]);
+});
+
 
 test('visibility-only change does not block an otherwise reconciled deletion',async t=>{
   const f=await fixture(t);await f.page.evaluate(()=>{state.library[0].visible=false;});
