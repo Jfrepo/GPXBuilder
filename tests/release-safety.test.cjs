@@ -42,7 +42,8 @@ test('explicit My Library deletes are durable across refresh', () => {
   assert.match(durableDelete, /#deleteTrackBtn,#deleteSelectedBtn/);
   assert.match(durableDelete, /method:'DELETE'/);
   assert.match(durableDelete, /base_revision:revision/);
-  assert.match(durableDelete, /setTimeout\(retryPending,300\)/);
+  assert.match(durableDelete, /hidePendingLocally\(\);retryPending\(\)/);
+  assert.match(durableDelete, /setInterval\(function\(\)\{if\(document\.visibilityState==='visible'\)\{hidePendingLocally\(\);retryPending\(\);\}\},2000\)/);
   assert.match(durableDelete, /window\.addEventListener\('online'/);
 });
 
