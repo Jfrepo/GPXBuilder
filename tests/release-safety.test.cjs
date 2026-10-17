@@ -5,6 +5,8 @@ const html = fs.readFileSync('index.html','utf8');
 const cloud = fs.readFileSync('worker-private-library-cloud.js','utf8');
 const guard = fs.readFileSync('worker-track-size-guard.js','utf8');
 const stability = fs.readFileSync('worker-autosave-stability.js','utf8');
+const legacyTrack = fs.readFileSync('worker-private-delete-tombstone-fix.js','utf8');
+const legacyWaypoint = fs.readFileSync('worker-private-waypoint-sync.js','utf8');
 const dev = fs.readFileSync('wrangler.dev.toml','utf8');
 const prod = fs.readFileSync('wrangler.toml','utf8');
 const deploy = fs.readFileSync('.github/workflows/cloudflare-dev.yml','utf8');
@@ -16,6 +18,17 @@ test('route editor keeps autosave capability but removes autosave from the rende
   assert.match(html, /upsertLocal\(deepClone\(item\)\);\s*scheduleCloudAutosave\(\)/);
   assert.match(stability, /const RENDER_AUTOSAVE = "function render\(\)\{\\n  autosaveEditor\(\);"/);
   assert.match(stability, /html = html\.replace\(RENDER_AUTOSAVE, RENDER_SAFE\)/);
+});
+
+test('legacy polling clients that can reload the page are stripped from delivered HTML', () => {
+  assert.match(legacyTrack, /setInterval\(function\(\)\{if\(document\.visibilityState==='visible'&&navigator\.onLine\)run\(\);\},5000\)/);
+  assert.match(legacyTrack, /location\.reload\(\)/);
+  assert.match(legacyWaypoint, /setInterval\(function\(\)\{if\(document\.visibilityState==='visible'&&navigator\.onLine\)run\(\);\},5000\)/);
+  assert.match(legacyWaypoint, /location\.reload\(\)/);
+  assert.match(stability, /mancardo-private-delete-tombstone-fix/);
+  assert.match(stability, /mancardo-private-waypoint-sync/);
+  assert.match(stability, /html = html\.replace\(LEGACY_TRACK_SYNC, ''\)/);
+  assert.match(stability, /html = html\.replace\(LEGACY_WAYPOINT_SYNC, ''\)/);
 });
 
 test('cloud sync never infers a deletion from missing local IDs', () => {
