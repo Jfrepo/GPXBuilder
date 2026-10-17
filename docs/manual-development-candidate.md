@@ -1,6 +1,6 @@
 # Manual Development-only candidate deployment
 
-This is a prepared route, **not an executed deployment**. The PR remains draft and unmerged. No Production or existing Development branch is changed by preparing it.
+**Historical route, not the new correction:** this pinned runtime was deployed successfully on 2026-10-17 at 21:18 UTC, but subsequently failed cross-client no-reappearance acceptance. The follow-up fix is not deployed. Do not rerun these steps expecting the latest PR code: the workflow still checks out old `63dc68e`. New-runtime deployment requires separate approval and an explicitly reviewed pin update. The PR remains draft and unmerged; Production remains untouched.
 
 ## Exact target and safeguards
 
@@ -13,7 +13,7 @@ This is a prepared route, **not an executed deployment**. The PR remains draft a
 - Existing Development credentials are reused without revealing values or expanding permissions. Any missing access, identity mismatch or API failure stops before deployment. No migrations, SQL queries, reset/reseed, or track mutation is performed by this workflow.
 - This updates the active Development app, not an isolated preview. The dedicated database and all existing records are retained. Subsequent mutating acceptance tests must use only newly created, clearly tagged synthetic tracks.
 
-## User Run workflow steps
+## Historical user Run workflow steps (not a current instruction)
 
 1. In `Jfrepo/GPXBuilder`, open **Actions**, then **Deploy Mancardo Development Worker**. Do not choose the separate Production workflow named **Deploy Mancardo to Cloudflare Workers**.
 2. Click **Run workflow**. Under **Use workflow from**, select exactly `chatgpt/mancardo-delete-qualification`, then click **Run workflow**. There are no input fields to fill.

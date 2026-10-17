@@ -1,62 +1,59 @@
-# Mancardo deletion correction: draft candidate, not release-qualified
+# Mancardo deletion correction: draft, not release-qualified
 
-## Baseline and scope
+## Current result and exact boundaries
 
-- Source baseline: `85d7868c29b5b1b1a4626ddf295b332ecae71021`, latest inspected `mancardo-dev` and Development deployment #62.
-- Deployment target proposed by this patch: `mancardo-dev-test`, dedicated `mancardo-private-library-dev` D1 through existing Development configuration. **Not deployed.**
-- Production `wrangler.toml`, migrations, and shared server/client source modules are unchanged. After separate authorization, the existing Development workflow's feature-branch copy adds a guarded manual-only job; its original job and all automatic triggers are unchanged. See [manual Development steps](manual-development-candidate.md). This preparation is not a deployment.
-- PR #79 is not merged or qualified by this patch. Its `409` retry guard alone does not protect an offline delete that first discovers a newer revision before sending DELETE. This candidate supersedes that behavior in the Development-only wrapper.
+- [Draft PR #80](https://github.com/Jfrepo/GPXBuilder/pull/80) targets `mancardo-dev` from `chatgpt/mancardo-delete-qualification`. Source baseline: `85d7868c29b5b1b1a4626ddf295b332ecae71021`. No merge or Production deployment.
+- The user-dispatched [Development run 39069567577, attempt 2](https://github.com/Jfrepo/GPXBuilder/actions/runs/39069567577) deployed runtime `63dc68e2eb4703a24a9bf607869ea3770baa3164` on 2026-10-17 at 21:18:27 UTC. Real metadata guards verified existing Worker `mancardo-dev-test` and D1 `mancardo-private-library-dev`. Worker version: `18b3ed15-9620-46f2-b611-9e710e76bc78`. No migrations or reseeding.
+- **That deployed runtime failed independently observed cross-client no-reappearance acceptance.** The original synthetic record was correctly tombstoned, but another client created and uploaded a new conflict-copy record. Earlier user-reported refresh and second-tab passes were narrower observations, not full qualification.
+- This revision proposes the focused cross-client correction below. **It is not deployed.** The manual Development workflow deliberately still checks out `63dc68e` and rejects the changed runtime. Do not rerun that workflow expecting this correction. A new runtime deployment requires separate approval and an explicitly updated pin.
+- Production configuration, shared base modules, migrations, main/dev branches, and the manual deployment workflow are unchanged by this follow-up.
 
 ## Reproduced causes
 
-1. Current deployed autosave wrapper appends its explicit-delete bridge outside the editor IIFE. Its `state` reference is out of scope; the caught lookup returns an empty list. The bridge also omits the menu-delete selector. Local deletion therefore has no durable cloud counterpart, permitting later reconciliation to restore the track.
-2. The rolled-back durable wrapper embeds a leading-newline `String.raw` value whose opener was stripped with `^<script`. The opener survives and lands inside the editor script. Rendering the actual Worker chain and compiling its returned script reproduced `Unexpected token '<'`. All ten old source-regex tests still passed against that broken wrapper.
-3. That wrapper returned an already-consumed response if the editor boot marker was absent.
-4. Both old delete clients fetched the latest server revision instead of pinning the revision the user had reconciled. Removing only the immediate 409 retry did not close the offline/concurrent-edit loss window.
+1. The original autosave wrapper's delete bridge was outside the editor IIFE. Its inaccessible `state` lookup was caught and returned no IDs, so deletion was local only. Its selector also missed menu deletion.
+2. The rolled-back durable wrapper retained a leading-newline `<script>` opener inside the editor script, breaking map startup. Actual delivered-HTML compilation reproduced the failure while all ten old regex assertions passed. Fallback HTML also reused a consumed response.
+3. The old delete clients acquired the latest cloud revision before DELETE. A 409 retry guard alone did not protect offline deletion against an intervening edit.
+4. **New live finding:** the full cloud client unconditionally called `preserveConflictCopy(local, 'Recovery snapshot before cloud delete')` for every incoming tombstone, including unchanged replicas. Other clients lack the initiating browser's local pending intent, so its guards did not prevent this. Their next queue scan uploaded the copy under a new ID.
+5. The adjacent stale-PUT/409 path also copied unchanged visibility-only replicas. Its same-hash shortcut could mistake a tombstone for a successful live PUT because tombstones retain the old content hash; the base-revision-zero conflict response can omit the deleted flag entirely.
 
-## Proposed change
+## Proposed behavior
 
-- Inject plain JavaScript inside the editor IIFE; no nested script tags. Return a fresh readable response for fallback HTML.
-- Persist a v4 intent before local removal, bound to the existing IndexedDB workspace account and last reconciled revision. Verify that the confirmed local content matches the revision hash (allowing only known presentation-only visibility variants) and remains unchanged while authorization is pending.
-- Send only that captured revision, including on retry after network loss. Cancel on a live revision conflict rather than acquiring permission to delete a newer edit.
-- Verify the expected account again server-side on the same authenticated DELETE request, closing a health-check/account-switch race.
-- Guard cloud reconciliation, late asynchronous local replacement, and conflict-copy creation while an explicit intent is pending. Retain a confirmed revision watermark to block old in-flight pulls; permit a genuinely newer live recreation.
-- Leave legacy v2/v3 pending records untouched. They do not contain enough account/revision authority to replay safely.
-- Add a secret-free, non-deploying PR qualification workflow. It runs isolated source/client/browser fixtures only.
+The existing v4 wrapper keeps account-bound, durable intent; exact reconciled base revision; unchanged-content proof; pinned retries; 409 cancellation; same-request server account validation; pending-intent guards; and readable, valid generated HTML.
 
-## Evidence
+The follow-up adds reconciliation inside the actual cloud-sync IIFE:
 
-Executed locally on Node v24.19.0:
+- Both incoming tombstones and stale-PUT conflicts use the same conservative helper.
+- Suppress recovery copies only with positive known-live metadata, a strictly newer tombstone, and an exact reconciled hash match allowing only boolean/null/absent top-level visibility variants.
+- Preserve substantive local edits or uncertain provenance as recovery copies. Ignore older/equal tombstones that cannot supersede known live metadata.
+- Re-read metadata, library snapshot, separate editor clone, and account after asynchronous hashing. If an uncommitted editor clone differs substantively, defer rather than erase it. Repeated concurrent changes also defer.
+- Scope final outbox deletion to the captured owner and recheck that owner inside the asynchronous database transaction callback.
+- Treat the PUT shortcut as live only when `deleted` is explicitly false or zero. Otherwise fetch the authoritative row and reconcile. A verified same-hash live acknowledgment updates metadata atomically without replacing local content or clearing newer queued edits; this preserves lost-initial-PUT-response recovery without inventing a copy.
 
-`node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs`
+## Live evidence, synthetic data only
 
-**35 passed, 0 failed:** 10 source safety assertions, 11 actual generated-HTML/mutation tests, and 14 executable client/server-guard scenarios with deterministic in-memory adapters. Scenarios cover persistence, reload, offline stale conflicts, lost response retry, owner isolation, storage failure, unknown revisions, malformed queue, independent queued failures, stale pulls, repeated actions, interrupted authorization, and same-request account checking.
+Approved test track `DOT-DELETE-QUAL-20261017-2140`, ID `tr_mvcxthk6_ehcpgj`, contained three invented points. An authenticated, independent cloud browser observed revision 1/live before deletion and revision 2/deleted with null payload after the one specifically approved permanent deletion at 22:01:27 UTC. After more than 60 seconds and full reload, the original stayed tombstoned.
 
-`node --check` on every `worker*.js` and `tests/*.cjs`: passed.
+A new record `tr_mvcxzbou_tarphn`, revision 1/live, appeared at 22:02:12.078 UTC, with the matching synthetic geometry and note `Recovery snapshot before cloud delete`. Its device identifier differed from the initiating browser's. The exact synthetic-record GET verified that this copy was persisted server-side, not merely a stale UI row. No exact other-device identity is inferred. The copy is retained as evidence; no extra deletion was performed. No existing user tracks were edited or deleted, and no credentials or real-track payloads are included in test artifacts.
 
-`git diff --check`: passed.
+## Executable evidence and limits
 
-Local Chromium launch was blocked by this execution environment's Unix-socket sandbox; the permitted escalation failed before browser startup. After authorized publication as [draft PR #80](https://github.com/Jfrepo/GPXBuilder/pull/80), [CI run 39031795479](https://github.com/Jfrepo/GPXBuilder/actions/runs/39031795479) successfully executed **35 nonbrowser checks and all 13 initial Chromium/localStorage/IndexedDB fixtures** on candidate `760e393fdcb0f182b2409393318c9e75d5a44805`. The tested PR merge tree was verified identical to that candidate tree. These fixtures use a routed synthetic API, not a live account or D1.
+- Exact deployed wrapper, fetched by immutable SHA: **11 complete emitted-client Node tests, 2 pass / 9 fail**. The clean receiver produces the same recovery-copy note observed live; visibility-only stale PUT produces a second conflict path.
+- Proposed revision: **70 nonbrowser checks pass locally**: 10 source safety, 11 delivered HTML/hash, 14 explicit-delete client/server guard, 9 deployment guard, 13 complete emitted-client sync, and 13 independent tombstone/acknowledgment safety checks. Adapters replace storage/network in Node; these are not live D1 proofs.
+- Four new browser cases run the actual generated full editor, real Chromium DOM/localStorage/IndexedDB/WebCrypto, two independent contexts, and shared synthetic API fixtures. Only Leaflet rendering/CDN assets and network services are stubbed. They cover unchanged receiver, genuine rename recovery, visibility-only stale upload, and edit during tombstone hashing. Local browser launch is sandbox-blocked; execution is pending exact-SHA nondeploying CI.
+- The prior [CI 39032743920](https://github.com/Jfrepo/GPXBuilder/actions/runs/39032743920) passed 43 checks and 15 isolated Chromium deletion fixtures on `de8b122955db1b34437279d48b6a7022aa82ec09`. Those results do not qualify this new correction. The new workflow runs all current source checks plus the prior 15 and new 4 browser fixtures.
+- Syntax checks and `git diff --check` pass. Frozen deployed-runtime fixture SHA-256 is `d3f63a6fdf56a74c31eb2958b0934005deeec3a0336f3f270b6b63735ed0e8fb`; guard tests verify that the unchanged manual route accepts only its pinned bytes and rejects this newer proposal.
 
-The current browser suite adds two focused confirmed main-button and selected-delete fixtures, for **15 cases**. It exercises the injected capture handlers with minimal fixture DOM, including the base editor's confirmation CSS state supplied by the fixture; it does not claim the entire editor confirmation flow is integrated. Require the new exact-SHA CI run to pass before crediting these two additions.
+## Remaining release gates, in priority order
 
-No authenticated browser, real D1, mobile-device, two-live-account, or deployment checks were performed. No claim of full map rendering is made from script compilation alone. Current Production, Development, and live records were not modified.
+1. Pass exact-candidate full-editor CI and independent review, then obtain separate approval for a newly pinned Development-only deployment. Existing manual steps target the old runtime.
+2. Repeat the disposable-track test across independent clients after deployment, proving original tombstone and absence of newly uploaded conflict copies after auto/manual refresh. A stale client with genuine unsynced changes must retain those changes, not lose data.
+3. Complete authenticated offline/concurrent-edit and account-isolation checks using synthetic records only. Another account requires separate authorized access; no broad admin permission is needed.
+4. Resolve or explicitly accept local-only deletion UX, persistent watermark retention, and backup/recovery evidence before release. Never infer missing metadata means never uploaded: an in-flight or lost-response PUT may already exist remotely.
 
-## Known limitations and required qualification
+The wrapper deliberately refuses explicit deletion without a positively reconciled revision, including unsynced/local-only tracks or substantive edits during authorization. It preserves data and asks for sync/review. Deferring a tombstone while the editor has uncommitted changes can leave the row visible until the edit is resolved. The outer sync UI may still say Synced in that case; this remains a pending-conflict UX limitation, not proof deletion finished.
 
-- This draft deliberately refuses deletion of unsynced/local-only tracks, tracks without a known reconciled revision, and tracks edited while delete authorization is pending. It preserves the local copy and requests sync/review instead. Visibility-only changes are now accepted by checking the stored exact hash against true/false/null/absent variants of the visible field; substantive edits remain protected. This is a temporary UX limitation and must be resolved or explicitly accepted before release; do not call this a comprehensive deletion fix.
-- Full-editor browser UX, all three integrated UI deletion entrypoints, authenticated account switching, and existing outbox/in-flight PUT interactions still require Development tests. Isolated browser fixtures do not establish these live-system properties.
-- A missing sync record is not proof of a never-uploaded track: PUT may have committed while its success response was lost, or still be in flight. Safe local-only deletion needs positive never-uploaded provenance plus serialization/cancellation against the uploader; this patch does not invent that invariant.
-- Persistent confirmed watermarks are retained locally for safety. Storage growth/retention requires review before a long-lived release.
-- Actual automatic refresh and manual refresh must both be exercised after an authorized Development deployment, including another device seeing the same tombstone, and cloud-side records inspected without modifying unrelated data.
-- Backup/restore evidence and investigation of previously missing tracks remain separate blockers.
+## Publication safety
 
-## Publication safety and deployment hold
+Only the feature branch is updated. Qualification Actions have read-only repository permissions, no secrets, deployment, migrations, or live records. Existing Actions deploy only named main/dev/release branches; the feature branch does not trigger those jobs. The manually gated candidate route remains byte-for-byte unchanged and pinned to the previously approved runtime.
 
-Proposed branch: `chatgpt/mancardo-delete-qualification`, based on the exact baseline above, draft PR into `mancardo-dev`.
-
-The repository's existing Actions deploy only `main`, `mancardo-dev`, or its named release branch. This feature branch does not trigger those deployment jobs. User-provided Cloudflare settings screenshots inspected on 2026-10-17 show Production branch `main`, no build command, root `/`, Production command `npx wrangler deploy`, and Preview command `npx wrangler preview`. Preview-branch builds are enabled, but Preview URLs are disabled. No settings were changed.
-
-Root `wrangler.toml` is unchanged, has no `[previews]` block, and the repository has no package scripts. Released [Wrangler 4.151.1](https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.151.1) calls `ensurePreviewsConfig` before building or uploading. Its [configuration guard](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.151.1/packages/wrangler/src/preview/ensure-config.ts) rejects the missing block in CI, regardless of dashboard Preview Base bindings; it does not silently copy Production bindings or fall back to a Production deployment. Therefore the existing automatic Cloudflare preview check is expected to fail closed, not provide a usable test URL. This conclusion is scoped to the inspected commands/configuration and released implementation, not an assumption that every preview is data-isolated.
-
-The separate draft is published and its secret-free qualification workflow is running/passing as recorded in the PR description for each exact SHA. Do not enable Preview URLs or change preview bindings as a side effect. The separately approved manual Development route pins the tested runtime to `63dc68e2eb4703a24a9bf607869ea3770baa3164`; preparing it does not run it. The available connector cannot dispatch the run, so the user must follow the exact [Run workflow steps](manual-development-candidate.md). Do not merge or deploy Production. Keep the draft unqualified until authenticated Development acceptance is evidenced.
+Inspected Cloudflare settings use Production branch `main` and `npx wrangler deploy`, while preview branches use `npx wrangler preview` with Preview URLs disabled. Root configuration has no `[previews]` block. Released [Wrangler 4.151.1's preview guard](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.151.1/packages/wrangler/src/preview/ensure-config.ts) fails before build/upload on that missing configuration. Thus the existing preview check is expected to fail closed, not provide a test release. No preview settings or access permissions are changed by this follow-up. PR #79 remains separate, unmerged, and unqualified.

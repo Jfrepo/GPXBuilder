@@ -167,6 +167,7 @@ const DURABLE_DELETE_BRIDGE = String.raw`
       return retryPending().then(function(){return true;});
     }).catch(function(e){markStatus('conflict','Delete not applied',e&&e.message||'No deletion was applied.');console.warn('Delete authorization failed',e);return false;}).finally(function(){authorizing=false;});
   }
+  window.mancardoReconciledRevisionHashes=revisionHashes;
   window.mancardoAuthorizedDelete=authorisedDelete;
 
   document.addEventListener('click',function(ev){
@@ -193,6 +194,78 @@ const DURABLE_DELETE_BRIDGE = String.raw`
 })();
 `;
 
+// Runs inside the actual cloud-sync IIFE. Other devices do not have this
+// browser's explicit-delete intent, so they must reconcile a server tombstone
+// against their own last reconciled content instead of always making a copy.
+const REMOTE_TOMBSTONE_RECONCILIATION = String.raw`
+  function acknowledgeVerifiedLivePut(op,cloud,owner){
+    if(!owner||accountKey!==owner||op.accountKey!==owner)return Promise.reject(new Error('Private account changed during upload reconciliation.'));
+    var revision=Number(cloud.revision);
+    if((cloud.deleted!==false&&cloud.deleted!==0)||cloud.sha256!==op.localHash||!Number.isInteger(revision)||revision<1)return Promise.reject(new Error('Unverified live upload acknowledgment.'));
+    return openDb().then(function(db){
+      return new Promise(function(resolve,reject){
+        var transaction,store,request,accepted=false;
+        try{
+          if(accountKey!==owner)throw new Error('Private account changed during upload reconciliation.');
+          transaction=db.transaction('sync','readwrite');store=transaction.objectStore('sync');request=store.get(owner+'|'+op.id);
+          request.onsuccess=function(){
+            try{
+              var meta=request.result;
+              if(accountKey!==owner||(meta&&meta.accountKey!==owner))throw new Error('Private account changed during upload reconciliation.');
+              if(meta&&(Number(meta.revision)>revision||(Number(meta.revision)===revision&&meta.deleted!==false&&meta.deleted!==0)))return;
+              // Check and acknowledge in one transaction. Never replace local
+              // content or clear its queue: the next scan retains newer edits.
+              store.put({key:owner+'|'+op.id,id:op.id,accountKey:owner,revision:revision,sha256:cloud.sha256,deleted:false,updatedAt:cloud.updated_at||0,deviceId:cloud.device_id||null});accepted=true;
+            }catch(error){transaction.abort();reject(error);}
+          };
+          transaction.oncomplete=function(){db.close();resolve(accepted);};
+          transaction.onerror=transaction.onabort=function(){db.close();reject(new Error('Upload acknowledgment was not committed.'));};
+        }catch(error){db.close();reject(error);}
+      });
+    });
+  }
+  function applyCloudTombstone(item){
+    var id=String(item.track_id),owner=accountKey,revision=Number(item.revision),attempts=0;
+    if(item.deleted!==true||!Number.isInteger(revision)||revision<1)return Promise.reject(new Error('Invalid cloud deletion revision.'));
+    function sameOwner(){if(!owner||accountKey!==owner)throw new Error('Private account changed during deletion reconciliation.');}
+    function inspect(){
+      sameOwner();
+      if(++attempts>3)return Promise.resolve(false); // Busy editor: defer, never discard a late edit.
+      return getSyncMeta(id).then(function(meta){
+        sameOwner();
+        if(meta&&meta.accountKey!==owner)throw new Error('Cloud deletion metadata belongs to another account.');
+        var known=!!(meta&&Number.isInteger(Number(meta.revision))&&Number(meta.revision)>0),knownLive=!!(known&&(meta.deleted===false||meta.deleted===0));
+        // An older/equal tombstone cannot supersede a newer/equal known live row.
+        if(known&&(Number(meta.revision)>revision||(knownLive&&Number(meta.revision)===revision)))return false;
+        var local=localById(id),snapshot=local?JSON.stringify(local):null,metaSnapshot=JSON.stringify(meta||null);
+        var editor=String(state.currentId||'')===id?state.current:null,editorSnapshot=editor?JSON.stringify(editor):null;
+        var hashes=Promise.all([local?window.mancardoReconciledRevisionHashes(snapshot):Promise.resolve([]),editor?window.mancardoReconciledRevisionHashes(editorSnapshot):Promise.resolve([])]);
+        return hashes.then(function(groups){
+          return getSyncMeta(id).then(function(latestMeta){
+            sameOwner();
+            var latest=localById(id),latestEditor=String(state.currentId||'')===id?state.current:null;
+            // Both checks happen after the FINAL await. A new object, edit, or
+            // sync result that arrived during hashing must be reconsidered.
+            if(JSON.stringify(latestMeta||null)!==metaSnapshot||(latest?JSON.stringify(latest):null)!==snapshot||(latestEditor?JSON.stringify(latestEditor):null)!==editorSnapshot)return inspect();
+            var values=groups[0],editorValues=groups[1];
+            // The editor is a separate clone. Preserve/defer an edit that has
+            // not reached the library rather than clearing it with the row.
+            if(latestEditor&&!editorValues.some(function(hash){return values.indexOf(hash)>=0;}))return false;
+            var unchanged=!!(knownLive&&Number(meta.revision)<revision&&values.indexOf(meta.sha256)>=0);
+            if(latest&&!unchanged)preserveConflictCopy(latest,'Recovery snapshot before cloud delete');
+            replaceLocal(id,null);
+            return putSyncMeta(id,{revision:revision,sha256:item.sha256||'',deleted:true,updatedAt:item.updated_at||0,deviceId:item.device_id||null}).then(function(){
+              sameOwner();
+              return tx('outbox','readwrite',function(store){sameOwner();return store.delete(owner+'|'+id);});
+            }).then(function(){return true;});
+          });
+        });
+      });
+    }
+    return inspect();
+  }
+`;
+
 function injectDurableDeletion(html){
   const boot=html.indexOf('// ---------- boot ----------');
   if(boot<0)return html;
@@ -201,8 +274,21 @@ function injectDurableDeletion(html){
   const scan='state.library.forEach(function(track){if(!track||!track.id)return;';
   const replace='function replaceLocal(id,track){';
   const preserve='function preserveConflictCopy(track,reason){';
-  if(!html.includes(apply)||!html.includes(scan)||!html.includes(replace)||!html.includes(preserve))throw new Error('Private sync integration anchors missing; refusing an unqualified delete client.');
-  html=html.replace(apply,'window.mancardoSetDeleteStatus=setStatus;\n'+apply+'if(window.mancardoDeleteBlocksCloudItem&&window.mancardoDeleteBlocksCloudItem(accountKey,item))return Promise.resolve();');
+  const tombstoneStart="if(item.deleted){\n        preserveConflictCopy(local,'Recovery snapshot before cloud delete');";
+  const putResolver='function resolvePutConflict(op,conflict){';
+  const putFastPath='if(conflict&&conflict.current&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash)';
+  const putConflict="var cloud=x.data;if(local)preserveConflictCopy(local,'Recovered from cross-device conflict');";
+  if(!html.includes(apply)||!html.includes(scan)||!html.includes(replace)||!html.includes(preserve)||!html.includes(tombstoneStart)||!html.includes(putResolver)||!html.includes(putFastPath)||!html.includes(putConflict))throw new Error('Private sync integration anchors missing; refusing an unqualified delete client.');
+  html=html.replace(apply,'window.mancardoSetDeleteStatus=setStatus;\n'+REMOTE_TOMBSTONE_RECONCILIATION+'\n'+apply+'if(window.mancardoDeleteBlocksCloudItem&&window.mancardoDeleteBlocksCloudItem(accountKey,item))return Promise.resolve();if(item.deleted)return applyCloudTombstone(item);');
+  // The existing branch is unreachable after the early tombstone dispatch.
+  // Remove it rather than leaving the unsafe unconditional-copy implementation.
+  html=html.replace(/      if\(item\.deleted\)\{\n        preserveConflictCopy\(local,'Recovery snapshot before cloud delete'\);[\s\S]*?\n      \}/,"      if(item.deleted)return applyCloudTombstone(item);");
+  // A tombstone retains the old content hash. Matching that hash is not proof
+  // a stale PUT succeeded. Missing `deleted` is ambiguous too: GET the row.
+  html=html.replace(putResolver,putResolver+'var conflictOwner=accountKey;');
+  html=html.replace(/if\(conflict&&conflict.current&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash\)\{return putSyncMeta\(op.id,[^\n]*?return delOutbox\(op.id\);\}\);\}/,
+    "if(conflict&&conflict.current&&(conflict.current.deleted===false||conflict.current.deleted===0)&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash)return acknowledgeVerifiedLivePut(op,{revision:conflict.current.revision,sha256:conflict.current.content_sha256,deleted:false,updated_at:conflict.current.updated_at},conflictOwner);");
+  html=html.replace(putConflict,"var cloud=x.data;if(accountKey!==conflictOwner||op.accountKey!==conflictOwner)throw new Error('Private account changed during upload reconciliation.');if(cloud.deleted)return applyCloudTombstone(cloud).then(function(){persistRemoteChanges();});if((cloud.deleted===false||cloud.deleted===0)&&cloud.sha256===op.localHash)return acknowledgeVerifiedLivePut(op,cloud,conflictOwner);if(local)preserveConflictCopy(local,'Recovered from cross-device conflict');");
   html=html.replace(scan,scan+'if(window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,track.id))return;');
   html=html.replace(replace,replace+'if(track&&window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,id))return;');
   html=html.replace(preserve,preserve+'if(track&&window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,track.id))return null;');
