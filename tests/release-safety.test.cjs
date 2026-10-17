@@ -37,23 +37,23 @@ test('cloud sync never infers a deletion from missing local IDs', () => {
   assert.match(cloud, /if\(op\.op==='delete'&&!op\.explicitUserDelete\)/);
 });
 
-test('authorised My Library deletes are recorded before local removal and survive refresh', () => {
-  assert.match(durableDelete, /mancardo_authorized_delete_pending_v3/);
+test('authorised My Library deletes pin workspace account and reconciled revision before removal', () => {
+  assert.match(durableDelete, /mancardo_authorized_delete_pending_v4/);
   assert.match(durableDelete, /authorizedUserDelete:true/);
   assert.match(durableDelete, /authorized_user_delete:true/);
-  assert.match(durableDelete, /delete_intent:'explicit-ui-delete'/);
-  assert.match(durableDelete, /\.mancardo-menu-delete,#deleteTrackBtn,#deleteSelectedBtn/);
-  assert.match(durableDelete, /authorize\(ids\);\s*removeLocal\(ids\)/);
+  assert.match(durableDelete, /base_revision:record\.baseRevision/);
+  assert.match(durableDelete, /x-mancardo-delete-account/);
+  assert.match(durableDelete, /boundAccountKey/);
+  assert.match(durableDelete, /writePending\(pending\);\s*persistRemoval\(ids\)/);
+  assert.match(durableDelete, /hashes\[x\.id\]\.indexOf\(x\.meta\.sha256\)<0/);
   assert.match(durableDelete, /method:'DELETE'/);
-  assert.match(durableDelete, /base_revision:revision/);
-  assert.match(durableDelete, /setInterval\(function\(\)\{if\(document\.visibilityState==='visible'\)\{hidePendingLocally\(\);retryPending\(\);\}\},1500\)/);
-  assert.match(durableDelete, /window\.addEventListener\('online'/);
+  assert.doesNotMatch(durableDelete, /status===409&&(?:attempt|n)</);
 });
 
-test('delete client executes inside the editor IIFE rather than an out-of-scope body script', () => {
+test('delete client is injected as plain JavaScript inside the editor IIFE', () => {
   assert.ok(durableDelete.includes("const boot=html.indexOf('// ---------- boot ----------')"));
-  assert.ok(durableDelete.includes("DURABLE_DELETE_BRIDGE.replace("));
-  assert.ok(durableDelete.includes("html=html.slice(0,boot)"));
+  assert.ok(durableDelete.includes("html.slice(0,insertion)+DURABLE_DELETE_BRIDGE"));
+  assert.doesNotMatch(durableDelete.match(/const DURABLE_DELETE_BRIDGE = String.raw`([\s\S]*?)`;/)[1], /<script\b/i);
   assert.ok(!durableDelete.includes("lastIndexOf('</body>')"));
 });
 
@@ -77,7 +77,7 @@ test('development autosave triggers cloud reconciliation', () => {
   assert.match(cloud, /addEventListener\('mancardo:track-autosaved'/);
 });
 
-test('production preview URLs cannot access production D1', () => {
+test('production preview URLs remain disabled and no preview D1 binding is declared', () => {
   assert.match(prod, /preview_urls = false/);
   assert.doesNotMatch(prod, /\[\[previews\.d1_databases\]\]/);
 });
@@ -90,5 +90,5 @@ test('autosave stability wrapper preserves the track-size safety guard', () => {
   assert.match(stability, /import baseWorker from '\.\/worker-track-size-guard\.js'/);
   assert.match(durableDelete, /import baseWorker from '\.\/worker-autosave-stability\.js'/);
   assert.match(prod, /main = "worker-autosave-stability\.js"/);
-  assert.match(dev, /main = "worker-autosave-stability\.js"/);
+  assert.match(dev, /main = "worker-delete-durable-fix\.js"/);
 });
