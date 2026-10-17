@@ -63,7 +63,7 @@ async function eventually(predicate){const until=Date.now()+5000;while(Date.now(
 
 async function fixture(t) {
   const track=fixtureTrack();
-  const model={rows:new Map([[track.id,{track_id:track.id,revision:1,sha256:hash(track),deleted:false,track:clone(track),device_id:'fixture-origin',updated_at:1}]]),requests:[],pullGate:null};
+  const model={rows:new Map([[track.id,{track_id:track.id,revision:1,sha256:hash(track),deleted:false,track:clone(track),device_id:'fixture-origin',updated_at:1}]]),requests:[],pullGate:null,putGate:null};
   const clients=[];
   async function client(device, options={}) {
     const context=await browser.newContext({viewport:{width:1440,height:900}});t.after(()=>context.close());
@@ -87,6 +87,7 @@ async function fixture(t) {
         const id=decodeURIComponent(url.pathname.split('/').pop()),row=model.rows.get(id);
         const data=method==='GET'?null:request.postDataJSON();model.requests.push({device,method,id,data:clone(data)});
         if(method==='GET')return route.fulfill({status:row?200:404,json:row||{error:'missing'}});
+        if(method==='PUT'&&model.putGate?.device===device&&model.putGate.id===id){const gate=model.putGate;model.putGate=null;gate.entered({id,data:clone(data)});await gate.release;}
         if(method==='DELETE'&&request.headers()['x-mancardo-delete-account']!=='fixture-account')throw new Error('Delete account binding missing');
         if(data.base_revision!==(row?.revision||0))return route.fulfill({status:409,json:{code:'revision_conflict',current:row?{revision:row.revision,deleted:row.deleted,content_sha256:row.sha256,updated_at:row.updated_at}:null}});
         const next={track_id:id,revision:(row?.revision||0)+1,sha256:method==='PUT'?hash(data.track):(row?.sha256||''),deleted:method==='DELETE',track:method==='PUT'?clone(data.track):null,device_id:data.device_id,updated_at:Date.now()};
@@ -116,6 +117,24 @@ async function fixture(t) {
       async tracks(){return page.evaluate(LIB=>JSON.parse(localStorage.getItem(LIB)||'[]'),LIB);},
       async remove(){await page.locator('[data-track-id="fixture-one"] .track-more').evaluate(button=>button.click());page.once('dialog',dialog=>dialog.accept());await page.locator('[data-track-id="fixture-one"] .mancardo-menu-delete').evaluate(button=>button.click());await eventually(()=>page.evaluate(PENDING=>JSON.parse(localStorage.getItem(PENDING)||'[]')[0]?.confirmedRevision===2,PENDING));},
       async rename(name){await page.locator('[data-track-id="fixture-one"] .track-more').evaluate(button=>button.click());page.once('dialog',dialog=>dialog.accept(name));await page.locator('[data-track-id="fixture-one"] .track-menu').getByRole('button',{name:'Rename',exact:true}).evaluate(button=>button.click());},
+      async waitForOfflineRenameQueued(name){
+        assert.equal(await page.evaluate(()=>navigator.onLine),false,'Keep the receiver offline until its rename event finishes queuing');
+        // The DOM rename handler returns before its async queueScan completes.
+        // A readonly transaction completes only after the earlier outbox write
+        // commits, so the event-driven flush has already observed offline=true.
+        // Do not reconnect early and race that flush with the explicit sync.
+        await eventually(()=>page.evaluate(expected=>new Promise((resolve,reject)=>{
+          const opening=indexedDB.open('mancardo_private_sync_v2',1);
+          opening.onerror=()=>reject(opening.error);
+          opening.onsuccess=()=>{
+            const db=opening.result,tx=db.transaction('outbox','readonly');
+            const request=tx.objectStore('outbox').get('fixture-account|fixture-one');let operation;
+            request.onsuccess=()=>{operation=request.result;};
+            tx.oncomplete=()=>{db.close();resolve(operation?.op==='put'&&operation.track?.name===expected);};
+            tx.onerror=tx.onabort=()=>{db.close();reject(tx.error||new Error('Cannot inspect queued rename'));};
+          };
+        }),name));
+      },
       async reload(){await page.reload();await page.clock.runFor(500);assert.deepEqual(errors,[]);}
     };clients.push(result);return result;
   }
@@ -139,7 +158,8 @@ test('full-editor receiver retains a real unsynced rename as a conflict copy',{t
   const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
   await a.sync();await b.sync();await a.remove();
   await b.context.setOffline(true);await b.rename('Synthetic unsynced rename');
-  await b.context.setOffline(false);await b.sync();
+  await b.waitForOfflineRenameQueued('Synthetic unsynced rename');
+  await b.context.setOffline(false);assert.equal(await b.sync(),true,'The explicit sync must complete, not return early behind another upload');
   const live=[...f.model.rows.values()].filter(row=>!row.deleted);
   assert.equal(live.length,1);assert.notEqual(live[0].track_id,f.track.id);assert.match(live[0].track.name,/Synthetic unsynced rename/);
   assert.deepEqual(live[0].track.segments,f.track.segments);assert.equal(f.model.rows.get(f.track.id).deleted,true);assert.deepEqual(b.errors,[]);
@@ -165,10 +185,44 @@ test('full-editor rename during a pending tombstone hash is never discarded',{ti
   });
   release();await eventually(()=>b.page.evaluate(()=>window.__fixtureHashEntered));
   await b.context.setOffline(true);await b.rename('Synthetic edit during hash');
+  await b.waitForOfflineRenameQueued('Synthetic edit during hash');
   await b.page.evaluate(()=>window.__fixtureReleaseHash());await syncing;
   // The edit can be preserved locally while offline; reconnect and complete
   // the actual generated queue/flush path before inspecting server records.
-  await b.context.setOffline(false);await b.sync();
+  await b.context.setOffline(false);assert.equal(await b.sync(),true,'The explicit sync must complete, not return early behind another upload');
   const live=[...f.model.rows.values()].filter(row=>!row.deleted);
   assert.equal(live.length,1);assert.match(live[0].track.name,/Synthetic edit during hash/);assert.equal(f.model.rows.get(f.track.id).deleted,true);assert.deepEqual(b.errors,[]);
+});
+
+test('event-driven rename flush makes overlapping sync return early until its held conflict response settles',{timeout:30000},async t=>{
+  const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
+  await a.sync();await b.sync();await a.remove();
+  let entered,release;
+  const uploading=new Promise(resolve=>entered=resolve),released=new Promise(resolve=>release=resolve);
+  f.model.putGate={device:b.device,id:f.track.id,entered,release:released};
+  // Stay online so the real rename event starts queueScan().then(flushOutbox).
+  // Hold that PUT's 409 response at the fixture API, not an arbitrary timeout.
+  await b.rename('Synthetic overlap rename');
+  const attempted=await uploading;
+  assert.equal(attempted.id,f.track.id);assert.equal(attempted.data.base_revision,1);
+  assert.equal(attempted.data.track.name,'Synthetic overlap rename');
+  assert.equal(await b.page.locator('#mancardoPrivateSyncChip').getAttribute('data-state'),'syncing');
+  assert.equal(await b.sync(),undefined,'Sync-now must expose its actual early return while the rename upload is in flight');
+  assert.deepEqual([...f.model.rows.values()].filter(row=>!row.deleted),[],'The held upload has not yet preserved or uploaded a recovery copy');
+  release();
+  // The event-only flush preserves the dirty local copy, but it does not run
+  // another queue scan to upload that new ID. Wait for its exact local outcome
+  // and terminal status before starting one explicit, complete synchronization.
+  await eventually(()=>b.page.evaluate(LIB=>{
+    const tracks=JSON.parse(localStorage.getItem(LIB)||'[]');
+    return tracks.length===1&&tracks[0].id!=='fixture-one'&&tracks[0].name==='Synthetic overlap rename (conflict copy)'&&document.getElementById('mancardoPrivateSyncChip').dataset.state==='synced';
+  },LIB));
+  assert.deepEqual([...f.model.rows.values()].filter(row=>!row.deleted),[],'Event-only conflict recovery remains local until the next scan');
+  assert.equal(await b.sync(),true,'The explicit sync must now run to completion');
+  const live=[...f.model.rows.values()].filter(row=>!row.deleted);
+  assert.equal(live.length,1);assert.notEqual(live[0].track_id,f.track.id);
+  assert.equal(live[0].track.name,'Synthetic overlap rename (conflict copy)');
+  assert.deepEqual(live[0].track.segments,f.track.segments);assert.equal(f.model.rows.get(f.track.id).deleted,true);
+  assert.deepEqual(f.model.requests.filter(request=>request.device===b.device&&request.method==='PUT').map(request=>[request.id,request.data.base_revision]),[[f.track.id,1],[live[0].track_id,0]]);
+  assert.deepEqual(b.errors,[]);
 });
