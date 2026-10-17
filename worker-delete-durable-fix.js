@@ -53,8 +53,7 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     return false;
   }
 
-  function deleteCloudTrack(id,attempt){
-    attempt=attempt||0;
+  function deleteCloudTrack(id){
     return api('/tracks/'+encodeURIComponent(id)).then(json).then(function(x){
       if(x.r.status===404||(x.d&&x.d.deleted)){removePending(id);return true;}
       if(!x.r.ok)throw new Error((x.d&&x.d.error)||('Lookup HTTP '+x.r.status));
@@ -65,7 +64,7 @@ const DURABLE_DELETE_BRIDGE = String.raw`
         body:JSON.stringify({base_revision:revision,device_id:device()})
       }).then(json).then(function(y){
         if(y.r.ok||(y.d&&y.d.deleted)){removePending(id);return true;}
-        if(y.r.status===409&&attempt<3)return deleteCloudTrack(id,attempt+1);
+        if(y.r.status===409){removePending(id);throw new Error('Delete conflict: newer cloud version preserved; review the track before deleting again.');}
         throw new Error((y.d&&y.d.error)||('Delete HTTP '+y.r.status));
       });
     });
@@ -77,7 +76,7 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     if(!pending.length||retrying||!navigator.onLine)return Promise.resolve();
     retrying=true;
     var chain=Promise.resolve();
-    pending.forEach(function(id){chain=chain.then(function(){return deleteCloudTrack(id,0);});});
+    pending.forEach(function(id){chain=chain.then(function(){return deleteCloudTrack(id);});});
     return chain.then(function(){
       hidePendingLocally();
       try{window.dispatchEvent(new CustomEvent('mancardo:explicit-cloud-delete'));}catch(e){}
