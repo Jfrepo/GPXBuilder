@@ -50,6 +50,13 @@ test('authorised My Library deletes are recorded before local removal and surviv
   assert.match(durableDelete, /window\.addEventListener\('online'/);
 });
 
+test('delete client executes inside the editor IIFE rather than an out-of-scope body script', () => {
+  assert.match(durableDelete, /const boot=html\\.indexOf\\('\\/\\/ ---------- boot ----------'\\)/);
+  assert.match(durableDelete, /DURABLE_DELETE_BRIDGE\\.replace\\(/);
+  assert.match(durableDelete, /html=html\\.slice\\(0,boot\\)/);
+  assert.doesNotMatch(durableDelete, /lastIndexOf\\('<\\/body>'\\)/);
+});
+
 test('shared attribution recognises Paul account labels', () => {
   assert.match(stability, /\\bpaul\\b\|\\btuffs\\b/);
   assert.match(stability, /return 'Paul'/);
