@@ -181,8 +181,13 @@ export default {
     if(!type.includes('text/html'))return response;
     let html=await response.text();
     html=html.replace(OLD_DELETE_BRIDGE,'');
-    const i=html.toLowerCase().lastIndexOf('</body>');
-    html=i>=0?html.slice(0,i)+DURABLE_DELETE_BRIDGE+'\n'+html.slice(i):html+DURABLE_DELETE_BRIDGE;
+    // The editor's state, persistLibrary and track menu handlers are scoped to its
+    // main IIFE. An external script appended before </body> cannot access them.
+    // Insert plain JavaScript inside that IIFE, before the boot sequence.
+    const boot=html.indexOf('// ---------- boot ----------');
+    if(boot<0)return response;
+    const client=DURABLE_DELETE_BRIDGE.replace(/^<script[^>]*>\s*/i,'').replace(/\s*<\/script>\s*$/i,'');
+    html=html.slice(0,boot)+'\n'+client+'\n'+html.slice(boot);
     const headers=new Headers(response.headers);
     headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store, max-age=0');
     return new Response(html,{status:response.status,statusText:response.statusText,headers});
