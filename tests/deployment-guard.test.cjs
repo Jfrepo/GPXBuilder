@@ -14,10 +14,10 @@ const production='6ada726b-aae6-441b-a698-69dc0789c7b7';
 async function execute(options={}){
   const calls=[],writes=[],errors=[];
   const files=Object.fromEntries(['wrangler.dev.toml','worker-delete-durable-fix.js'].map(file=>[file,fs.readFileSync(path.join(root,file))]));
-  // The real manual workflow checks out immutable 63dc68e, not PR HEAD.
-  files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/deployed-delete-runtime-63dc68e.txt'));
-  assert.equal(crypto.createHash('sha256').update(files['worker-delete-durable-fix.js']).digest('hex'),'d3f63a6fdf56a74c31eb2958b0934005deeec3a0336f3f270b6b63735ed0e8fb');
-  if(options.currentCandidate)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(root,'worker-delete-durable-fix.js'));
+  // The real manual workflow checks out immutable 3d7a43b, not PR HEAD.
+  files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-delete-runtime-3d7a43b.txt'));
+  assert.equal(crypto.createHash('sha256').update(files['worker-delete-durable-fix.js']).digest('hex'),'3ea53546d9222af9a61d152d6c7a1827917b9d1938f8da3afeaecd07a41499f8');
+  if(options.oldRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/deployed-delete-runtime-63dc68e.txt'));
   if(options.changedFile)files[options.changedFile]=Buffer.concat([files[options.changedFile],Buffer.from('\nchanged')]);
   const process={env:{CF_TOKEN:'fixture-token-not-a-credential',CF_ACCOUNT:'a'.repeat(32),DEV_DB:id,...options.env},exitCode:0};
   const sandbox={process,AbortSignal,console:{log(){},error(message){errors.push(message);}},require(module){
@@ -37,8 +37,8 @@ async function execute(options={}){
 test('manual candidate route is exact-branch/event gated with fixed checkout and Development-only deploy',()=>{
   const manual=workflow.slice(workflow.indexOf('  deploy-reviewed-candidate:'));
   assert.match(manual,/if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/chatgpt\/mancardo-delete-qualification'/);
-  assert.match(manual,/ref: '63dc68e2eb4703a24a9bf607869ea3770baa3164'/);
-  assert.match(manual,/test "\$\(git rev-parse HEAD\)" = '63dc68e2eb4703a24a9bf607869ea3770baa3164'/);
+  assert.match(manual,/ref: '3d7a43b23b6ddc12a96074425c0e87c2c4c76685'/);
+  assert.match(manual,/test "\$\(git rev-parse HEAD\)" = '3d7a43b23b6ddc12a96074425c0e87c2c4c76685'/);
   assert.match(manual,/environment: development/);assert.match(manual,/persist-credentials: false/);
   assert.match(manual,/npx --yes wrangler@4\.151\.1 deploy --config wrangler\.dev\.toml --name mancardo-dev-test/);
   assert.doesNotMatch(manual,/continue-on-error|d1 execute|migrations apply|workflow_run|pull_request_target/);
@@ -84,6 +84,6 @@ test('legacy binding id is accepted only when it identifies the same verified De
   const r=await execute({settings:{bindings:[{type:'d1',name:'PRIVATE_LIBRARY_DB',id}]}});assert.equal(r.exitCode,0);assert.equal(r.writes.length,1);
 });
 
-test('new proposed runtime is not authorized by the unchanged deployed-runtime guard',async()=>{
-  const r=await execute({currentCandidate:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
+test('old deployed runtime is rejected by the newly approved reviewed-runtime guard',async()=>{
+  const r=await execute({oldRuntime:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
 });

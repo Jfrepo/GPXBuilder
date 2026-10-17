@@ -58,15 +58,15 @@ jobs:
       - name: Check out the exact tested runtime, not the moving branch tip
         uses: actions/checkout@v4
         with:
-          ref: '63dc68e2eb4703a24a9bf607869ea3770baa3164'
+          ref: '3d7a43b23b6ddc12a96074425c0e87c2c4c76685'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Verify immutable candidate and rerun its source checks
         run: |
-          test "$(git rev-parse HEAD)" = '63dc68e2eb4703a24a9bf607869ea3770baa3164'
-          node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs
+          test "$(git rev-parse HEAD)" = '3d7a43b23b6ddc12a96074425c0e87c2c4c76685'
+          node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs
           git diff --exit-code
       - name: Verify existing Development database identity and binding (read only)
         env:
@@ -84,7 +84,7 @@ jobs:
             if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id||'')||id.toLowerCase()===production)throw new Error('Refusing an invalid or Production D1 database.');
             const expected={
               'wrangler.dev.toml':'e5237a94e142e693b8a3697b8259787adf35b7faba877a950ff21321aef78bea',
-              'worker-delete-durable-fix.js':'d3f63a6fdf56a74c31eb2958b0934005deeec3a0336f3f270b6b63735ed0e8fb'
+              'worker-delete-durable-fix.js':'3ea53546d9222af9a61d152d6c7a1827917b9d1938f8da3afeaecd07a41499f8'
             };
             for(const [file,hash] of Object.entries(expected)){
               if(crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')!==hash)throw new Error('The pinned Development source/configuration changed.');
