@@ -90,3 +90,10 @@ test('explicit cloud deletion fails closed on concurrent revision conflict', () 
   assert.match(wrapper, /method:'DELETE'/);
   assert.match(wrapper, /base_revision:revision/);
 });
+
+test('active durable deletion cancels stale intent on conflict rather than retrying against a newer revision', () => {
+  const durable = fs.readFileSync('worker-delete-durable-fix.js','utf8');
+  assert.match(durable, /if\(y\.r\.status===409\)\{removePending\(id\);throw new Error\('Delete conflict:/);
+  assert.doesNotMatch(durable, /status===409&&attempt</);
+  assert.match(durable, /PENDING_KEY='mancardo_explicit_delete_pending_v2'/);
+});
