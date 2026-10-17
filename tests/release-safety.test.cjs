@@ -38,6 +38,21 @@ test('cloud sync never infers a deletion from missing local IDs', () => {
   assert.match(cloud, /if\(op\.op==='delete'&&!op\.explicitUserDelete\)/);
 });
 
+test('explicit My Library delete buttons mirror deletions to private cloud', () => {
+  assert.match(stability, /mancardo-explicit-delete-bridge/);
+  assert.match(stability, /#deleteTrackBtn,#deleteSelectedBtn/);
+  assert.match(stability, /method:'DELETE'/);
+  assert.match(stability, /base_revision:revision/);
+  assert.match(stability, /mancardo:explicit-cloud-delete/);
+});
+
+test('shared attribution recognises Paul account labels', () => {
+  assert.match(stability, /\\bpaul\\b\|\\btuffs\\b/);
+  assert.match(stability, /return 'Paul'/);
+  assert.match(stability, /UPDATE shared_library_tracks/);
+  assert.match(stability, /modified_by='Shared user'/);
+});
+
 test('development and production workers have separate D1 bindings', () => {
   assert.match(dev, /name = "mancardo-dev-test"/);
   assert.match(dev, /database_name = "mancardo-private-library-dev"/);
