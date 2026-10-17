@@ -64,7 +64,7 @@ const DURABLE_DELETE_BRIDGE = String.raw`
         body:JSON.stringify({base_revision:revision,device_id:device()})
       }).then(json).then(function(y){
         if(y.r.ok||(y.d&&y.d.deleted)){removePending(id);return true;}
-        if(y.r.status===409)throw new Error('Delete conflict: a newer cloud revision exists; manual reconciliation required.');
+        if(y.r.status===409){removePending(id);throw new Error('Delete conflict: newer cloud version preserved; review the track before deleting again.');}
         throw new Error((y.d&&y.d.error)||('Delete HTTP '+y.r.status));
       });
     });
