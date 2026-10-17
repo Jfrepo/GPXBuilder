@@ -25,8 +25,7 @@ const EXPLICIT_DELETE_BRIDGE = String.raw`
   function json(r){return r.json().catch(function(){return {};}).then(function(d){return {r:r,d:d};});}
   function device(){try{return localStorage.getItem('mancardo_private_device_id_v1')||'';}catch(e){return '';}}
 
-  function deleteCloudTrack(id,attempt){
-    attempt=attempt||0;
+  function deleteCloudTrack(id){
     return api('/tracks/'+encodeURIComponent(id)).then(json).then(function(x){
       if(x.r.status===404)return true;
       if(!x.r.ok)throw new Error((x.d&&x.d.error)||('Lookup HTTP '+x.r.status));
@@ -39,7 +38,8 @@ const EXPLICIT_DELETE_BRIDGE = String.raw`
         body:JSON.stringify({base_revision:revision,device_id:device()})
       }).then(json).then(function(y){
         if(y.r.ok)return true;
-        if(y.r.status===409&&attempt<1)return deleteCloudTrack(id,attempt+1);
+        // Never retry a delete against a newly observed revision: another device may have edited the track.
+        if(y.r.status===409)throw new Error('Delete conflict: cloud track changed; preserve the newer version for review.');
         throw new Error((y.d&&y.d.error)||('Delete HTTP '+y.r.status));
       });
     });
@@ -50,7 +50,7 @@ const EXPLICIT_DELETE_BRIDGE = String.raw`
       var after={};ids().forEach(function(id){after[id]=1;});
       var removed=before.filter(function(id){return !after[id];});
       if(!removed.length)return;
-      Promise.all(removed.map(function(id){return deleteCloudTrack(id,0);})).then(function(){
+      Promise.all(removed.map(function(id){return deleteCloudTrack(id);})).then(function(){
         try{window.dispatchEvent(new CustomEvent('mancardo:explicit-cloud-delete'));}catch(e){}
       }).catch(function(e){
         console.warn('Explicit cloud delete is pending',e);
