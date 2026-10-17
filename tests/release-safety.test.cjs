@@ -5,6 +5,7 @@ const html = fs.readFileSync('index.html','utf8');
 const cloud = fs.readFileSync('worker-private-library-cloud.js','utf8');
 const guard = fs.readFileSync('worker-track-size-guard.js','utf8');
 const stability = fs.readFileSync('worker-autosave-stability.js','utf8');
+const durableDelete = fs.readFileSync('worker-delete-durable-fix.js','utf8');
 const legacyTrack = fs.readFileSync('worker-private-delete-tombstone-fix.js','utf8');
 const legacyWaypoint = fs.readFileSync('worker-private-waypoint-sync.js','utf8');
 const dev = fs.readFileSync('wrangler.dev.toml','utf8');
@@ -25,8 +26,6 @@ test('legacy polling clients that can reload the page are stripped from delivere
   assert.match(legacyTrack, /location\.reload\(\)/);
   assert.match(legacyWaypoint, /setInterval\(function\(\)\{if\(document\.visibilityState==='visible'&&navigator\.onLine\)run\(\);\},5000\)/);
   assert.match(legacyWaypoint, /location\.reload\(\)/);
-  assert.match(stability, /mancardo-private-delete-tombstone-fix/);
-  assert.match(stability, /mancardo-private-waypoint-sync/);
   assert.match(stability, /html = html\.replace\(LEGACY_TRACK_SYNC, ''\)/);
   assert.match(stability, /html = html\.replace\(LEGACY_WAYPOINT_SYNC, ''\)/);
 });
@@ -38,12 +37,13 @@ test('cloud sync never infers a deletion from missing local IDs', () => {
   assert.match(cloud, /if\(op\.op==='delete'&&!op\.explicitUserDelete\)/);
 });
 
-test('explicit My Library delete buttons mirror deletions to private cloud', () => {
-  assert.match(stability, /mancardo-explicit-delete-bridge/);
-  assert.match(stability, /#deleteTrackBtn,#deleteSelectedBtn/);
-  assert.match(stability, /method:'DELETE'/);
-  assert.match(stability, /base_revision:revision/);
-  assert.match(stability, /mancardo:explicit-cloud-delete/);
+test('explicit My Library deletes are durable across refresh', () => {
+  assert.match(durableDelete, /mancardo_explicit_delete_pending_v2/);
+  assert.match(durableDelete, /#deleteTrackBtn,#deleteSelectedBtn/);
+  assert.match(durableDelete, /method:'DELETE'/);
+  assert.match(durableDelete, /base_revision:revision/);
+  assert.match(durableDelete, /setTimeout\(retryPending,300\)/);
+  assert.match(durableDelete, /window\.addEventListener\('online'/);
 });
 
 test('shared attribution recognises Paul account labels', () => {
@@ -77,6 +77,7 @@ test('autosave stability wrapper preserves the track-size safety guard', () => {
   assert.match(guard, /code:'track_safety_limit'/);
   assert.match(guard, /x-mancardo-track-size-warning/);
   assert.match(stability, /import baseWorker from '\.\/worker-track-size-guard\.js'/);
+  assert.match(durableDelete, /import baseWorker from '\.\/worker-autosave-stability\.js'/);
   assert.match(prod, /main = "worker-autosave-stability\.js"/);
-  assert.match(dev, /main = "worker-autosave-stability\.js"/);
+  assert.match(dev, /main = "worker-delete-durable-fix\.js"/);
 });
