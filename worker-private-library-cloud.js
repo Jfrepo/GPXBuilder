@@ -63,6 +63,7 @@ const ACTIVE_SYNC_CSS=String.raw`
 const ACTIVE_SYNC_FEATURE=String.raw`
 // ---------- Active private My Library cloud sync ----------
 (function installMancardoPrivateCloudSync(){
+  const API_PREFIX='/api/private-library';
   if(window.__mancardoPrivateCloudSyncInstalled)return;
   window.__mancardoPrivateCloudSyncInstalled=true;
 
@@ -84,7 +85,7 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   var msgEl=document.getElementById('mancardoPrivateSyncMessage'),accountEl=document.getElementById('mancardoPrivateSyncAccount'),deviceEl=document.getElementById('mancardoPrivateSyncDevice'),pendingEl=document.getElementById('mancardoPrivateSyncPending'),conflictEl=document.getElementById('mancardoPrivateSyncConflicts');
   deviceEl.textContent=deviceId;
 
-  function setStatus(state,label,message){chip.dataset.state=state;chip.textContent='☁ '+label;lastMessage=message||label;msgEl.textContent=lastMessage;accountEl.textContent=accountLabel||'Not signed in';conflictEl.textContent=String(conflictCount);updatePending();}
+  function setStatus(state,label,message){chip.dataset.state=state;chip.textContent='☁ '+label+(accountLabel&&state!=='signin'?' · '+accountLabel:'');chip.title=message||label;lastMessage=message||label;msgEl.textContent=lastMessage;accountEl.textContent=accountLabel||'Not signed in';conflictEl.textContent=String(conflictCount);updatePending();}
 
   function openDb(){return new Promise(function(resolve,reject){if(!window.indexedDB){reject(new Error('IndexedDB unavailable'));return;}var r=indexedDB.open(DB,VERSION);r.onupgradeneeded=function(){var d=r.result;if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta',{keyPath:'key'});if(!d.objectStoreNames.contains('sync'))d.createObjectStore('sync',{keyPath:'key'});if(!d.objectStoreNames.contains('outbox')){var s=d.createObjectStore('outbox',{keyPath:'key'});s.createIndex('queuedAt','queuedAt');}};r.onsuccess=function(){resolve(r.result);};r.onerror=function(){reject(r.error||new Error('IndexedDB open failed'));};});}
   function tx(store,mode,fn){return openDb().then(function(db){return new Promise(function(resolve,reject){var t=db.transaction(store,mode),s=t.objectStore(store),req;try{req=fn(s);}catch(e){db.close();reject(e);return;}if(req){req.onsuccess=function(){resolve(req.result);};req.onerror=function(){reject(req.error||new Error('IndexedDB request failed'));};}else{t.oncomplete=function(){resolve();};t.onerror=function(){reject(t.error||new Error('IndexedDB transaction failed'));};}t.oncomplete=function(){db.close();};});});}
@@ -109,7 +110,7 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   var basePersistLibrary=persistLibrary;
   persistLibrary=function(){var r=basePersistLibrary.apply(this,arguments);if(!suppressScan)scheduleScan();return r;};
 
-  function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});return fetch(API_PREFIX+path,opts);}
+  function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});return fetch('/api/private-library'+path,opts);}
   function jsonOrEmpty(r){return r.json().catch(function(){return {};}).then(function(d){return {response:r,data:d};});}
 
   function health(){return api('/health').then(function(r){return jsonOrEmpty(r);}).then(function(x){lastHealth=x.data||{};if(!x.response.ok&&x.response.status!==401&&x.response.status!==503)throw new Error('Health check HTTP '+x.response.status);return x.data||{};});}
@@ -122,7 +123,7 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   function applyCloudItem(item){var id=item.track_id,local=localById(id);return getSyncMeta(id).then(function(meta){if(!local){if(!item.deleted)replaceLocal(id,item.track);return putSyncMeta(id,{revision:item.revision,sha256:item.sha256||'',deleted:!!item.deleted,updatedAt:item.updated_at||0,deviceId:item.device_id||null});}
     return hashTrack(local).then(function(localHash){
       if(item.deleted){
-        if(!(meta&&localHash===meta.sha256))preserveConflictCopy(local,'Local copy kept after cloud delete');
+        preserveConflictCopy(local,'Recovery snapshot before cloud delete');
         replaceLocal(id,null);
         return putSyncMeta(id,{revision:item.revision,sha256:item.sha256||'',deleted:true,updatedAt:item.updated_at||0,deviceId:item.device_id||null});
       }
@@ -136,10 +137,10 @@ const ACTIVE_SYNC_FEATURE=String.raw`
 
   function mergeCloud(items){var chain=Promise.resolve(),changed=false;items.forEach(function(item){chain=chain.then(function(){var before=JSON.stringify(state.library);return applyCloudItem(item).then(function(){if(JSON.stringify(state.library)!==before)changed=true;});});});return chain.then(function(){if(changed)persistRemoteChanges();return items;});}
 
-  function queueScan(){if(!ready||!accountKey)return Promise.resolve();return allSyncMeta().then(function(metaList){var metaMap={};metaList.forEach(function(m){metaMap[m.id]=m;});var localIds={};var p=Promise.resolve();state.library.forEach(function(track){if(!track||!track.id)return;localIds[track.id]=true;p=p.then(function(){return hashTrack(track).then(function(h){var m=metaMap[track.id];if(!m||m.deleted||m.sha256!==h){return putOutbox({id:track.id,op:'put',baseRevision:m?Number(m.revision)||0:0,track:clone(track),localHash:h});}return delOutbox(track.id);});});});metaList.forEach(function(m){if(!m.deleted&&!localIds[m.id]){p=p.then(function(){return putOutbox({id:m.id,op:'delete',baseRevision:Number(m.revision)||0});});}});return p.then(updatePending);});}
+  function queueScan(){if(!ready||!accountKey)return Promise.resolve();return allSyncMeta().then(function(metaList){var metaMap={};metaList.forEach(function(m){metaMap[m.id]=m;});var localIds={};var p=Promise.resolve();state.library.forEach(function(track){if(!track||!track.id)return;localIds[track.id]=true;p=p.then(function(){return hashTrack(track).then(function(h){var m=metaMap[track.id];if(!m||m.deleted||m.sha256!==h){return putOutbox({id:track.id,op:'put',baseRevision:m?Number(m.revision)||0:0,track:clone(track),localHash:h});}return delOutbox(track.id);});});});/* Missing local entries are NOT evidence of intentional deletion. Never infer cloud deletes from a scan. */return p.then(updatePending);});}
   function scheduleScan(){clearTimeout(scanTimer);scanTimer=setTimeout(function(){queueScan().then(function(){if(navigator.onLine)flushOutbox();}).catch(function(e){console.warn('private sync queue scan failed',e);});},1200);}
 
-  function acceptPutSuccess(id,track,data,hash){return putSyncMeta(id,{revision:Number(data.revision)||1,sha256:String(data.sha256||hash||''),deleted:false,updatedAt:Number(data.updated_at)||Date.now(),deviceId:deviceId}).then(function(){return delOutbox(id);});}
+  function acceptPutSuccess(id,track,data,hash){return putSyncMeta(id,{revision:Number(data.revision)||1,sha256:String(data.sha256||hash||''),deleted:false,updatedAt:Number(data.updated_at)||Date.now(),deviceId:deviceId}).then(function(){return hashTrack(localById(id)||track).then(function(latestHash){if(latestHash!==hash){return putOutbox({id:id,op:'put',baseRevision:Number(data.revision)||1,track:clone(localById(id)||track),localHash:latestHash});}return delOutbox(id);});});}
   function acceptDeleteSuccess(id,data){return putSyncMeta(id,{revision:Number(data.revision)||1,sha256:'',deleted:true,updatedAt:Number(data.updated_at)||Date.now(),deviceId:deviceId}).then(function(){return delOutbox(id);});}
 
   function resolvePutConflict(op,conflict){var local=localById(op.id);if(conflict&&conflict.current&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash){return putSyncMeta(op.id,{revision:Number(conflict.current.revision)||1,sha256:op.localHash,deleted:false,updatedAt:Number(conflict.current.updated_at)||Date.now(),deviceId:null}).then(function(){return delOutbox(op.id);});}
@@ -149,14 +150,32 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   function flushOutbox(){if(syncing||!ready||!accountKey||!navigator.onLine)return Promise.resolve();syncing=true;setStatus('syncing','Syncing','Uploading queued My Library changes…');return allOutbox().then(function(ops){var chain=Promise.resolve();ops.forEach(function(op){chain=chain.then(function(){if(op.op==='put'){
           var current=localById(op.id);if(!current)return delOutbox(op.id);return hashTrack(current).then(function(h){op.track=clone(current);op.localHash=h;return api('/tracks/'+encodeURIComponent(op.id),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({base_revision:Number(op.baseRevision)||0,track:op.track,device_id:deviceId})}).then(jsonOrEmpty).then(function(x){if(x.response.ok)return acceptPutSuccess(op.id,current,x.data,h);if(x.response.status===409)return resolvePutConflict(op,x.data);if(x.response.status===401)throw Object.assign(new Error('Sign in required'),{code:'signin'});if(x.response.status===503)throw Object.assign(new Error((x.data&&x.data.error)||'Cloud storage not ready'),{code:'setup'});throw new Error((x.data&&x.data.error)||('Upload HTTP '+x.response.status));});});
         }
-        return api('/tracks/'+encodeURIComponent(op.id),{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({base_revision:Number(op.baseRevision)||0,device_id:deviceId})}).then(jsonOrEmpty).then(function(x){if(x.response.ok)return acceptDeleteSuccess(op.id,x.data);if(x.response.status===409)return resolveDeleteConflict(op,x.data);if(x.response.status===401)throw Object.assign(new Error('Sign in required'),{code:'signin'});if(x.response.status===503)throw Object.assign(new Error((x.data&&x.data.error)||'Cloud storage not ready'),{code:'setup'});throw new Error((x.data&&x.data.error)||('Delete HTTP '+x.response.status));});
-      });});return chain;}).then(function(){setStatus('synced','Synced','My Library is saved locally and synced to your private cloud account.');}).catch(function(e){if(e&&e.code==='signin')setStatus('signin','Sign in','Private sync is ready but this browser needs to sign in.');else if(e&&e.code==='setup')setStatus('setup','Setup needed',e.message);else if(!navigator.onLine)setStatus('offline','Offline','Changes are saved locally and queued. They will upload when this device is online again.');else setStatus('offline','Sync pending','Changes are saved locally. Cloud upload will retry automatically. '+(e&&e.message?e.message:''));}).finally(function(){syncing=false;updatePending();});}
+        // Quarantine legacy inferred deletes. Explicit deletion needs a separate, audited user action.\n        if(op.op==='delete'&&!op.explicitUserDelete){return delOutbox(op.id);}\n        return api('/tracks/'+encodeURIComponent(op.id),{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({base_revision:Number(op.baseRevision)||0,device_id:deviceId})}).then(jsonOrEmpty).then(function(x){if(x.response.ok)return acceptDeleteSuccess(op.id,x.data);if(x.response.status===409)return resolveDeleteConflict(op,x.data);if(x.response.status===401)throw Object.assign(new Error('Sign in required'),{code:'signin'});if(x.response.status===503)throw Object.assign(new Error((x.data&&x.data.error)||'Cloud storage not ready'),{code:'setup'});throw new Error((x.data&&x.data.error)||('Delete HTTP '+x.response.status));});
+      });});return chain;}).then(function(){return allOutbox().then(function(pending){if(pending.length)setStatus('offline','Sync pending',pending.length+' local change(s) are awaiting cloud upload.');else setStatus('synced','Synced','My Library is saved locally and synced to your private cloud account.');});}).catch(function(e){if(e&&e.code==='signin')setStatus('signin','Sign in','Private sync is ready but this browser needs to sign in.');else if(e&&e.code==='setup')setStatus('setup','Setup needed',e.message);else if(!navigator.onLine)setStatus('offline','Offline','Changes are saved locally and queued. They will upload when this device is online again.');else setStatus('offline','Sync pending','Changes are saved locally. Cloud upload will retry automatically. '+(e&&e.message?e.message:''));}).finally(function(){syncing=false;updatePending();});}
 
-  function syncNow(){if(syncing)return Promise.resolve();if(!window.indexedDB){setStatus('setup','Unsupported','IndexedDB is unavailable. Private cloud sync stays disabled on this device because a durable local queue cannot be guaranteed.');return Promise.resolve();}setStatus('syncing','Checking','Checking private cloud storage and account…');return health().then(function(h){if(!h.storageReady){ready=false;setStatus('setup','Setup needed',h.storageDetail||'Private cloud storage is not provisioned yet.');return false;}if(!h.authConfigured){ready=false;setStatus('setup','Setup needed','Private account authentication is not configured yet.');return false;}if(!h.authenticated||!h.accountKey){ready=false;setStatus('signin','Sign in','Sign in to your private ManCardo account before syncing My Library across devices.');return false;}return bindAccount(h).then(function(ok){if(!ok)return false;ready=true;setStatus('syncing','Syncing','Checking for newer My Library changes from your other devices…');return pullAll().then(mergeCloud).then(queueScan).then(flushOutbox).then(function(){if(ready&&!syncing)setStatus('synced','Synced','My Library is saved locally and synced to your private cloud account.');return true;});});}).catch(function(e){ready=false;if(!navigator.onLine)setStatus('offline','Offline','Local editing remains available. Cloud sync will retry when the network returns.');else setStatus('signin','Sign in','Private cloud could not verify this browser session. Use Sign in, then Sync now.');console.warn('private sync failed',e);});}
+  function syncNow(){if(syncing)return Promise.resolve();if(!window.indexedDB){setStatus('setup','Unsupported','IndexedDB is unavailable. Private cloud sync stays disabled on this device because a durable local queue cannot be guaranteed.');return Promise.resolve();}setStatus('syncing','Checking','Checking private cloud storage and account…');return health().then(function(h){if(!h.storageReady){ready=false;setStatus('setup','Setup needed',h.storageDetail||'Private cloud storage is not provisioned yet.');return false;}if(!h.authConfigured){ready=false;setStatus('setup','Setup needed','Private account authentication is not configured yet.');return false;}if(!h.authenticated||!h.accountKey){ready=false;setStatus('signin','Sign in','Sign in to your private ManCardo account before syncing My Library across devices.');return false;}return bindAccount(h).then(function(ok){if(!ok)return false;ready=true;setStatus('syncing','Syncing','Checking for newer My Library changes from your other devices…');return queueScan().then(flushOutbox).then(pullAll).then(mergeCloud).then(queueScan).then(flushOutbox).then(function(){return allOutbox().then(function(pending){if(pending.length){setStatus('offline','Sync pending',pending.length+' local change(s) still need to upload.');return false;}if(ready&&!syncing)setStatus('synced','Synced','My Library is saved locally and synced to your private cloud account.');return true;});});});}).catch(function(e){ready=false;if(!navigator.onLine)setStatus('offline','Offline','Local editing remains available. Cloud sync will retry when the network returns.');else setStatus('signin','Sign in','Private cloud could not verify this browser session. Use Sign in, then Sync now.');console.warn('private sync failed',e);});}
 
   document.getElementById('mancardoPrivateSyncClose').onclick=function(){overlay.classList.add('hidden');};document.getElementById('mancardoPrivateSyncDone').onclick=function(){overlay.classList.add('hidden');};document.getElementById('mancardoPrivateSyncNow').onclick=syncNow;document.getElementById('mancardoPrivateSyncSignIn').onclick=function(){window.open(API_PREFIX+'/login','mancardo-private-login','width=640,height=700');};chip.onclick=function(){overlay.classList.remove('hidden');msgEl.textContent=lastMessage;updatePending();};overlay.addEventListener('click',function(ev){if(ev.target===overlay)overlay.classList.add('hidden');});
 
   if(els&&els.saveBtn){var baseSaveClick=els.saveBtn.onclick;els.saveBtn.onclick=function(){var r=baseSaveClick&&baseSaveClick.apply(this,arguments);setTimeout(function(){queueScan().then(flushOutbox);},30);return r;};}
+  window.addEventListener('mancardo:track-autosaved',function(){
+    if(!ready){syncNow();return;}
+    function upload(attempt){
+      if(syncing){if(attempt<25)setTimeout(function(){upload(attempt+1);},350);return;}
+      queueScan().then(flushOutbox).catch(function(e){console.warn('Track autosave upload pending',e);setStatus('offline','Sync pending','Track changes are saved locally and will retry cloud sync.');});
+    }
+    upload(0);
+  });
+  window.addEventListener('mancardo:track-renamed',function(){
+    // A rename is a cloud write, even when the user never presses Save.
+    // Wait for an in-flight upload to finish rather than silently skipping it.
+    function uploadRename(attempt){
+      if(!ready){syncNow();return;}
+      if(syncing){if(attempt<20)setTimeout(function(){uploadRename(attempt+1);},350);return;}
+      queueScan().then(flushOutbox).catch(function(e){console.warn('track rename cloud upload failed',e);setStatus('offline','Sync pending','Track rename is saved locally but its cloud upload has not completed.');});
+    }
+    uploadRename(0);
+  });
   window.addEventListener('online',function(){setTimeout(syncNow,250);});window.addEventListener('offline',function(){setStatus('offline','Offline','Changes remain saved locally and will sync when the network returns.');});document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(syncNow,400);});
   setInterval(function(){if(document.visibilityState==='visible'&&navigator.onLine)syncNow();},60000);
   setTimeout(syncNow,900);
@@ -166,9 +185,9 @@ const ACTIVE_SYNC_FEATURE=String.raw`
 function injectActiveSync(html){
   if(html.includes('installMancardoPrivateCloudSync'))return html;
   html=html.replace('</head>',ACTIVE_SYNC_CSS+'\n</head>');
-  const close=html.lastIndexOf('})();');
-  if(close===-1)return html;
-  return html.slice(0,close)+ACTIVE_SYNC_FEATURE+'\n'+html.slice(close);
+  const boot=html.indexOf('// ---------- boot ----------');
+  if(boot===-1)return html;
+  return html.slice(0,boot)+ACTIVE_SYNC_FEATURE+'\n'+html.slice(boot);
 }
 
 export default {
