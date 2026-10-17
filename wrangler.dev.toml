@@ -1,5 +1,5 @@
 name = "mancardo-dev-test"
-main = "worker-track-size-guard.js"
+main = "worker-autosave-stability.js"
 compatibility_date = "2026-10-02"
 preview_urls = true
 
