@@ -7,25 +7,44 @@ const DURABLE_DELETE_BRIDGE = String.raw`
 (function(){
   if(window.__mancardoExplicitDeleteBridgeInstalled)return;
   window.__mancardoExplicitDeleteBridgeInstalled=true;
-  var PENDING_KEY='mancardo_explicit_delete_pending_v2';
+
+  var PENDING_KEY='mancardo_authorized_delete_pending_v3';
   var LIBRARY_KEY='switchback_local_tracks_v1';
-  var deleteIntent=null;
   var retrying=false;
 
-  function ids(){
-    try{return (state.library||[]).filter(function(t){return t&&t.id;}).map(function(t){return String(t.id);});}
-    catch(e){return [];}
-  }
   function readPending(){
-    try{var a=JSON.parse(localStorage.getItem(PENDING_KEY)||'[]');return Array.isArray(a)?a.map(String):[];}catch(e){return [];}
+    try{
+      var a=JSON.parse(localStorage.getItem(PENDING_KEY)||'[]');
+      return Array.isArray(a)?a.filter(function(x){return x&&x.id&&x.authorizedUserDelete===true;}):[];
+    }catch(e){return [];}
   }
   function writePending(a){
-    var seen={},out=[];(a||[]).forEach(function(id){id=String(id||'');if(id&&!seen[id]){seen[id]=1;out.push(id);}});
+    var seen={},out=[];
+    (a||[]).forEach(function(x){
+      if(!x||!x.id||x.authorizedUserDelete!==true)return;
+      var id=String(x.id);
+      if(seen[id])return;
+      seen[id]=1;
+      out.push({id:id,authorizedUserDelete:true,requestedAt:Number(x.requestedAt)||Date.now(),attempts:Number(x.attempts)||0});
+    });
     try{localStorage.setItem(PENDING_KEY,JSON.stringify(out));}catch(e){}
     return out;
   }
-  function addPending(a){return writePending(readPending().concat(a||[]));}
-  function removePending(id){return writePending(readPending().filter(function(x){return x!==String(id);}));}
+  function authorize(ids){
+    var now=Date.now(),pending=readPending();
+    (ids||[]).forEach(function(id){
+      id=String(id||'');
+      if(id)pending.push({id:id,authorizedUserDelete:true,requestedAt:now,attempts:0});
+    });
+    return writePending(pending);
+  }
+  function removePending(id){
+    id=String(id);
+    return writePending(readPending().filter(function(x){return String(x.id)!==id;}));
+  }
+  function pendingIds(){
+    var out={};readPending().forEach(function(x){out[String(x.id)]=1;});return out;
+  }
   function api(path,opts){
     opts=opts||{};opts.credentials='include';opts.cache='no-store';
     opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});
@@ -35,13 +54,12 @@ const DURABLE_DELETE_BRIDGE = String.raw`
   function device(){try{return localStorage.getItem('mancardo_private_device_id_v1')||'';}catch(e){return '';}}
   function markPendingStatus(){
     var chip=document.getElementById('mancardoPrivateSyncChip');
-    if(chip){chip.dataset.state='offline';chip.textContent='☁ Sync pending';chip.title='A library deletion is saved locally and is waiting for cloud confirmation.';}
+    if(chip){chip.dataset.state='offline';chip.textContent='☁ Delete pending';chip.title='An authorised library deletion is waiting for cloud confirmation.';}
   }
 
   function hidePendingLocally(){
-    var pending=readPending();
-    if(!pending.length)return false;
-    var blocked={};pending.forEach(function(id){blocked[String(id)]=1;});
+    var blocked=pendingIds();
+    if(!Object.keys(blocked).length)return false;
     var before=(state.library||[]).length;
     state.library=(state.library||[]).filter(function(t){return !(t&&blocked[String(t.id)]);});
     if(state.currentId&&blocked[String(state.currentId)]){state.current=null;state.currentId=null;state.selection=null;}
@@ -53,19 +71,25 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     return false;
   }
 
-  function deleteCloudTrack(id,attempt){
-    attempt=attempt||0;
+  function deleteCloudTrack(record,attempt){
+    var id=String(record.id),n=attempt||0;
     return api('/tracks/'+encodeURIComponent(id)).then(json).then(function(x){
       if(x.r.status===404||(x.d&&x.d.deleted)){removePending(id);return true;}
       if(!x.r.ok)throw new Error((x.d&&x.d.error)||('Lookup HTTP '+x.r.status));
       var revision=Number(x.d&&x.d.revision)||0;
-      if(revision<1)throw new Error('Cloud revision unavailable for delete');
+      if(revision<1)throw new Error('Cloud revision unavailable for authorised delete');
       return api('/tracks/'+encodeURIComponent(id),{
         method:'DELETE',headers:{'content-type':'application/json'},
-        body:JSON.stringify({base_revision:revision,device_id:device()})
+        body:JSON.stringify({
+          base_revision:revision,
+          device_id:device(),
+          authorized_user_delete:true,
+          delete_intent:'explicit-ui-delete',
+          requested_at:Number(record.requestedAt)||Date.now()
+        })
       }).then(json).then(function(y){
         if(y.r.ok||(y.d&&y.d.deleted)){removePending(id);return true;}
-        if(y.r.status===409&&attempt<3)return deleteCloudTrack(id,attempt+1);
+        if(y.r.status===409&&n<3)return deleteCloudTrack(record,n+1);
         throw new Error((y.d&&y.d.error)||('Delete HTTP '+y.r.status));
       });
     });
@@ -77,37 +101,76 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     if(!pending.length||retrying||!navigator.onLine)return Promise.resolve();
     retrying=true;
     var chain=Promise.resolve();
-    pending.forEach(function(id){chain=chain.then(function(){return deleteCloudTrack(id,0);});});
+    pending.forEach(function(record){chain=chain.then(function(){return deleteCloudTrack(record,0);});});
     return chain.then(function(){
       hidePendingLocally();
       try{window.dispatchEvent(new CustomEvent('mancardo:explicit-cloud-delete'));}catch(e){}
-    }).catch(function(e){markPendingStatus();console.warn('Explicit cloud delete still pending',e);})
+    }).catch(function(e){markPendingStatus();console.warn('Authorised cloud delete still pending',e);})
       .finally(function(){retrying=false;});
   }
 
+  function removeLocal(ids){
+    var blocked={};(ids||[]).forEach(function(id){blocked[String(id)]=1;});
+    state.library=(state.library||[]).filter(function(t){return !(t&&blocked[String(t.id)]);});
+    if(state.currentId&&blocked[String(state.currentId)]){state.current=null;state.currentId=null;state.selection=null;}
+    try{state.trackMenuId=null;state.paletteId=null;}catch(e){}
+    try{persistLibrary();}catch(e){try{localStorage.setItem(LIBRARY_KEY,JSON.stringify(state.library));}catch(_){} }
+    try{if(typeof render==='function')render();if(typeof renderLibrary==='function')renderLibrary();}catch(e){}
+    markPendingStatus();
+    retryPending();
+  }
+
+  function authorisedDelete(ids){
+    ids=(ids||[]).map(String).filter(Boolean);
+    if(!ids.length)return false;
+    // The deletion authority is written synchronously BEFORE the local track is removed.
+    // This survives browser refresh and prevents cloud reconciliation from treating the
+    // missing track as accidental data loss.
+    authorize(ids);
+    removeLocal(ids);
+    return true;
+  }
+  window.mancardoAuthorizedDelete=authorisedDelete;
+
   document.addEventListener('click',function(ev){
-    var btn=ev.target&&ev.target.closest?ev.target.closest('#deleteTrackBtn,#deleteSelectedBtn'):null;
-    if(!btn)return;
-    deleteIntent={before:ids(),expires:Date.now()+5000};
+    var target=ev.target&&ev.target.closest?ev.target.closest('.mancardo-menu-delete,#deleteTrackBtn,#deleteSelectedBtn'):null;
+    if(!target)return;
+
+    if(target.classList.contains('mancardo-menu-delete')){
+      ev.preventDefault();ev.stopImmediatePropagation();
+      var card=target.closest('.track-item');
+      var id=card&&card.getAttribute('data-track-id');
+      var item=(state.library||[]).find(function(t){return t&&String(t.id)===String(id);});
+      if(!id||!item)return;
+      if(!window.confirm('Delete "'+(item.name||'this track')+'" from My Library? This cannot be undone.'))return;
+      authorisedDelete([id]);
+      return;
+    }
+
+    if(target.id==='deleteSelectedBtn'){
+      ev.preventDefault();ev.stopImmediatePropagation();
+      var selected=(state.library||[]).filter(function(item){return item&&item.visible!==false;});
+      if(!selected.length)return;
+      var label=selected.length===1?'this selected track':selected.length+' selected tracks';
+      if(!window.confirm('Delete '+label+' from the library? This cannot be undone.'))return;
+      authorisedDelete(selected.map(function(item){return item.id;}));
+      return;
+    }
+
+    // The main Delete button uses a two-click armConfirm flow. Allow the first click to arm it,
+    // then own the second confirmed click so the authorisation record is durable before removal.
+    if(target.id==='deleteTrackBtn'&&target.classList.contains('confirming')){
+      ev.preventDefault();ev.stopImmediatePropagation();
+      if(state.currentId)authorisedDelete([state.currentId]);
+    }
   },true);
 
-  var basePersist=persistLibrary;
-  persistLibrary=function(){
-    var intent=deleteIntent;
-    var r=basePersist.apply(this,arguments);
-    if(intent&&Date.now()<=intent.expires){
-      var after={};ids().forEach(function(id){after[id]=1;});
-      var removed=intent.before.filter(function(id){return !after[id];});
-      if(removed.length){deleteIntent=null;addPending(removed);hidePendingLocally();markPendingStatus();retryPending();}
-    }
-    hidePendingLocally();
-    return r;
-  };
-
-  window.addEventListener('online',function(){setTimeout(retryPending,150);});
-  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(retryPending,150);});
-  setInterval(function(){if(document.visibilityState==='visible'){hidePendingLocally();retryPending();}},2000);
-  setTimeout(function(){hidePendingLocally();retryPending();},100);
+  // Keep authorised tombstones dominant over a stale cloud pull until the server confirms delete.
+  window.addEventListener('online',function(){setTimeout(retryPending,100);});
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(retryPending,100);});
+  window.addEventListener('mancardo:track-autosaved',function(){setTimeout(hidePendingLocally,0);});
+  setInterval(function(){if(document.visibilityState==='visible'){hidePendingLocally();retryPending();}},1500);
+  setTimeout(function(){hidePendingLocally();retryPending();},50);
 })();
 </script>`;
 
@@ -120,7 +183,8 @@ export default {
     html=html.replace(OLD_DELETE_BRIDGE,'');
     const i=html.toLowerCase().lastIndexOf('</body>');
     html=i>=0?html.slice(0,i)+DURABLE_DELETE_BRIDGE+'\n'+html.slice(i):html+DURABLE_DELETE_BRIDGE;
-    const headers=new Headers(response.headers);headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store, max-age=0');
+    const headers=new Headers(response.headers);
+    headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store, max-age=0');
     return new Response(html,{status:response.status,statusText:response.statusText,headers});
   }
 };
