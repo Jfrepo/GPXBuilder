@@ -8,7 +8,9 @@ const DURABLE_DELETE_BRIDGE = String.raw`
   if(window.__mancardoExplicitDeleteBridgeInstalled)return;
   window.__mancardoExplicitDeleteBridgeInstalled=true;
   var PENDING_KEY='mancardo_explicit_delete_pending_v2';
+  var LIBRARY_KEY='switchback_local_tracks_v1';
   var deleteIntent=null;
+  var retrying=false;
 
   function ids(){
     try{return (state.library||[]).filter(function(t){return t&&t.id;}).map(function(t){return String(t.id);});}
@@ -36,39 +38,57 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     if(chip){chip.dataset.state='offline';chip.textContent='☁ Sync pending';chip.title='A library deletion is saved locally and is waiting for cloud confirmation.';}
   }
 
+  function hidePendingLocally(){
+    var pending=readPending();
+    if(!pending.length)return false;
+    var blocked={};pending.forEach(function(id){blocked[String(id)]=1;});
+    var before=(state.library||[]).length;
+    state.library=(state.library||[]).filter(function(t){return !(t&&blocked[String(t.id)]);});
+    if(state.currentId&&blocked[String(state.currentId)]){state.current=null;state.currentId=null;state.selection=null;}
+    if(state.library.length!==before){
+      try{localStorage.setItem(LIBRARY_KEY,JSON.stringify(state.library));}catch(e){}
+      try{if(typeof renderLibrary==='function')renderLibrary();if(typeof render==='function')render();}catch(e){}
+      return true;
+    }
+    return false;
+  }
+
   function deleteCloudTrack(id,attempt){
     attempt=attempt||0;
     return api('/tracks/'+encodeURIComponent(id)).then(json).then(function(x){
-      if(x.r.status===404||x.d&&x.d.deleted){removePending(id);return true;}
+      if(x.r.status===404||(x.d&&x.d.deleted)){removePending(id);return true;}
       if(!x.r.ok)throw new Error((x.d&&x.d.error)||('Lookup HTTP '+x.r.status));
       var revision=Number(x.d&&x.d.revision)||0;
-      if(revision<1){removePending(id);return true;}
+      if(revision<1)throw new Error('Cloud revision unavailable for delete');
       return api('/tracks/'+encodeURIComponent(id),{
         method:'DELETE',headers:{'content-type':'application/json'},
         body:JSON.stringify({base_revision:revision,device_id:device()})
       }).then(json).then(function(y){
-        if(y.r.ok){removePending(id);return true;}
-        if(y.r.status===409&&attempt<2)return deleteCloudTrack(id,attempt+1);
+        if(y.r.ok||(y.d&&y.d.deleted)){removePending(id);return true;}
+        if(y.r.status===409&&attempt<3)return deleteCloudTrack(id,attempt+1);
         throw new Error((y.d&&y.d.error)||('Delete HTTP '+y.r.status));
       });
     });
   }
 
   function retryPending(){
+    hidePendingLocally();
     var pending=readPending();
-    if(!pending.length)return Promise.resolve();
+    if(!pending.length||retrying||!navigator.onLine)return Promise.resolve();
+    retrying=true;
     var chain=Promise.resolve();
     pending.forEach(function(id){chain=chain.then(function(){return deleteCloudTrack(id,0);});});
     return chain.then(function(){
+      hidePendingLocally();
       try{window.dispatchEvent(new CustomEvent('mancardo:explicit-cloud-delete'));}catch(e){}
-    }).catch(function(e){markPendingStatus();console.warn('Explicit cloud delete still pending',e);});
+    }).catch(function(e){markPendingStatus();console.warn('Explicit cloud delete still pending',e);})
+      .finally(function(){retrying=false;});
   }
 
   document.addEventListener('click',function(ev){
     var btn=ev.target&&ev.target.closest?ev.target.closest('#deleteTrackBtn,#deleteSelectedBtn'):null;
     if(!btn)return;
-    if(btn.id==='deleteTrackBtn'&&!btn.classList.contains('confirming'))return;
-    deleteIntent={before:ids(),expires:Date.now()+3000};
+    deleteIntent={before:ids(),expires:Date.now()+5000};
   },true);
 
   var basePersist=persistLibrary;
@@ -78,14 +98,16 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     if(intent&&Date.now()<=intent.expires){
       var after={};ids().forEach(function(id){after[id]=1;});
       var removed=intent.before.filter(function(id){return !after[id];});
-      deleteIntent=null;
-      if(removed.length){addPending(removed);markPendingStatus();retryPending();}
+      if(removed.length){deleteIntent=null;addPending(removed);hidePendingLocally();markPendingStatus();retryPending();}
     }
+    hidePendingLocally();
     return r;
   };
 
-  window.addEventListener('online',function(){setTimeout(retryPending,200);});
-  setTimeout(retryPending,300);
+  window.addEventListener('online',function(){setTimeout(retryPending,150);});
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(retryPending,150);});
+  setInterval(function(){if(document.visibilityState==='visible'){hidePendingLocally();retryPending();}},2000);
+  setTimeout(function(){hidePendingLocally();retryPending();},100);
 })();
 </script>`;
 
