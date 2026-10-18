@@ -29,7 +29,7 @@ function fakeIndexedDB(stores){return {open(){const req={};setImmediate(()=>{req
 
 async function fixture(){
   const initial=track();
-  const model={rows:new Map([[initial.id,{track_id:initial.id,revision:1,sha256:hash(initial),deleted:false,track:clone(initial),device_id:'fixture-origin',updated_at:1}]]),requests:[],onPull:null};
+  const model={rows:new Map([[initial.id,{track_id:initial.id,revision:1,sha256:hash(initial),deleted:false,track:clone(initial),device_id:'fixture-origin',updated_at:1}]]),requests:[],healthRequests:[],onPull:null};
   async function client(device,options={}){
     const baseline=clone(initial),local=clone(options.local||baseline);
     const stores={meta:new Map([['boundAccountKey',{key:'boundAccountKey',value:'A'}]]),sync:new Map([['A|'+initial.id,{key:'A|'+initial.id,id:initial.id,accountKey:'A',revision:1,sha256:hash(baseline),deleted:false}]]),outbox:new Map()};
@@ -44,7 +44,7 @@ async function fixture(){
       addEventListener(name,fn){(handlers[name]??=[]).push(fn);},dispatchEvent(event){for(const fn of handlers[event.type]||[])fn(event);},
       async fetch(url,opts={}){
         await tick();const parsed=new URL(url,'https://fixture.test'),method=opts.method||'GET';
-        if(parsed.pathname.endsWith('/health'))return Response.json({authenticated:true,authConfigured:true,storageReady:true,accountKey:healthAccount,accountLabel:'Synthetic account'});
+        if(parsed.pathname.endsWith('/health')){model.healthRequests.push({device,account:healthAccount});return Response.json({authenticated:true,authConfigured:true,storageReady:true,accountKey:healthAccount,accountLabel:'Synthetic account'});}
         if(parsed.pathname==='/api/private-library/tracks'){
           const items=clone([...model.rows.values()]);model.requests.push({device,method,path:parsed.pathname});
           if(model.onPull)await model.onPull(device);
@@ -132,13 +132,25 @@ test('editor-only geometry changes are retained when the library replica is unch
   assert.equal(f.model.rows.get(f.initial.id).deleted,true,'Unpersisted editor state must not recreate the original ID');
 });
 
-test('account changes during tombstone hashing stop reconciliation without deleting or cross-account metadata',{timeout:10000},async()=>{
+test('a second sync joins held tombstone reconciliation before a later account change can pause the workspace',{timeout:10000},async()=>{
   const f=await setupPair();let gate;
   f.model.onPull=async device=>{if(device==='device-b'){f.model.onPull=null;gate=f.b.pauseNextHash();}};
   const syncing=f.b.sync();while(!gate)await tick();await gate.entered.promise;
-  f.b.setHealthAccount('B');await f.b.sync();gate.release.resolve();await syncing;
-  assert.equal(f.b.tracks().length,1);assert.equal(f.b.tracks()[0].id,f.initial.id);
-  assert.equal(f.b.stores.sync.get('A|'+f.initial.id).revision,1);assert.equal(f.b.stores.sync.has('B|'+f.initial.id),false);
+  const healthCount=f.model.healthRequests.length;
+  f.b.setHealthAccount('B');const joined=f.b.sync();let settled=false;joined.then(()=>{settled=true;});
+  for(let i=0;i<8;i++)await tick();
+  assert.equal(joined,syncing,'The second caller must join the complete cycle, not run competing health/bind work');
+  assert.equal(settled,false);assert.equal(f.model.healthRequests.length,healthCount);
+  assert.equal(f.b.tracks()[0].id,f.initial.id,'Held reconciliation has not discarded local content');
+  gate.release.resolve();await joined;
+  assert.deepEqual(f.b.tracks(),[],'The already-authorized clean A tombstone completes before another health check');
+  assert.equal(f.b.stores.sync.get('A|'+f.initial.id).revision,2);
+  assert.equal(f.b.stores.sync.get('A|'+f.initial.id).deleted,true);
+  const before=clone([...f.b.stores.sync]);
+  assert.equal(await f.b.sync(),false,'A subsequent B health must pause the A-bound workspace');
+  assert.deepEqual([...f.b.stores.sync],before);
+  assert.equal(f.b.stores.meta.get('boundAccountKey').value,'A');
+  assert.equal(f.b.stores.sync.has('B|'+f.initial.id),false);
   assert.equal(f.model.requests.filter(r=>r.device==='device-b'&&r.method==='PUT').length,0);
 });
 

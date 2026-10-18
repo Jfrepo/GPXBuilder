@@ -92,6 +92,9 @@ async function fixture({ account = OTHER, otherPresent = true } = {}) {
   localCard.getAttribute = name => name === 'data-track-id' ? primaryTrack.id : null;
   localCard.appendChild(element('ti-name', primaryTrack.name));
   const sharedCard = element('shared-item');
+  // The canonical shared renderer supplies this exact row's note. The stable
+  // decorator no longer owns a competing network fetch or name-based lookup.
+  sharedCard.getAttribute = name => name === 'data-mancardo-shared-note' ? sharedTracks[0].note : null;
   const sharedName = sharedCard.appendChild(element('shared-item-name', sharedTracks[0].name));
   sharedName.appendChild({ nodeType: 3, nodeValue: sharedTracks[0].name });
   sharedCard.appendChild(element('shared-item-meta', 'Synthetic shared metadata'));
@@ -129,7 +132,7 @@ async function fixture({ account = OTHER, otherPresent = true } = {}) {
     document: {
       visibilityState: 'visible', documentElement: {},
       addEventListener(type, handler) { add(documentEvents, type, handler); },
-      getElementById(id) { return id === 'mancardoPrivateSyncChip' ? chip : null; },
+      getElementById(id) { return id === 'mancardoPrivateSyncChip' ? chip : id === 'trackList' ? localCard : id === 'sharedTrackList' ? sharedCard : null; },
       createElement() { return element(); },
       querySelectorAll(selector) {
         if (selector.startsWith('#trackList ')) return [localCard];
@@ -230,7 +233,7 @@ test('emitted stable-note UI retains local icons and shared notes without a para
   assert.equal(f.localCard.querySelector('.mancardo-note-icon')?.title, 'Note: ' + primaryTrack.note);
   assert.equal(f.sharedCard.querySelector('.mancardo-note-icon')?.title, 'Note: Shared synthetic note');
   assert.equal(f.sharedCard.querySelector('.shared-item-note')?.textContent, 'Shared synthetic note');
-  assert.ok(f.calls.some(call => call.path === '/api/tracks'), 'shared-library decoration must keep its shared endpoint');
+  assert.equal(f.calls.filter(call => call.path === '/api/tracks').length, 0, 'decoration uses canonical row data without a competing shared fetch');
   assert.deepEqual(f.privateCalls(), [], 'healthy note uploads must use the real editor persistence path, not this decoration helper');
   const local = JSON.parse(f.storage.get(LIBRARY_KEY)); local[0].note = '';
   f.storage.set(LIBRARY_KEY, JSON.stringify(local)); f.sharedTracks[0].note = '';

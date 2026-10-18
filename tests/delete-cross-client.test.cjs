@@ -228,7 +228,7 @@ test('full-editor rename during a pending tombstone hash is never discarded',{ti
   assert.equal(live.length,1);assert.match(live[0].track.name,/Synthetic edit during hash/);assert.equal(f.model.rows.get(f.track.id).deleted,true);assert.deepEqual(b.errors,[]);
 });
 
-test('event-driven rename flush makes overlapping sync return early until its held conflict response settles',{timeout:30000},async t=>{
+test('event-driven rename flush makes overlapping sync wait for its held conflict and preserve one recovery copy',{timeout:30000},async t=>{
   const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
   await a.sync();await b.sync();await a.remove();
   let entered,release;
@@ -241,23 +241,24 @@ test('event-driven rename flush makes overlapping sync return early until its he
   assert.equal(attempted.id,f.track.id);assert.equal(attempted.data.base_revision,1);
   assert.equal(attempted.data.track.name,'Synthetic overlap rename');
   assert.equal(await b.page.locator('#mancardoPrivateSyncChip').getAttribute('data-state'),'syncing');
-  assert.equal(await b.sync(),undefined,'Sync-now must expose its actual early return while the rename upload is in flight');
+  // Invoke the same installed handler as b.sync(), but retain its promise in
+  // the browser so the fixture can release the held PUT before awaiting it.
+  await b.page.evaluate(()=>{
+    window.__fixtureOverlapSettled=false;
+    window.__fixtureOverlapResult=Promise.resolve(document.getElementById('mancardoPrivateSyncNow').onclick()).then(function(result){window.__fixtureOverlapSettled=true;return result;});
+  });
+  await b.page.evaluate(()=>Promise.resolve());
+  assert.equal(await b.page.evaluate(()=>window.__fixtureOverlapSettled),false,'Sync-now must stay pending while the rename upload is held');
   assert.deepEqual([...f.model.rows.values()].filter(row=>!row.deleted),[],'The held upload has not yet preserved or uploaded a recovery copy');
   release();
-  // The event-only flush preserves the dirty local copy, but it does not run
-  // another queue scan to upload that new ID. Wait for its exact local outcome
-  // and terminal status before starting one explicit, complete synchronization.
-  await eventually(()=>b.page.evaluate(LIB=>{
-    const tracks=JSON.parse(localStorage.getItem(LIB)||'[]');
-    return tracks.length===1&&tracks[0].id!=='fixture-one'&&tracks[0].name==='Synthetic overlap rename (conflict copy)'&&document.getElementById('mancardoPrivateSyncChip').dataset.state==='synced';
-  },LIB));
-  assert.deepEqual([...f.model.rows.values()].filter(row=>!row.deleted),[],'Event-only conflict recovery remains local until the next scan');
-  assert.equal(await b.sync(),true,'The explicit sync must now run to completion');
+  assert.equal(await b.page.evaluate(()=>window.__fixtureOverlapResult),true,'The joined sync must wait for conflict recovery and complete its scan/upload/pull cycle');
   const live=[...f.model.rows.values()].filter(row=>!row.deleted);
   assert.equal(live.length,1);assert.notEqual(live[0].track_id,f.track.id);
   assert.equal(live[0].track.name,'Synthetic overlap rename (conflict copy)');
   assert.deepEqual(live[0].track.segments,f.track.segments);assert.equal(f.model.rows.get(f.track.id).deleted,true);
   assert.deepEqual(f.model.requests.filter(request=>request.device===b.device&&request.method==='PUT').map(request=>[request.id,request.data.base_revision]),[[f.track.id,1],[live[0].track_id,0]]);
+  assert.deepEqual(await b.tracks(),[live[0].track],'The same single recovered rename, including its note and geometry, must remain in the browser and cloud');
+  assert.equal(await b.page.locator('#mancardoPrivateSyncChip').getAttribute('data-state'),'synced');
   assert.deepEqual(b.errors,[]);
 });
 

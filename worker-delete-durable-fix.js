@@ -1,4 +1,5 @@
 import baseWorker from './worker-autosave-stability.js';
+import { repairRequestCadence } from './worker-request-cadence.js';
 
 const OLD_DELETE_BRIDGE = /<script id="mancardo-explicit-delete-bridge">[\s\S]*?<\/script>/i;
 
@@ -98,21 +99,20 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     writePending(pending);
     markStatus('synced','Delete confirmed','The cloud confirmed this deletion.');
   }
-  function reconcile(){window.dispatchEvent(new Event('online'));}
+  function reconcile(){window.dispatchEvent(new Event('mancardo:private-reconcile'));}
   function deleteCloudTrack(record){
     return api('/tracks/'+encodeURIComponent(record.id),{
       method:'DELETE',headers:{'content-type':'application/json'},
       body:JSON.stringify({base_revision:record.baseRevision,device_id:device(),authorized_user_delete:true,delete_intent:'explicit-ui-delete',requested_at:record.requestedAt})
     },record.accountKey).then(function(x){
-      if(x.r.ok&&x.d.deleted){confirmed(record,x.d.revision);return;}
+      if(x.r.ok&&x.d.deleted){confirmed(record,x.d.revision);return true;}
       if(x.r.status===409&&x.d.code==='revision_conflict'){
         // Covers a response lost after a successful DELETE, without issuing a
         // second DELETE at the newly observed revision.
-        if(x.d.current&&x.d.current.deleted){confirmed(record,x.d.current.revision);return;}
+        if(x.d.current&&x.d.current.deleted){confirmed(record,x.d.current.revision);return true;}
         removePending(record);
         markStatus('conflict','Delete cancelled','This track changed on another device. The newer cloud copy will be restored; review it before deleting again.');
-        reconcile();
-        return;
+        return true;
       }
       throw new Error((x.d&&x.d.error)||('Delete HTTP '+x.r.status));
     });
@@ -128,9 +128,11 @@ const DURABLE_DELETE_BRIDGE = String.raw`
       if(!h.r.ok||!h.d.authenticated||!h.d.storageReady||h.d.accountKey!==workspaceAccount)throw new Error('Deletion paused: sign in to the account bound to this private workspace.');
       hidePendingLocally();
       var records=readPending().filter(function(x){return x.accountKey===workspaceAccount&&!x.confirmedRevision;});
-      var chain=Promise.resolve();
-      records.forEach(function(record){chain=chain.then(function(){return deleteCloudTrack(record).catch(report);});});
-      return chain.then(function(){if(records.length)reconcile();});
+      var chain=Promise.resolve(),changed=false;
+      records.forEach(function(record){chain=chain.then(function(){return deleteCloudTrack(record).then(function(didChange){if(didChange)changed=true;}).catch(report);});});
+      // Failed attempts remain pending for the normal retry cadence. They must
+      // not synthesize online and recursively trigger their own retry handler.
+      return chain.then(function(){if(changed)reconcile();});
     }).catch(report).finally(function(){retrying=false;});
   }
   function revisionHashes(snapshot){
@@ -315,6 +317,7 @@ function injectDurableDeletion(html){
   html=html.replace(scan,scan+'if(window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,track.id))return;');
   html=html.replace(replace,replace+'if(track&&window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,id))return;');
   html=html.replace(preserve,preserve+'if(track&&window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,track.id))return null;');
+  html=repairRequestCadence(html);
   const insertion=html.indexOf('// ---------- boot ----------');
   return html.slice(0,insertion)+DURABLE_DELETE_BRIDGE+'\n'+html.slice(insertion);
 }
