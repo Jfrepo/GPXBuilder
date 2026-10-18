@@ -199,6 +199,109 @@ test('full-editor receiver retains a real unsynced rename as a conflict copy',{t
   assert.deepEqual(live[0].track.segments,f.track.segments);assert.equal(f.model.rows.get(f.track.id).deleted,true);assert.deepEqual(b.errors,[]);
 });
 
+// These cases enter the note through the actual editor input handler. The
+// readonly IDB snapshot is the lifecycle boundary: it observes a committed
+// offline queue operation, not an injected edit or a retry-until-green sync.
+async function queueOfflineNote(f,client,note) {
+  await client.setOffline(true);
+  await client.note(note);
+  await client.page.clock.runFor(1600); // Emitted persistLibrary debounce is 1200 ms.
+  await eventually(async()=>{
+    const workspace=await client.workspace();
+    return workspace.outbox.some(op=>op.key==='fixture-account|fixture-one'&&op.track?.note===note);
+  });
+  assert.equal(await client.page.evaluate(()=>navigator.onLine),false);
+  const workspace=await client.workspace();
+  assert.equal(workspace.outbox.length,1,'A genuine offline note must commit exactly one durable put');
+  const queued=workspace.outbox[0];
+  assert.equal(queued.op,'put');assert.equal(queued.id,f.track.id);
+  assert.equal(queued.accountKey,'fixture-account');assert.equal(queued.baseRevision,1);
+  assert.equal(queued.track.note,note);assert.equal(queued.localHash,hash(queued.track));
+  assert.notEqual(queued.localHash,hash(f.track),'The queued content must differ from the acknowledged replica');
+  assert.deepEqual(queued.track.segments,f.track.segments);
+  assert.equal(workspace.sync.find(meta=>meta.key==='fixture-account|fixture-one').revision,1);
+  assert.equal(f.model.requests.filter(request=>request.device===client.device&&request.method==='PUT').length,0,'Offline note input must not reach any cloud write');
+  assert.deepEqual(await client.tracks(),[queued.track]);
+  return queued;
+}
+
+async function editorNoteValue(client,id) {
+  const row=client.page.locator('[data-track-id="'+id+'"]');
+  if(!await row.locator('.track-note textarea').count()){
+    await row.locator('.track-more').evaluate(button=>button.click());
+    await row.locator('.track-menu').getByRole('button',{name:'Note',exact:true}).evaluate(button=>button.click());
+  }
+  return row.locator('.track-note textarea').inputValue();
+}
+
+for(const conflict of ['remote tombstone','newer live revision'])test('full-editor offline note survives '+conflict+' verbatim with one durable recovery copy',{timeout:30000},async t=>{
+  const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
+  // Finish the actual startup timers before going offline. Otherwise the
+  // pending 900 ms health check could race the note's 1200 ms queue debounce.
+  await a.page.clock.runFor(1000);await b.page.clock.runFor(1000);
+  assert.equal(await a.sync(),true);assert.equal(await b.sync(),true);
+  const original=clone(f.model.rows.get(f.track.id));
+  const note='  Café 🧭\nKeep my note & spacing  ';
+  assert.ok(note.length<=40,'Exercise the existing editor note limit without truncation');
+  const queued=await queueOfflineNote(f,b,note);
+  assert.deepEqual(f.model.rows.get(f.track.id),original,'The offline note is not already present on the server');
+
+  if(conflict==='remote tombstone'){
+    await a.remove();
+  }else{
+    await queueOfflineNote(f,a,'Other device cloud note 🧭');
+    await a.setOffline(false);assert.equal(await a.sync(),true);
+  }
+  const remote=clone(f.model.rows.get(f.track.id));
+  assert.equal(remote.revision,2);assert.equal(remote.deleted,conflict==='remote tombstone');
+  if(!remote.deleted){assert.equal(remote.track.note,'Other device cloud note 🧭');assert.deepEqual(remote.track.segments,f.track.segments);}
+
+  // Real offline reload proves that both the text and committed outbox entry
+  // survive in browser storage before conflict resolution gets a chance to run.
+  await b.reload();assert.equal(await b.page.evaluate(()=>navigator.onLine),false);
+  assert.deepEqual((await b.workspace()).outbox,[queued]);
+  assert.deepEqual(await b.tracks(),[queued.track]);
+  assert.equal(await editorNoteValue(b,f.track.id),note);
+  assert.equal(f.model.requests.filter(request=>request.device===b.device&&request.method==='PUT').length,0);
+
+  await b.setOffline(false);
+  assert.equal(await b.sync(),true,'One awaited full sync must resolve and upload the recovery copy');
+  const copies=[...f.model.rows.values()].filter(row=>row.track_id!==f.track.id);
+  assert.equal(copies.length,1,'Do not discard the note or manufacture repeated recovery records');
+  const copy=clone(copies[0]);
+  assert.notEqual(copy.track_id,f.track.id);assert.equal(copy.track.id,copy.track_id);
+  assert.equal(copy.revision,1);assert.equal(copy.deleted,false);
+  assert.equal(copy.track.name,queued.track.name+' (conflict copy)');assert.equal(copy.track.draft,true);
+  assert.equal(copy.track.note,note,'The uploaded copy must retain user text, not replace it with a recovery diagnostic');
+  assert.deepEqual(copy.track.segments,queued.track.segments);
+  assert.deepEqual(f.model.rows.get(f.track.id),remote,'The exact remote tombstone/newer live row must stay unchanged');
+  const expectedLocal=remote.deleted?[copy.track]:[copy.track,remote.track];
+  assert.deepEqual(await b.tracks(),expectedLocal,'The browser and uploaded recovery copy must contain the same complete content');
+  assert.equal(await editorNoteValue(b,copy.track_id),note,'The recovered note must remain editable in the emitted DOM');
+  const workspace=await b.workspace();
+  assert.deepEqual(workspace.outbox,[],'A reported successful sync must drain its durable queue');
+  assert.equal(workspace.meta.find(meta=>meta.key==='boundAccountKey').value,'fixture-account');
+  const originalMeta=workspace.sync.find(meta=>meta.key==='fixture-account|'+f.track.id);
+  assert.equal(originalMeta.revision,2);assert.equal(originalMeta.deleted,remote.deleted);
+  const copyMeta=workspace.sync.find(meta=>meta.key==='fixture-account|'+copy.track_id);
+  assert.equal(copyMeta.revision,1);assert.equal(copyMeta.sha256,hash(copy.track));assert.equal(copyMeta.deleted,false);
+  const writes=()=>f.model.requests.filter(request=>request.device===b.device&&(request.method==='PUT'||request.method==='DELETE'));
+  const expectedWrites=[['PUT',f.track.id,1,'fixture-account'],['PUT',copy.track_id,0,'fixture-account']];
+  assert.deepEqual(writes().map(request=>[request.method,request.id,request.data.base_revision,request.privateHeader]),expectedWrites,'One stale original-ID attempt and one fresh-ID upload, without overwriting the authoritative original');
+  assert.equal(writes()[0].data.track.note,note);assert.equal(writes()[1].data.track.note,note);
+
+  // A real reload plus the emitted startup/online timers and one awaited sync
+  // must retain the same ID and exact note without another write or copy.
+  const serverSnapshot=clone([...f.model.rows.values()]);
+  await b.reload();await b.page.clock.runFor(1000);assert.equal(await b.sync(),true);
+  assert.deepEqual(await b.tracks(),expectedLocal);
+  assert.equal(await editorNoteValue(b,copy.track_id),note);
+  assert.deepEqual((await b.workspace()).outbox,[]);
+  assert.deepEqual([...f.model.rows.values()],serverSnapshot);
+  assert.deepEqual(writes().map(request=>[request.method,request.id,request.data.base_revision,request.privateHeader]),expectedWrites);
+  assert.deepEqual(a.errors,[]);assert.deepEqual(b.errors,[]);
+});
+
 test('full-editor visibility checkbox is not a substantive conflict after another device deletes',{timeout:30000},async t=>{
   const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
   await a.sync();await b.sync();await a.remove();

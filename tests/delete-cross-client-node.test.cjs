@@ -59,6 +59,7 @@ async function fixture(){
       }};
     context.window=context;vm.createContext(context);vm.runInContext(cloudClient,context);vm.runInContext(deleteClient,context);for(let i=0;i<5;i++)await tick();
     return {context,stores,storage,timers,warnings,device,
+      recoveryMessage:()=>elements.get('mancardoPrivateSyncConflicts').title,
       setHealthAccount(account){healthAccount=account;},
       sync:()=>elements.get('mancardoPrivateSyncNow').onclick(),remove:()=>context.mancardoAuthorizedDelete([initial.id]),
       tracks:()=>clone(context.state.library),
@@ -83,6 +84,62 @@ test('complete emitted cloud client applies another device tombstone without inv
 test('complete emitted cloud client preserves a substantive unsynced edit against remote deletion',{timeout:10000},async()=>{
   const f=await setupPair();f.b.edit({name:'Unique unsynced rename'});await f.b.sync();
   const live=f.live();assert.equal(live.length,1);assert.notEqual(live[0].track_id,f.initial.id);assert.match(live[0].track.name,/Unique unsynced rename/);assert.deepEqual(live[0].track.segments,f.initial.segments);assert.equal(f.model.rows.get(f.initial.id).deleted,true);
+});
+
+async function queueOfflineNote(f,b,note){
+  b.context.navigator.onLine=false;b.edit({note});
+  const scan=[...b.timers].reverse().find(t=>t.delay===1200);
+  assert.ok(scan,'Actual note persistence must schedule the cloud queue scan');scan.fn();
+  for(let i=0;i<100&&!b.stores.outbox.get('A|'+f.initial.id);i++)await tick();
+  const op=clone(b.stores.outbox.get('A|'+f.initial.id));
+  assert.ok(op,'Actual emitted scan must persist the offline edit');
+  assert.equal(op.track.note,note);assert.equal(op.baseRevision,1);assert.equal(op.accountKey,'A');
+  assert.equal(op.localHash,hash(op.track));assert.notEqual(op.localHash,hash(f.initial));
+  assert.equal(f.model.rows.get(f.initial.id).revision,1);
+  return op;
+}
+
+for(const remote of ['tombstone','newer live revision'])test('queued unsynced note survives '+remote+' in local and uploaded recovery copies',{timeout:10000},async()=>{
+  const f=await fixture(),a=await f.client('device-a'),b=await f.client('device-b');
+  assert.equal(await a.sync(),true);assert.equal(await b.sync(),true);
+  const note='Keep this unsynced private note';await queueOfflineNote(f,b,note);
+  if(remote==='tombstone')assert.equal(await a.remove(),true);
+  else{a.edit({name:'Newer cloud rename'});assert.equal(await a.sync(),true);}
+  const authoritative=clone(f.model.rows.get(f.initial.id));assert.equal(authoritative.revision,2);
+  b.context.navigator.onLine=true;assert.equal(await b.sync(),true);
+  const copies=f.live().filter(r=>r.track_id!==f.initial.id),local=b.tracks().filter(r=>r.id!==f.initial.id);
+  assert.equal(copies.length,1);assert.equal(local.length,1);assert.equal(copies[0].track.note,note);assert.equal(local[0].note,note);
+  assert.deepEqual(copies[0].track.segments,f.initial.segments);assert.deepEqual(local,[copies[0].track]);
+  assert.deepEqual(f.model.rows.get(f.initial.id),authoritative,'Recovery must not rewrite the original cloud record');
+  assert.equal(copies[0].track.name,f.initial.name+' (conflict copy)');assert.equal(copies[0].track.draft,true);
+  assert.match(b.recoveryMessage(),remote==='tombstone'?/Recovery snapshot before cloud delete/:/Recovered from cross-device conflict/);
+  assert.deepEqual(f.model.requests.filter(r=>r.device==='device-b'&&r.method==='PUT').map(r=>[r.id,r.body.base_revision]),[[f.initial.id,1],[copies[0].track_id,0]],'One rejected old-base PUT and one fresh-ID recovery upload only');
+  await b.rehydrateLibrary();await b.sync();assert.equal(b.tracks().find(t=>t.id===copies[0].track_id).note,note);
+  assert.equal(f.live().filter(r=>r.track_id!==f.initial.id).length,1);
+});
+
+test('a note changed during pending tombstone hashing is preserved verbatim',{timeout:10000},async()=>{
+  const f=await setupPair();let gate;
+  f.model.onPull=async device=>{if(device==='device-b'){f.model.onPull=null;gate=f.b.pauseNextHash();}};
+  const syncing=f.b.sync();while(!gate)await tick();await gate.entered.promise;
+  const note='Note changed during reconciliation';f.b.edit({note});gate.release.resolve();await syncing;
+  const live=f.live();assert.equal(live.length,1);assert.equal(live[0].track.note,note);
+  assert.equal(f.b.tracks()[0].note,note);assert.deepEqual(live[0].track.segments,f.initial.segments);
+  assert.equal(f.model.rows.get(f.initial.id).deleted,true);
+});
+
+test('a replacement local note arriving during live-conflict GET is the version recovered',{timeout:10000},async()=>{
+  const f=await fixture(),a=await f.client('device-a'),b=await f.client('device-b');
+  await a.sync();await b.sync();await queueOfflineNote(f,b,'First unsynced note');
+  a.edit({name:'Newer authoritative rename'});await a.sync();const authoritative=clone(f.model.rows.get(f.initial.id));
+  const entered=defer(),release=defer();f.model.onGet=async(device,id)=>{if(device==='device-b'&&id===f.initial.id){f.model.onGet=null;entered.resolve();await release.promise;}};
+  b.context.navigator.onLine=true;const syncing=b.sync();await entered.promise;
+  const latest='Latest note saved during conflict GET';
+  b.context.state.library=b.context.state.library.map(t=>t.id===f.initial.id?{...clone(t),note:latest}:t);b.context.persistLibrary();
+  release.resolve();await syncing;
+  const copies=f.live().filter(r=>r.track_id!==f.initial.id);assert.equal(copies.length,1);assert.equal(copies[0].track.note,latest);
+  assert.equal(b.tracks().find(t=>t.id===copies[0].track_id).note,latest);assert.deepEqual(copies[0].track.segments,f.initial.segments);
+  assert.deepEqual(f.model.rows.get(f.initial.id),authoritative);
 });
 
 test('visibility-only receiver state must not create a conflict copy through the stale PUT path',{timeout:10000},async()=>{

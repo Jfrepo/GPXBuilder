@@ -150,6 +150,95 @@ test('emitted cloud mutation functions recheck pending deletion after asynchrono
   assert.equal(state.library.length, 0, 'a pending intent must not prevent applying a cloud tombstone');
 });
 
+async function emittedRecoveryContext() {
+  const html = await (await render(durableEntry)).text();
+  const functions = ['stripSharedLink', 'preserveConflictCopy'].map(name => {
+    const line = html.split('\n').find(value => value.trimStart().startsWith('function ' + name + '('));
+    assert.ok(line, 'expected actual emitted recovery function: ' + name);
+    return line;
+  });
+  const context = vm.createContext({
+    state: { library: [] }, accountKey: 'fixture-owner',
+    window: { mancardoHasPendingDelete: () => false },
+    clone: value => JSON.parse(JSON.stringify(value)),
+    uid: () => 'fixture-recovered-id', conflictCount: 0, conflictEl: { title: '' },
+  });
+  vm.runInContext(functions.join('\n'), context);
+  return context;
+}
+
+test('emitted recovery copy retains every serialized note representation verbatim', async () => {
+  const context = await emittedRecoveryContext();
+  const values = [undefined, '', null, false, 0, 7, ['legacy', { text: 'value' }],
+    { text: 'legacy object', recoveryReason: 'user metadata' },
+    '  Café 🧭\nKeep outer spaces  ', 'A legacy note longer than the current forty-character editor limit must not be truncated.'];
+  for (const note of values) {
+    const original = { id: 'fixture-original', name: 'Synthetic route', segments: [[{ lat: 1, lon: 2 }]] };
+    if (note !== undefined) original.note = note;
+    const before = JSON.stringify(original);
+    const copy = context.preserveConflictCopy(original, 'Recovery snapshot before cloud delete');
+    assert.equal(Object.hasOwn(copy, 'note'), Object.hasOwn(original, 'note'), 'Do not manufacture an absent note');
+    assert.deepEqual(copy.note, original.note, 'Do not trim, truncate, coerce or replace serialized note content');
+    assert.equal(JSON.stringify(original), before, 'Never mutate the original object while making its copy');
+    assert.deepEqual(copy.segments, original.segments);
+    assert.equal(copy.id, 'fixture-recovered-id');
+    assert.equal(copy.name, original.name + ' (conflict copy)');
+    assert.equal(copy.draft, true);
+    assert.equal(context.state.library[0], copy);
+  }
+  assert.equal(context.conflictCount, values.length);
+});
+
+test('emitted recovery diagnostics are session-local and cannot overwrite user metadata keys', async () => {
+  const context = await emittedRecoveryContext();
+  const original = JSON.parse('{"id":"fixture-original","name":"Synthetic route","note":"User note","segments":[[{"lat":1,"lon":2}]],"recovery":{"reason":"user value"},"recoveryReason":"already used","recoveredFrom":{"id":"user-owned"},"conflictEl":{"title":"payload, not UI"},"__proto__":{"note":"own JSON key"},"constructor":{"note":"another own key"},"sharedId":"fixture-shared","sharedBaseVersion":4,"sharedBaseModifiedAt":1,"sharedBaseModifiedBy":"fixture-owner"}');
+  const before = JSON.stringify(original), reason = '<recovery> & diagnostic\n' + 'x'.repeat(60);
+  const copy = context.preserveConflictCopy(original, reason);
+  assert.equal(context.conflictEl.title, reason, 'Keep the complete diagnostic on the existing UI element');
+  assert.equal(JSON.stringify(original), before);
+  const preserved = JSON.parse(JSON.stringify(copy));
+  for (const key of ['id', 'name', 'draft', 'createdAt', 'updatedAt']) delete preserved[key];
+  const expected = JSON.parse(before);
+  for (const key of ['id', 'name', 'sharedId', 'sharedBaseVersion', 'sharedBaseModifiedAt', 'sharedBaseModifiedBy']) delete expected[key];
+  assert.deepEqual(preserved, expected, 'Only established copy identity/status/shared-link changes may affect payload fields');
+  assert.equal(Object.hasOwn(copy, '__proto__'), true);
+  assert.equal(Object.hasOwn(copy, 'constructor'), true);
+  const snapshot = JSON.stringify(copy);
+  context.conflictEl.title = '';
+  assert.equal(JSON.stringify(copy), snapshot, 'Resetting the transient UI reason must not alter persisted track content');
+  context.preserveConflictCopy(original);
+  assert.equal(context.conflictEl.title, 'Recovered sync conflict');
+});
+
+async function actualRecoveryTransform() {
+  const source = fs.readFileSync(path.join(root, durableEntry), 'utf8');
+  const { repairRequestCadence } = await import(pathToFileURL(path.join(root, 'worker-request-cadence.js')).href);
+  // Remove only module-loading/export syntax. All constants and the complete
+  // private HTML transformer execute unchanged with the real cadence helper.
+  const context = vm.createContext({ repairRequestCadence });
+  vm.runInContext(source.replace(/^import[^\n]*\n/gm, '').replace('export default {', 'const exportedWorker = {'), context);
+  const base = await (await render(productionEntry)).text();
+  return { transform: context.injectDurableDeletion, base };
+}
+
+test('actual recovery transformer accepts the complete baseline and matches delivered HTML', async () => {
+  const { transform, base } = await actualRecoveryTransform();
+  const transformed = transform(base);
+  assert.equal(transformed, await (await render(durableEntry)).text());
+  compileInlineScripts(transformed, 'complete recovery transformer');
+});
+
+for (const mutation of ['missing', 'duplicate']) {
+  test('actual recovery transformer fails closed for a ' + mutation + ' note-assignment anchor', async () => {
+    const { transform, base } = await actualRecoveryTransform();
+    const anchor = "c.note=String(reason||'Recovered sync conflict').slice(0,40);";
+    assert.equal(base.split(anchor).length, 2, 'The real upstream response must contain exactly one expected anchor');
+    const altered = base.replace(anchor, mutation === 'missing' ? '' : anchor + anchor);
+    assert.throws(() => transform(altered), /Conflict-note preservation anchor missing or ambiguous/,
+      'Never silently deliver the old lossy path when its source changes');
+  });
+}
+
 async function emittedRevisionHashes() {
   const html = await (await render(durableEntry)).text();
   const start = html.indexOf('function revisionHashes(snapshot){');

@@ -23,6 +23,7 @@ async function execute(options={}){
   if(options.deployedAccountRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-account-runtime-91af34b.txt'));
   if(options.previousRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-delete-runtime-3d7a43b.txt'));
   if(options.oldRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/deployed-delete-runtime-63dc68e.txt'));
+  if(options.currentCandidate)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(root,'worker-delete-durable-fix.js'));
   if(options.changedFile)files[options.changedFile]=Buffer.concat([files[options.changedFile],Buffer.from('\nchanged')]);
   if(options.missingFile)delete files[options.missingFile];
   const process={env:{CF_TOKEN:'fixture-token-not-a-credential',CF_ACCOUNT:'a'.repeat(32),DEV_DB:id,...options.env},exitCode:0};
@@ -109,4 +110,8 @@ test('missing pinned helper or other source stops before API access and config w
 
 test('currently deployed account-bound runtime cannot pass the new cadence guard',async()=>{
   const r=await execute({deployedAccountRuntime:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
+});
+
+test('proposed note-preservation runtime cannot pass the unchanged deployed fde guard',async()=>{
+  const r=await execute({currentCandidate:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
 });

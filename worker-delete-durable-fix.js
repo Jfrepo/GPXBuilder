@@ -313,10 +313,18 @@ function injectDurableDeletion(html){
   html=html.replace(putResolver,putResolver+'var conflictOwner=accountKey;');
   html=html.replace(/if\(conflict&&conflict.current&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash\)\{return putSyncMeta\(op.id,[^\n]*?return delOutbox\(op.id\);\}\);\}/,
     "if(conflict&&conflict.current&&(conflict.current.deleted===false||conflict.current.deleted===0)&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash)return acknowledgeVerifiedLivePut(op,{revision:conflict.current.revision,sha256:conflict.current.content_sha256,deleted:false,updated_at:conflict.current.updated_at},conflictOwner);");
-  html=html.replace(putConflict,"var cloud=x.data;if(accountKey!==conflictOwner||op.accountKey!==conflictOwner)throw new Error('Private account changed during upload reconciliation.');if(cloud.deleted)return applyCloudTombstone(cloud).then(function(){persistRemoteChanges();});if((cloud.deleted===false||cloud.deleted===0)&&cloud.sha256===op.localHash)return acknowledgeVerifiedLivePut(op,cloud,conflictOwner);if(local)preserveConflictCopy(local,'Recovered from cross-device conflict');");
+  // The authoritative GET may outlive an immutable local edit. Recover the
+  // latest library object after the await, never the stale captured reference.
+  html=html.replace(putConflict,"var cloud=x.data;if(accountKey!==conflictOwner||op.accountKey!==conflictOwner)throw new Error('Private account changed during upload reconciliation.');if(cloud.deleted)return applyCloudTombstone(cloud).then(function(){persistRemoteChanges();});if((cloud.deleted===false||cloud.deleted===0)&&cloud.sha256===op.localHash)return acknowledgeVerifiedLivePut(op,cloud,conflictOwner);local=localById(op.id);if(local)preserveConflictCopy(local,'Recovered from cross-device conflict');");
   html=html.replace(scan,scan+'if(window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,track.id))return;');
   html=html.replace(replace,replace+'if(track&&window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,id))return;');
   html=html.replace(preserve,preserve+'if(track&&window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,track.id))return null;');
+  // A recovery diagnostic is not user track content. Preserve the cloned note
+  // verbatim (including an absent/empty note) and keep the reason in the existing
+  // session-local sync panel instead of overwriting any track-payload property.
+  const recoveryNote="c.note=String(reason||'Recovered sync conflict').slice(0,40);";
+  if(html.split(recoveryNote).length!==2)throw new Error('Conflict-note preservation anchor missing or ambiguous; refusing a lossy recovery client.');
+  html=html.replace(recoveryNote,"conflictEl.title=String(reason||'Recovered sync conflict');");
   html=repairRequestCadence(html);
   const insertion=html.indexOf('// ---------- boot ----------');
   return html.slice(0,insertion)+DURABLE_DELETE_BRIDGE+'\n'+html.slice(insertion);
