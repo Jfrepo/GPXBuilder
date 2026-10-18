@@ -1,70 +1,119 @@
-# Guarded manual Development preparation: note preservation
+# Guarded manual Development preparation: two-record ownership page
 
-The user approved this public preparation on 2026-10-18 at 08:44:16 UTC.
-**This update does not deploy automatically.** PR #80 remains draft and
-unmerged. Production and existing main/dev branches are unchanged.
-Development still runs `fde3864c5fb621b5c8c9a3ef28ad596b6202a3f6`, Worker
-version `a9e7dba3-43ea-43a1-9bda-e8c601778ea3`, until a new user-started run
-successfully deploys the reviewed correction.
+This four-file public preparation was approved on 2026-10-18 at 11:09:29 UTC.
+**It does not deploy, configure private identifiers, create records or run live
+probes.** PR #80 stays draft and unmerged. Main, ordinary Development branches,
+Production configuration and authentication permissions are unchanged.
 
-## Fixed target and checks
+Development currently runs `bffa68b7624a504de03d335361d1467d80964ce5`, version
+`5829bdeb-0b77-4ddc-bb7c-d3383424f30b`. The ownership page is not deployed by
+publishing this preparation. Do not start a workflow until the separate
+configuration, Access-coverage and deployment approvals below are complete.
 
-- Runtime: immutable tested commit `bffa68b7624a504de03d335361d1467d80964ce5`.
-  [Exact-head CI 39111794504](https://github.com/Jfrepo/GPXBuilder/actions/runs/39111794504)
-  passed 159 source checks and 42 Chromium cases, zero failures, cancellations
-  or skips. The tested merge tree equals this runtime's tree.
-  Application bytes are identical to the previously reviewed note correction
-  at `b292df32ec5e5306c6312a31390729f990a3e5df`. This successor changes only
-  the test fixture to wait for a committed outbox transaction rather than a
-  fixed number of event-loop turns. A held real digest regression retains the
-  original content, owner, revision and server assertions.
-- Development Worker: `mancardo-dev-test` only.
-- Database: existing `mancardo-private-library-dev`, with its secret UUID
-  checked against the read-only API response and the existing Worker's exact
-  D1 binding. The Production UUID is rejected case-insensitively.
-- Wrapper SHA256: `f3332f09cb228240273c7551f022dd355228b33c8dfec52d66abc2846345381d`.
-- Unchanged helper SHA256: `66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e`.
-- Unchanged Dev config SHA256: `e5237a94e142e693b8a3697b8259787adf35b7faba877a950ff21321aef78bea`.
-- Both runtime files and configuration must match before API access or local
-  config injection. Missing/changed helper or wrapper fails closed.
-- The pinned checkout reruns all **159** checks, including the historical guard
-  suite stored at bffa68b7. That suite tests the previous fde3864c pin, not the
-  newly selected workflow. The selected workflow's **13** guard tests run
-  separately in preparation PR CI, which also runs all 159 source checks and
-  42 Chromium cases. The actual selected inline identity guard executes during
-  the later user-dispatched deployment.
-- Event, exact feature-branch, environment, credentials, permissions, targets,
-  read-only identity checks and pinned Wrangler deploy command are unchanged.
-  No live D1 SQL queries, migrations, resets, reseeding or track writes occur
-  in this workflow. Source tests use disposable in-memory SQLite only.
+## Immutable candidate and guard
 
-## User action after independent preparation CI passes
+- Fixed checkout: `fe10024e79143d47fbaf86a3864f69db60fa7200`.
+  [Exact-head CI 39121604464](https://github.com/Jfrepo/GPXBuilder/actions/runs/39121604464)
+  independently passed 213 source checks and 62 Chromium nodes, with zero
+  failures, cancellations or skips. This includes 42 existing browser nodes
+  and 19 new ownership scenarios plus their parent. The actual merge checkout
+  has exactly the candidate's tree. These are isolated fixtures, not live tests.
+- Only Worker `mancardo-dev-test` and its existing database
+  `mancardo-private-library-dev` are eligible. The real read-only API guard
+  verifies the exact database UUID/name and existing Worker's single D1
+  binding. Production's UUID is rejected case-insensitively.
+- Attested entrypoint: `worker-owner-qualification.js`, SHA256
+  `8c1f2f39458a71cc155b96c5a2ace2abf0b638e2c0b2ece5613d43410d89ebd5`.
+- Unchanged application wrapper SHA256:
+  `f3332f09cb228240273c7551f022dd355228b33c8dfec52d66abc2846345381d`.
+- Unchanged cadence helper SHA256:
+  `66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e`.
+- Unchanged committed Dev config SHA256:
+  `e5237a94e142e693b8a3697b8259787adf35b7faba877a950ff21321aef78bea`.
+- Asset-exclusion file SHA256: `b5abc5b4c9dffc6819fd542711396a4734fe52ce295d75b032cef3edf4eacce6`. This unchanged file
+  excludes the configured Wrangler file and private local environment files
+  from static asset upload.
+- Missing/changed source or configuration, missing/malformed/duplicate owner
+  bindings, and invalid Development identity fail closed before configuration
+  is written. Source/private-binding failures precede any Cloudflare API call.
+- The pinned checkout reruns its full **213** source checks. Its historical
+  guard tests still exercise the bffa68b7 workflow stored in that commit, not
+  this new selected workflow. The selected workflow's **18** guard checks run
+  separately in preparation PR CI, whose expected totals are **218** source
+  checks and **62** Chromium nodes. Preparation results are pending until the
+  exact published head completes and receives independent verification.
+
+The original deploy job, event/branch restrictions, Development environment,
+permissions and existing credentials are unchanged. The candidate job still
+requires both a manual event and the exact feature branch. No live D1 queries,
+migrations, resets, reseeding or track writes occur in the workflow; source
+tests use disposable in-memory SQLite. The real deployment guard runs only
+in a later user-started deployment.
+
+## Private configuration: separate prerequisite, not performed here
+
+The future manual job requires two distinct, verified lower-case 24-hex
+account identifiers from Development environment secrets named
+`MANCARDO_QUALIFICATION_ACCOUNT_A` and `MANCARDO_QUALIFICATION_ACCOUNT_B`.
+These are consistency identifiers, not passwords, tokens or new credentials.
+No real values are in these four files. Do not infer them from browser role
+selection or a current session, and do not publish them in source or receipts.
+
+Separately approve and verify each value against its intended already-signed-in
+identity. Configuration creation is not authorized by this preparation. The
+workflow does not create or update GitHub secrets or authentication settings.
+Existing Cloudflare Access policy coverage of the exact page route must also
+be verified without broadening a policy. An expired session or new login
+prompt stops the process rather than authorizing sign-in.
+
+After all integrity and identity checks succeed, the job changes only its
+runner-local copy of `wrangler.dev.toml`: inject the verified Development D1
+UUID, select `worker-owner-qualification.js`, and add the exact run identifier
+`owner-isolation-20261018-1032` with the two owner identifiers. All other config
+bytes must remain unchanged. A future deployment transmits those identifiers
+to the existing Cloudflare account as Worker variable bindings, visible to
+its authorized administrators. It does not create new security credentials.
+The committed Wrangler file remains unchanged.
+
+The pinned Wrangler command and target are unchanged. An inline subprocess
+wrapper captures bounded stdout/stderr and redacts supplied private values
+before printing either stream; it does not depend solely on GitHub's secret
+masking. Values are not command-line arguments. No configured file or raw
+subprocess output is uploaded as an artifact. Subprocess exit status is
+preserved; uncertain completion requires inspecting the actual Worker version
+before any retry. No automatic retry is added.
+
+## Later manual deployment, only after separate approval
+
+Once exact-head preparation CI is independently verified, the two private
+bindings and existing Access coverage are verified, and deployment is approved:
 
 1. Open [the Development workflow](https://github.com/Jfrepo/GPXBuilder/actions/workflows/cloudflare-dev.yml).
-2. Choose **Run workflow**, then **Use workflow from**
-   `chatgpt/mancardo-delete-qualification`. Start a **NEW** run, not Re-run jobs;
-   a rerun keeps the old workflow/pin.
-3. In the new run, original job `deploy` must be skipped. Only
-   `deploy-reviewed-candidate` may deploy. Checkout must be exactly
-   `bffa68b7624a504de03d335361d1467d80964ce5`.
-4. Wait for successful integrity/identity gates and the exact Development
-   version receipt. Do not treat preparation CI alone as a deployment.
-5. Save unsynced work, then refresh or close all older Development clients
-   before a new live test. Do not clear storage, alter identities or touch
-   Production. A new login is not part of these instructions.
+2. Choose **Run workflow**, then select
+   `chatgpt/mancardo-delete-qualification`. Start a **NEW** run, never Re-run
+   jobs, which would retain an earlier workflow and pin.
+3. Original job `deploy` must be skipped. Only `deploy-reviewed-candidate`
+   may run, with checkout exactly `fe10024e79143d47fbaf86a3864f69db60fa7200`.
+4. Verify all 213 pinned checks, five integrity hashes, private-binding checks,
+   real Development identity checks and the exact deployed version receipt.
+   Do not confuse CI or a guard result with completed deployment.
+5. Preserve unsynced work and safely refresh only relevant Development clients.
+   Do not clear storage, switch populated workspaces or alter Production.
 
-## Acceptance remains separate
+## Live operations remain a separate decision
 
-The correction retains notes verbatim in conflict copies and leaves recovery
-reasons in the existing session-local conflict indicator. It has passed
-isolated fixtures, not live unsynced-note acceptance. After a separately
-approved deployment and safe refresh, use one new disposable synthetic track
-for a bounded offline-note test. Any irreversible online deletion needs exact
-named action-time approval. Preserve the original tombstone and the recovered
-copy; no cleanup or existing-track mutation is implied.
+The page performs no automatic requests or writes. It targets only the two
+fixed synthetic IDs described in the [reviewed harness protocol](owner-isolation-harness-proposal-20261018.md),
+without loading the editor, listing tracks or accessing app storage.
+Both owners must first provide positive controls for their own new live
+revision-1 fixture. Each later foreign PUT and DELETE requires the specified
+approval, exact target and expected rejection; a protection defect could
+alter or permanently delete the disposable target. Do not treat an absent
+fixture or generic authentication failure as a successful ownership test.
+No cleanup is implied.
 
-Live foreign-account writes, same-workspace account switching, broader device
-coverage, backup/restore proof and pending/conflict UX remain separate release
-gates. The unrelated Cloudflare Workers Builds failure has no exposed cause;
-do not equate it with the no-deploy Actions results or deployment identity
-checks.
+Separate profiles do not qualify same-workspace account switching. That live
+gate, broader device coverage and general release approval remain open. The
+separate Cloudflare Workers Builds failure on the candidate has no exposed
+cause; it is distinct from successful no-deploy Actions checks and the later
+manual deployment guard.

@@ -58,39 +58,46 @@ jobs:
       - name: Check out the exact tested runtime, not the moving branch tip
         uses: actions/checkout@v4
         with:
-          ref: 'bffa68b7624a504de03d335361d1467d80964ce5'
+          ref: 'fe10024e79143d47fbaf86a3864f69db60fa7200'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Verify immutable candidate and rerun its source checks
         run: |
-          test "$(git rev-parse HEAD)" = 'bffa68b7624a504de03d335361d1467d80964ce5'
-          node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs
+          test "$(git rev-parse HEAD)" = 'fe10024e79143d47fbaf86a3864f69db60fa7200'
+          node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs tests/owner-qualification-server.test.cjs tests/owner-qualification-client.test.cjs
           git diff --exit-code
       - name: Verify existing Development database identity and binding (read only)
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DEV_DB: ${{ secrets.CLOUDFLARE_DEV_D1_DATABASE_ID }}
+          QUAL_OWNER_A: ${{ secrets.MANCARDO_QUALIFICATION_ACCOUNT_A }}
+          QUAL_OWNER_B: ${{ secrets.MANCARDO_QUALIFICATION_ACCOUNT_B }}
         run: |
           node <<'NODE'
           // BEGIN PINNED DEVELOPMENT GUARD
           (async function verifyDevelopmentTarget(){
             const fs=require('node:fs'),crypto=require('node:crypto');
             const token=process.env.CF_TOKEN,account=process.env.CF_ACCOUNT,id=process.env.DEV_DB;
+            const ownerA=process.env.QUAL_OWNER_A,ownerB=process.env.QUAL_OWNER_B;
+            if(!/^[a-f0-9]{24}$/.test(ownerA||'')||!/^[a-f0-9]{24}$/.test(ownerB||'')||ownerA===ownerB)throw new Error('Private qualification identity bindings are missing or invalid.');
             const production='6ada726b-aae6-441b-a698-69dc0789c7b7';
             if(!token||!/^[a-f0-9]{32}$/i.test(account||''))throw new Error('Existing Development credentials are missing or invalid.');
             if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id||'')||id.toLowerCase()===production)throw new Error('Refusing an invalid or Production D1 database.');
             const expected={
+              '.assetsignore':'b5abc5b4c9dffc6819fd542711396a4734fe52ce295d75b032cef3edf4eacce6',
               'wrangler.dev.toml':'e5237a94e142e693b8a3697b8259787adf35b7faba877a950ff21321aef78bea',
               'worker-delete-durable-fix.js':'f3332f09cb228240273c7551f022dd355228b33c8dfec52d66abc2846345381d',
-              'worker-request-cadence.js':'66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e'
+              'worker-request-cadence.js':'66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e',
+              'worker-owner-qualification.js':'8c1f2f39458a71cc155b96c5a2ace2abf0b638e2c0b2ece5613d43410d89ebd5'
             };
             for(const [file,hash] of Object.entries(expected)){
               if(crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')!==hash)throw new Error('The pinned Development source/configuration changed.');
             }
             const config=fs.readFileSync('wrangler.dev.toml','utf8');
+            if((config.match(/^main = "worker-delete-durable-fix\.js"$/gm)||[]).length!==1||(config.match(/^\[vars\]$/gm)||[]).length!==1||config.includes('MANCARDO_QUALIFICATION_'))throw new Error('Unexpected qualification configuration template.');
             async function readApi(path){
               const response=await fetch('https://api.cloudflare.com/client/v4/accounts/'+account+path,{
                 method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),
@@ -109,13 +116,49 @@ jobs:
             const binding=bindings[0],boundId=String(binding.database_id||binding.id||'').toLowerCase();
             if(boundId!==id.toLowerCase()||(binding.database_id&&binding.id&&String(binding.database_id).toLowerCase()!==String(binding.id).toLowerCase()))throw new Error('Existing Development Worker is bound to a different database.');
             if((config.match(/DEV_DATABASE_ID_REQUIRED/g)||[]).length!==1)throw new Error('Expected exactly one Development binding placeholder.');
-            fs.writeFileSync('wrangler.dev.toml',config.replace('DEV_DATABASE_ID_REQUIRED',id));
+            const configured=config.replace('DEV_DATABASE_ID_REQUIRED',id)
+              .replace('main = "worker-delete-durable-fix.js"','main = "worker-owner-qualification.js"')
+              .replace('[vars]','[vars]\nMANCARDO_QUALIFICATION_RUN = "owner-isolation-20261018-1032"\nMANCARDO_QUALIFICATION_ACCOUNT_A = '+JSON.stringify(ownerA)+'\nMANCARDO_QUALIFICATION_ACCOUNT_B = '+JSON.stringify(ownerB));
+            fs.writeFileSync('wrangler.dev.toml',configured);
             console.log('Verified existing mancardo-dev-test and mancardo-private-library-dev. No database query, migration, or data change was performed.');
           })().catch(()=>{console.error('::error::Pinned Development source or read-only identity verification failed. No deployment was attempted.');process.exitCode=1;});
           // END PINNED DEVELOPMENT GUARD
           NODE
-      - name: Deploy only the pinned Development Worker (no migrations)
-        run: npx --yes wrangler@4.151.1 deploy --config wrangler.dev.toml --name mancardo-dev-test
+      - name: Deploy only the pinned Development Worker (no migrations; private output redaction)
+        run: |
+          node <<'NODE'
+          // BEGIN PRIVATE DEPLOY OUTPUT GUARD
+          (function deployWithPrivateOutput(){
+            const {spawnSync}=require('node:child_process');
+            const ownerA=process.env.QUAL_OWNER_A,ownerB=process.env.QUAL_OWNER_B;
+            if(!/^[a-f0-9]{24}$/.test(ownerA||'')||!/^[a-f0-9]{24}$/.test(ownerB||'')||ownerA===ownerB){
+              console.error('::error::Private qualification identity bindings are missing or invalid. No deployment was attempted.');process.exitCode=1;return;
+            }
+            const privateValues=[ownerA,ownerB,process.env.CLOUDFLARE_API_TOKEN,process.env.CLOUDFLARE_ACCOUNT_ID,process.env.DEV_DB].filter(Boolean).sort((a,b)=>b.length-a.length);
+            function safeOutput(value){let text=String(value||'');for(const privateValue of privateValues)text=text.split(privateValue).join('[REDACTED]');return text;}
+            let result;
+            try{
+              // Same pinned command/target, without a shell or private arguments.
+              result=spawnSync('npx',['--yes','wrangler@4.151.1','deploy','--config','wrangler.dev.toml','--name','mancardo-dev-test'],{
+                env:process.env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:8*1024*1024
+              });
+            }catch{
+              console.error('::error::Development deployment completion is uncertain. Inspect the current version before any retry.');process.exitCode=1;return;
+            }
+            if(result.error||result.signal||!Number.isInteger(result.status)){
+              // Discard possibly truncated streams: an incomplete private value
+              // cannot be reliably redacted after buffer/transport failure.
+              console.error('::error::Development deployment completion is uncertain. Inspect the current version before any retry.');process.exitCode=1;return;
+            }
+            if(result.stdout)process.stdout.write(safeOutput(result.stdout));
+            if(result.stderr)process.stderr.write(safeOutput(result.stderr));
+            process.exitCode=result.status;
+          })();
+          // END PRIVATE DEPLOY OUTPUT GUARD
+          NODE
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEV_DB: ${{ secrets.CLOUDFLARE_DEV_D1_DATABASE_ID }}
+          QUAL_OWNER_A: ${{ secrets.MANCARDO_QUALIFICATION_ACCOUNT_A }}
+          QUAL_OWNER_B: ${{ secrets.MANCARDO_QUALIFICATION_ACCOUNT_B }}
