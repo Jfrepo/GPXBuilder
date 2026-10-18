@@ -25,7 +25,7 @@ test.before(async()=>{
   deleteClient=emittedIife('// ---------- Durable, revision-pinned explicit My Library deletion ----------');
 });
 function element(){return {dataset:{},classList:{add(){},remove(){},contains(){return false;}},appendChild(){},insertBefore(){},querySelector(){return null;},addEventListener(){}};}
-function fakeIndexedDB(stores){return {open(){const req={};setImmediate(()=>{req.result={close(){},transaction(names,mode){const tx={pending:0,closed:false};function complete(){if(tx.pending||tx.closed)return;tx.closed=true;tx.oncomplete?.();}tx.objectStore=name=>{const store=stores[name];if(!store)throw new Error('Unknown object store '+name);const request=operation=>{const result={};tx.pending++;setImmediate(()=>{try{result.result=clone(operation());result.onsuccess?.();}catch(error){result.error=error;result.onerror?.();tx.error=error;tx.onerror?.();}finally{tx.pending--;setImmediate(complete);}});return result;};return {get:key=>request(()=>store.get(key)),getAll:()=>request(()=>[...store.values()]),put:value=>request(()=>{store.set(value.key,clone(value));return value.key;}),delete:key=>request(()=>store.delete(key))};};setImmediate(complete);return tx;}};req.onsuccess?.();});return req;}};}
+function fakeIndexedDB(stores,onCommit=()=>{}){return {open(){const req={};setImmediate(()=>{req.result={close(){},transaction(names,mode){const tx={pending:0,closed:false};function complete(){if(tx.pending||tx.closed)return;tx.closed=true;tx.oncomplete?.();if(!tx.error)onCommit(names,mode);}tx.objectStore=name=>{const store=stores[name];if(!store)throw new Error('Unknown object store '+name);const request=operation=>{const result={};tx.pending++;setImmediate(()=>{try{result.result=clone(operation());result.onsuccess?.();}catch(error){result.error=error;result.onerror?.();tx.error=error;tx.onerror?.();}finally{tx.pending--;setImmediate(complete);}});return result;};return {get:key=>request(()=>store.get(key)),getAll:()=>request(()=>[...store.values()]),put:value=>request(()=>{store.set(value.key,clone(value));return value.key;}),delete:key=>request(()=>store.delete(key))};};setImmediate(complete);return tx;}};req.onsuccess?.();});return req;}};}
 
 async function fixture(){
   const initial=track();
@@ -34,10 +34,11 @@ async function fixture(){
     const baseline=clone(initial),local=clone(options.local||baseline);
     const stores={meta:new Map([['boundAccountKey',{key:'boundAccountKey',value:'A'}]]),sync:new Map([['A|'+initial.id,{key:'A|'+initial.id,id:initial.id,accountKey:'A',revision:1,sha256:hash(baseline),deleted:false}]]),outbox:new Map()};
     const storage=new Map([[LIB,JSON.stringify([local])],[PENDING,'[]'],['mancardo_private_device_id_v1',device]]);
-    const elements=new Map(),handlers={},timers=[],warnings=[];let nextHashGate=null,id=0,healthAccount='A';
+    const elements=new Map(),handlers={},timers=[],warnings=[],outboxCommitWaiters=[];let nextHashGate=null,id=0,healthAccount='A';
+    function committed(names,mode){if(mode!=='readwrite'||![].concat(names).includes('outbox'))return;for(const waiter of [...outboxCommitWaiters]){const value=stores.outbox.get(waiter.key);if(value){outboxCommitWaiters.splice(outboxCommitWaiters.indexOf(waiter),1);waiter.resolve(clone(value));}}}
     const document={visibilityState:'visible',body:element(),createElement:element,querySelector:()=>element(),getElementById(name){if(!elements.has(name))elements.set(name,element());return elements.get(name);},addEventListener(){}};
     const context={state:{library:[local],currentId:null,current:null},els:{},confirmTimers:{},document,navigator:{onLine:true},Event,TextEncoder,Uint8Array,console:{warn(...args){warnings.push(args.map(String).join(' '));}},
-      localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,String(value))},indexedDB:fakeIndexedDB(stores),
+      localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,String(value))},indexedDB:fakeIndexedDB(stores,committed),
       crypto:{subtle:{async digest(algorithm,data){const gate=nextHashGate;nextHashGate=null;const result=await webcrypto.subtle.digest(algorithm,data);if(gate){gate.entered.resolve();await gate.release.promise;}return result;}}},
       uid:()=>device+'-copy-'+(++id),deepClone:clone,render(){},renderLibrary(){},persistLibrary(){storage.set(LIB,JSON.stringify(context.state.library));},
       setTimeout(fn,delay){timers.push({fn,delay});return timers.length;},clearTimeout(){},setInterval(){},
@@ -60,6 +61,7 @@ async function fixture(){
     context.window=context;vm.createContext(context);vm.runInContext(cloudClient,context);vm.runInContext(deleteClient,context);for(let i=0;i<5;i++)await tick();
     return {context,stores,storage,timers,warnings,device,
       recoveryMessage:()=>elements.get('mancardoPrivateSyncConflicts').title,
+      waitForOutboxCommit(key){const done=defer();outboxCommitWaiters.push({key,resolve:done.resolve});return done.promise;},
       setHealthAccount(account){healthAccount=account;},
       sync:()=>elements.get('mancardoPrivateSyncNow').onclick(),remove:()=>context.mancardoAuthorizedDelete([initial.id]),
       tracks:()=>clone(context.state.library),
@@ -89,9 +91,11 @@ test('complete emitted cloud client preserves a substantive unsynced edit agains
 async function queueOfflineNote(f,b,note){
   b.context.navigator.onLine=false;b.edit({note});
   const scan=[...b.timers].reverse().find(t=>t.delay===1200);
-  assert.ok(scan,'Actual note persistence must schedule the cloud queue scan');scan.fn();
-  for(let i=0;i<100&&!b.stores.outbox.get('A|'+f.initial.id);i++)await tick();
-  const op=clone(b.stores.outbox.get('A|'+f.initial.id));
+  assert.ok(scan,'Actual note persistence must schedule the cloud queue scan');
+  // Subscribe before scheduling; WebCrypto completion is not bounded by a
+  // fixed number of event-loop turns. Observe the actual durable transaction.
+  const committed=b.waitForOutboxCommit('A|'+f.initial.id);scan.fn();
+  const op=await committed;
   assert.ok(op,'Actual emitted scan must persist the offline edit');
   assert.equal(op.track.note,note);assert.equal(op.baseRevision,1);assert.equal(op.accountKey,'A');
   assert.equal(op.localHash,hash(op.track));assert.notEqual(op.localHash,hash(f.initial));
@@ -102,7 +106,13 @@ async function queueOfflineNote(f,b,note){
 for(const remote of ['tombstone','newer live revision'])test('queued unsynced note survives '+remote+' in local and uploaded recovery copies',{timeout:10000},async()=>{
   const f=await fixture(),a=await f.client('device-a'),b=await f.client('device-b');
   assert.equal(await a.sync(),true);assert.equal(await b.sync(),true);
-  const note='Keep this unsynced private note';await queueOfflineNote(f,b,note);
+  const note='Keep this unsynced private note';
+  if(remote==='tombstone'){
+    const gate=b.pauseNextHash();let settled=false;const queued=queueOfflineNote(f,b,note).finally(()=>{settled=true;});
+    await gate.entered.promise;for(let i=0;i<150;i++)await tick();
+    assert.equal(settled,false,'Queue readiness must wait for the real transaction, not expire after 100 turns');
+    assert.equal(b.stores.outbox.size,0);gate.release.resolve();await queued;
+  }else await queueOfflineNote(f,b,note);
   if(remote==='tombstone')assert.equal(await a.remove(),true);
   else{a.edit({name:'Newer cloud rename'});assert.equal(await a.sync(),true);}
   const authoritative=clone(f.model.rows.get(f.initial.id));assert.equal(authoritative.revision,2);
