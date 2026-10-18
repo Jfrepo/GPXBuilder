@@ -29,22 +29,35 @@ function track(id, name) {
 
 // This adapter executes the unmodified SQL and bound arguments. It does not
 // parse SQL, filter rows by owner, implement revisions, or synthesize results.
-function d1Binding(sqlite) {
+// D1 meta.changes is trigger-inclusive. Measure SQLite total_changes() around
+// each statement, rather than using StatementSync.run().changes (direct rows).
+function d1Binding(sqlite, statements) {
   return {
     prepare(sql) {
       function statement(values) {
+        function execute(method) {
+          const before = Number(sqlite.prepare('SELECT total_changes() AS count').get().count);
+          const result = sqlite.prepare(sql)[method](...values);
+          const totalChanges = Number(sqlite.prepare('SELECT total_changes() AS count').get().count) - before;
+          const directChanges = totalChanges ? Number(sqlite.prepare('SELECT changes() AS count').get().count) : 0;
+          statements.push({ method, sql, values: jsonClone(values), directChanges, totalChanges,
+            results: method === 'run' ? [] : jsonClone(result === undefined ? [] : method === 'all' ? result : [result]) });
+          return { result, meta: { changes: totalChanges,
+            last_row_id: Number(sqlite.prepare('SELECT last_insert_rowid() AS id').get().id) } };
+        }
         return {
           bind(...args) { return statement(args); },
           async first(column) {
-            const row = sqlite.prepare(sql).get(...values);
+            const row = execute('get').result;
             return row ? (column === undefined ? jsonClone(row) : row[column]) : null;
           },
           async all() {
-            return { success: true, results: jsonClone(sqlite.prepare(sql).all(...values)) };
+            const { result, meta } = execute('all');
+            return { success: true, results: jsonClone(result), meta };
           },
           async run() {
-            const result = sqlite.prepare(sql).run(...values);
-            return { success: true, meta: { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid) } };
+            const { meta } = execute('run');
+            return { success: true, results: [], meta };
           },
         };
       }
@@ -77,8 +90,9 @@ async function fixture(t) {
       'All network requests must remain inside the synthetic JWKS fixture');
   });
   const worker = (await import(pathToFileURL(process.env.MANCARDO_DELETE_TEST_ENTRY || path.join(root, 'worker-delete-durable-fix.js')).href)).default;
+  const statements = [];
   const env = {
-    PRIVATE_LIBRARY_DB: d1Binding(sqlite),
+    PRIVATE_LIBRARY_DB: d1Binding(sqlite, statements),
     CF_ACCESS_TEAM_DOMAIN: issuer,
     CF_ACCESS_AUD: audience,
     ASSETS: { async fetch() { throw new Error('API ownership tests must not reach ASSETS'); } },
@@ -119,7 +133,7 @@ async function fixture(t) {
   }
   assert.notEqual(accountKeys.a, accountKeys.b);
   return {
-    env, request, token, tokens, accountKeys,
+    env, request, token, tokens, accountKeys, statements,
     put(owner, value, revision = 0, extras = {}) {
       return request(owner, '/tracks/' + encodeURIComponent(value.id), {
         method: 'PUT', headers: { 'x-mancardo-private-account': accountKeys[owner] },
