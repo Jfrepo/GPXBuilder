@@ -61,6 +61,7 @@ async function fixture(){
     context.window=context;vm.createContext(context);vm.runInContext(cloudClient,context);vm.runInContext(deleteClient,context);for(let i=0;i<5;i++)await tick();
     return {context,stores,storage,timers,warnings,device,
       recoveryMessage:()=>elements.get('mancardoPrivateSyncConflicts').title,
+      message:()=>elements.get('mancardoPrivateSyncMessage').textContent,
       waitForOutboxCommit(key){const done=defer();outboxCommitWaiters.push({key,resolve:done.resolve});return done.promise;},
       setHealthAccount(account){healthAccount=account;},
       sync:()=>elements.get('mancardoPrivateSyncNow').onclick(),remove:()=>context.mancardoAuthorizedDelete([initial.id]),
@@ -244,4 +245,65 @@ test('newer local edit during lost-ACK live GET is uploaded on the original ID w
   assert.equal(live[0].track_id,f.initial.id);assert.equal(live[0].revision,2);assert.equal(live[0].track.name,'New edit while verifying lost initial ACK');
   assert.equal(b.tracks().length,1);assert.equal(b.tracks()[0].name,'New edit while verifying lost initial ACK');
   assert.deepEqual(f.model.requests.filter(r=>r.method==='PUT').map(r=>[r.id,r.body.base_revision]),[[f.initial.id,0],[f.initial.id,1]]);
+});
+
+for(const immutable of [false,true])test('a late '+(immutable?'replacement':'in-place')+' note survives an ordinary live pull hash await',{timeout:10000},async()=>{
+  const f=await fixture(),a=await f.client('device-a'),b=await f.client('device-b');
+  await a.sync();await b.sync();a.edit({name:'New authoritative cloud name'});await a.sync();
+  const authoritative=clone(f.model.rows.get(f.initial.id));assert.equal(authoritative.revision,2);
+  let gate;const entered=defer();
+  f.model.onPull=async device=>{if(device==='device-b'){f.model.onPull=null;gate=b.pauseNextHash();entered.resolve();}};
+  const syncing=b.sync();await entered.promise;await gate.entered.promise;
+  const note='Latest note during ordinary live pull';
+  if(immutable){b.context.state.library=b.context.state.library.map(t=>t.id===f.initial.id?{...clone(t),note}:t);b.context.persistLibrary();}
+  else b.edit({note});
+  gate.release.resolve();await syncing;
+  const copies=f.live().filter(r=>r.track_id!==f.initial.id);assert.equal(copies.length,1);
+  assert.equal(copies[0].track.note,note);assert.equal(b.tracks().find(t=>t.id===copies[0].track_id).note,note);
+  assert.deepEqual(copies[0].track.segments,f.initial.segments);assert.equal(copies[0].track.name,f.initial.name+' (conflict copy)');
+  assert.deepEqual(f.model.rows.get(f.initial.id),authoritative,'Newer original cloud row must not be overwritten');
+  assert.deepEqual(f.model.requests.filter(r=>r.device==='device-b'&&r.method==='PUT').map(r=>[r.id,r.body.base_revision]),[[copies[0].track_id,0]],'Only the preserved fresh-ID copy is uploaded');
+  await b.rehydrateLibrary();await b.sync();assert.equal(f.live().filter(r=>r.track_id!==f.initial.id).length,1);
+  assert.equal(b.tracks().find(t=>t.id===copies[0].track_id).note,note);
+});
+
+test('ordinary live pull defers rather than clearing an editor-only late note',{timeout:10000},async()=>{
+  const f=await fixture(),a=await f.client('device-a'),b=await f.client('device-b');
+  await a.sync();await b.sync();a.edit({name:'New authoritative cloud name'});await a.sync();
+  const authoritative=clone(f.model.rows.get(f.initial.id));
+  b.context.state.currentId=f.initial.id;b.context.state.current=clone(f.initial);
+  let gate;const entered=defer();
+  f.model.onPull=async device=>{if(device==='device-b'){f.model.onPull=null;gate=b.pauseNextHash();entered.resolve();}};
+  const syncing=b.sync();await entered.promise;await gate.entered.promise;
+  b.context.state.current.note='Unsaved editor-only note';
+  gate.release.resolve();assert.equal(await syncing,false,'A deferred editor is not a completed sync');
+  assert.match(b.message(),/preserved but has not yet been reconciled/);
+  assert.equal(b.context.state.current.note,'Unsaved editor-only note');
+  assert.deepEqual(b.tracks(),[f.initial],'Library must not be replaced behind an unsaved editor clone');
+  assert.deepEqual(f.model.rows.get(f.initial.id),authoritative);assert.equal(f.live().length,1);
+  assert.equal(f.model.requests.filter(r=>r.device==='device-b'&&r.method==='PUT').length,0);
+  assert.equal(b.stores.sync.get('A|'+f.initial.id).revision,1,'Deferred cloud revision is not falsely acknowledged');
+});
+
+
+for(const when of ['before','during'])test('live PUT-conflict GET preserves an editor-only note arriving '+when+' the await',{timeout:10000},async()=>{
+  const f=await fixture(),a=await f.client('device-a'),b=await f.client('device-b');await a.sync();await b.sync();
+  a.edit({name:'Authoritative newer name'});await a.sync();const authoritative=clone(f.model.rows.get(f.initial.id));
+  b.edit({note:'Persisted library note'});
+  const entered=defer(),release=defer();f.model.onGet=async(device,id)=>{if(device==='device-b'&&id===f.initial.id){f.model.onGet=null;entered.resolve();await release.promise;}};
+  const note='Newest unsaved editor note';
+  function editEditor(){b.context.state.currentId=f.initial.id;b.context.state.current={...clone(b.tracks()[0]),note};}
+  if(when==='before')editEditor();const syncing=b.sync();await entered.promise;if(when==='during')editEditor();
+  release.resolve();assert.equal(await syncing,false,'Unreconciled editor must not claim completed sync');
+  assert.equal(b.context.state.current.note,note);assert.equal(b.tracks()[0].note,'Persisted library note');
+  assert.deepEqual(f.model.rows.get(f.initial.id),authoritative);assert.equal(f.live().length,1);
+  const pending=b.stores.outbox.get('A|'+f.initial.id);assert.equal(pending.accountKey,'A');assert.equal(pending.baseRevision,1);assert.equal(pending.track.note,'Persisted library note');
+  assert.equal(b.stores.sync.get('A|'+f.initial.id).revision,1);
+  assert.deepEqual(f.model.requests.filter(r=>r.device==='device-b'&&r.method==='PUT').map(r=>[r.id,r.body.base_revision]),[[f.initial.id,1],[f.initial.id,1]],'Only two rejected old-base attempts occur in the bounded full cycle');
+  // Model explicit editor save/reconciliation, not an automatic discard.
+  b.edit({note});b.context.state.current=clone(b.tracks()[0]);assert.equal(await b.sync(),true);
+  const copy=f.live().find(r=>r.track_id!==f.initial.id);assert.ok(copy);assert.equal(copy.track.note,note);assert.deepEqual(copy.track.segments,f.initial.segments);
+  assert.deepEqual(f.model.rows.get(f.initial.id),authoritative);assert.equal(b.stores.outbox.size,0);
+  assert.deepEqual(f.model.requests.filter(r=>r.device==='device-b'&&r.method==='PUT').map(r=>[r.id,r.body.base_revision]),[[f.initial.id,1],[f.initial.id,1],[f.initial.id,1],[copy.track_id,0]]);
+  await b.rehydrateLibrary();await b.sync();assert.equal(f.live().length,2);assert.equal(b.tracks().find(t=>t.id===copy.track_id).note,note);
 });

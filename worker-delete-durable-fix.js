@@ -268,6 +268,79 @@ const REMOTE_TOMBSTONE_RECONCILIATION = String.raw`
   }
 `;
 
+// A live pull has the same late-edit hazard as a tombstone: hashing and
+// metadata reads yield while the editor can replace or mutate the local row.
+// Revalidate every input after the final await and reconsider only a bounded
+// number of times. An unsaved editor clone is never discarded by a cloud pull.
+const LIVE_ROW_RECONCILIATION = String.raw`
+  var liveReconciliationDeferred=false;
+  function deferLiveReconciliation(){liveReconciliationDeferred=true;return false;}
+  function applyCloudItem(item){
+    var id=String(item.track_id),owner=accountKey,revision=Number(item.revision),attempts=0;
+    function sameOwner(){if(!ready||!owner||accountKey!==owner)throw new Error('Private account changed during live reconciliation.');}
+    function blocked(){return window.mancardoDeleteBlocksCloudItem&&window.mancardoDeleteBlocksCloudItem(owner,item);}
+    sameOwner();
+    if(blocked())return Promise.resolve(false);
+    if(item.deleted===true)return applyCloudTombstone(item);
+    if((item.deleted!==false&&item.deleted!==0)||!Number.isInteger(revision)||revision<1||!item.track||String(item.track.id)!==id) return Promise.reject(new Error('Invalid cloud live revision.'));
+    function inspect(){
+      sameOwner();
+      if(++attempts>3)return Promise.resolve(deferLiveReconciliation());
+      return getSyncMeta(id).then(function(meta){
+        sameOwner();
+        if(meta&&meta.accountKey!==owner)throw new Error('Cloud live metadata belongs to another account.');
+        var known=!!(meta&&Number.isInteger(Number(meta.revision))&&Number(meta.revision)>0),knownLive=!!(known&&(meta.deleted===false||meta.deleted===0));
+        if(known&&(Number(meta.revision)>revision||(Number(meta.revision)===revision&&!knownLive)))return false;
+        var local=localById(id),snapshot=local?JSON.stringify(local):null,metaSnapshot=JSON.stringify(meta||null);
+        var editor=String(state.currentId||'')===id?state.current:null,editorSnapshot=editor?JSON.stringify(editor):null;
+        return Promise.all([local?hashTrack(local):Promise.resolve(null),editor?window.mancardoReconciledRevisionHashes(editorSnapshot):Promise.resolve([])]).then(function(hashes){
+          return getSyncMeta(id).then(function(latestMeta){
+            sameOwner();
+            var latest=localById(id),latestEditor=String(state.currentId||'')===id?state.current:null;
+            if(JSON.stringify(latestMeta||null)!==metaSnapshot||(latest?JSON.stringify(latest):null)!==snapshot||(latestEditor?JSON.stringify(latestEditor):null)!==editorSnapshot)return inspect();
+            if(blocked())return false;
+            var localHash=hashes[0];
+            if(latestEditor&&(!latest||hashes[1].indexOf(localHash)<0))return deferLiveReconciliation();
+            var acknowledgement={revision:revision,sha256:item.sha256||'',deleted:false,updatedAt:item.updated_at||0,deviceId:item.device_id||null};
+            if(!latest){replaceLocal(id,item.track);return putSyncMeta(id,acknowledgement);}
+            if(localHash===item.sha256)return putSyncMeta(id,acknowledgement);
+            if(knownLive&&localHash===meta.sha256){replaceLocal(id,item.track);return putSyncMeta(id,acknowledgement);}
+            if(known&&Number(meta.revision)===revision)return false;
+            preserveConflictCopy(latest,'Recovered from cross-device conflict');replaceLocal(id,item.track);
+            return putSyncMeta(id,acknowledgement);
+          });
+        });
+      });
+    }
+    return inspect();
+  }
+`;
+
+// A conflicting PUT's GET can also outlive an editor change. Use the same
+// final-await reconciliation as ordinary pulls; a deferred editor keeps both
+// its local content and the owner-bound queued operation intact.
+const LIVE_PUT_CONFLICT_RECONCILIATION = String.raw`
+  function resolvePutConflict(op,conflict){
+    var conflictOwner=accountKey;
+    function sameOwner(){if(!ready||!conflictOwner||accountKey!==conflictOwner||op.accountKey!==conflictOwner)throw new Error('Private account changed during upload reconciliation.');}
+    sameOwner();
+    if(conflict&&conflict.current&&(conflict.current.deleted===false||conflict.current.deleted===0)&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash)return acknowledgeVerifiedLivePut(op,{revision:conflict.current.revision,sha256:conflict.current.content_sha256,deleted:false,updated_at:conflict.current.updated_at},conflictOwner);
+    return api('/tracks/'+encodeURIComponent(op.id),{headers:{'x-mancardo-private-account':op.accountKey}}).then(jsonOrEmpty).then(function(x){
+      sameOwner();
+      if(!x.response.ok)throw new Error('Could not resolve cloud conflict');
+      var cloud=x.data;
+      if(cloud.deleted)return applyCloudTombstone(cloud).then(function(){persistRemoteChanges();});
+      if((cloud.deleted===false||cloud.deleted===0)&&cloud.sha256===op.localHash)return acknowledgeVerifiedLivePut(op,cloud,conflictOwner);
+      return applyCloudItem(cloud).then(function(applied){
+        sameOwner();
+        if(applied===false){setStatus('offline','Sync pending','A local editor change is still being preserved. Save or reconcile that edit before applying the cloud version.');return false;}
+        persistRemoteChanges();
+        return tx('outbox','readwrite',function(store){sameOwner();return store.delete(conflictOwner+'|'+op.id);}).then(function(){setStatus('conflict','Conflict kept','A newer cloud version existed. Your unsynced local version was preserved as a separate Draft conflict copy.');});
+      });
+    });
+  }
+`;
+
 function injectDurableDeletion(html){
   const boot=html.indexOf('// ---------- boot ----------');
   if(boot<0)return html;
@@ -310,12 +383,11 @@ function injectDurableDeletion(html){
   html=html.replace(/      if\(item\.deleted\)\{\n        preserveConflictCopy\(local,'Recovery snapshot before cloud delete'\);[\s\S]*?\n      \}/,"      if(item.deleted)return applyCloudTombstone(item);");
   // A tombstone retains the old content hash. Matching that hash is not proof
   // a stale PUT succeeded. Missing `deleted` is ambiguous too: GET the row.
-  html=html.replace(putResolver,putResolver+'var conflictOwner=accountKey;');
-  html=html.replace(/if\(conflict&&conflict.current&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash\)\{return putSyncMeta\(op.id,[^\n]*?return delOutbox\(op.id\);\}\);\}/,
-    "if(conflict&&conflict.current&&(conflict.current.deleted===false||conflict.current.deleted===0)&&conflict.current.content_sha256&&conflict.current.content_sha256===op.localHash)return acknowledgeVerifiedLivePut(op,{revision:conflict.current.revision,sha256:conflict.current.content_sha256,deleted:false,updated_at:conflict.current.updated_at},conflictOwner);");
-  // The authoritative GET may outlive an immutable local edit. Recover the
-  // latest library object after the await, never the stale captured reference.
-  html=html.replace(putConflict,"var cloud=x.data;if(accountKey!==conflictOwner||op.accountKey!==conflictOwner)throw new Error('Private account changed during upload reconciliation.');if(cloud.deleted)return applyCloudTombstone(cloud).then(function(){persistRemoteChanges();});if((cloud.deleted===false||cloud.deleted===0)&&cloud.sha256===op.localHash)return acknowledgeVerifiedLivePut(op,cloud,conflictOwner);local=localById(op.id);if(local)preserveConflictCopy(local,'Recovered from cross-device conflict');");
+  const putEnd='\n  function resolveDeleteConflict(op,conflict){';
+  if(html.split(putResolver).length!==2||html.split(putEnd).length!==2)throw new Error('Upload reconciliation anchor missing or ambiguous; refusing a lossy conflict client.');
+  const putIndex=html.indexOf(putResolver),putEndIndex=html.indexOf(putEnd,putIndex);
+  if(putEndIndex<putIndex)throw new Error('Upload reconciliation boundary changed; refusing a lossy conflict client.');
+  html=html.slice(0,putIndex)+LIVE_PUT_CONFLICT_RECONCILIATION+html.slice(putEndIndex);
   html=html.replace(scan,scan+'if(window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,track.id))return;');
   html=html.replace(replace,replace+'if(track&&window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,id))return;');
   html=html.replace(preserve,preserve+'if(track&&window.mancardoHasPendingDelete&&window.mancardoHasPendingDelete(accountKey,track.id))return null;');
@@ -325,6 +397,16 @@ function injectDurableDeletion(html){
   const recoveryNote="c.note=String(reason||'Recovered sync conflict').slice(0,40);";
   if(html.split(recoveryNote).length!==2)throw new Error('Conflict-note preservation anchor missing or ambiguous; refusing a lossy recovery client.');
   html=html.replace(recoveryNote,"conflictEl.title=String(reason||'Recovered sync conflict');");
+  const liveStart='function applyCloudItem(item){',liveEnd='\n\n  function mergeCloud(items)';
+  if(html.split(liveStart).length!==2||html.split(liveEnd).length!==2)throw new Error('Live reconciliation anchor missing or ambiguous; refusing a lossy pull client.');
+  const liveIndex=html.indexOf(liveStart),mergeIndex=html.indexOf(liveEnd,liveIndex);
+  if(mergeIndex<liveIndex)throw new Error('Live reconciliation boundary changed; refusing a lossy pull client.');
+  html=html.slice(0,liveIndex)+LIVE_ROW_RECONCILIATION+html.slice(mergeIndex);
+  const mergeStart='function mergeCloud(items){';
+  const finalSynced="if(ready&&!syncing)setStatus('synced','Synced','My Library is saved locally and synced to your private cloud account.');return true;";
+  if(html.split(mergeStart).length!==2||html.split(finalSynced).length!==2)throw new Error('Deferred reconciliation status anchor missing or ambiguous; refusing a misleading sync client.');
+  html=html.replace(mergeStart,mergeStart+'liveReconciliationDeferred=false;');
+  html=html.replace(finalSynced,"if(liveReconciliationDeferred){setStatus('offline','Sync pending','A local editor change is preserved but has not yet been reconciled with the cloud version.');return false;}"+finalSynced);
   html=repairRequestCadence(html);
   const insertion=html.indexOf('// ---------- boot ----------');
   return html.slice(0,insertion)+DURABLE_DELETE_BRIDGE+'\n'+html.slice(insertion);

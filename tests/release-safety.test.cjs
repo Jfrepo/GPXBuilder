@@ -69,7 +69,7 @@ test('development and production workers have separate D1 bindings', () => {
   assert.match(dev, /database_name = "mancardo-private-library-dev"/);
   assert.match(dev, /database_id = "DEV_DATABASE_ID_REQUIRED"/);
   assert.match(prod, /database_name = "mancardo-private-library"/);
-  assert.match(deploy, /test "\$DEV_DB" != "6ada726b-aae6-441b-a698-69dc0789c7b7"/);
+  assert.match(deploy, /test "\$\{DEV_DB,,\}" != "6ada726b-aae6-441b-a698-69dc0789c7b7"/);
 });
 
 test('development autosave triggers cloud reconciliation', () => {

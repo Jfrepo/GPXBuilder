@@ -331,6 +331,176 @@ test('full-editor rename during a pending tombstone hash is never discarded',{ti
   assert.equal(live.length,1);assert.match(live[0].track.name,/Synthetic edit during hash/);assert.equal(f.model.rows.get(f.track.id).deleted,true);assert.deepEqual(b.errors,[]);
 });
 
+for(const selected of [false,true])test('full-editor '+(selected?'selected-track note stays queued through live conflict until explicit row reselect allows recovery':'note entered during an ordinary live-pull hash survives verbatim in one durable recovery copy'),{timeout:30000},async t=>{
+  const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
+  await a.page.clock.runFor(1000);await b.page.clock.runFor(1000);
+  assert.equal(await a.sync(),true);assert.equal(await b.sync(),true);
+  // Create the authoritative revision through the real editor and a committed
+  // offline queue, not by mutating the fixture's server rows or app state.
+  await a.setOffline(true);await a.rename('New authoritative cloud name');
+  await a.waitForOfflineRenameQueued('New authoritative cloud name');
+  await a.setOffline(false);assert.equal(await a.sync(),true);
+  const remote=clone(f.model.rows.get(f.track.id));
+  assert.equal(remote.revision,2);assert.equal(remote.deleted,false);
+  assert.equal(remote.track.name,'New authoritative cloud name');
+  assert.deepEqual(remote.track.segments,f.track.segments);
+  assert.deepEqual(await b.tracks(),[f.track]);
+  if(selected){
+    await b.page.locator('[data-track-id="fixture-one"] .ti-name').evaluate(name=>name.click());
+    assert.equal(await b.page.locator('#statName').textContent(),f.track.name);
+    assert.equal(await b.page.locator('.track-item.active').getAttribute('data-track-id'),f.track.id);
+  }
+  const before=await b.workspace();
+  assert.deepEqual(before.outbox,[]);
+  assert.equal(before.sync.find(meta=>meta.key==='fixture-account|'+f.track.id).revision,1);
+  const writes=()=>f.model.requests.filter(request=>request.device===b.device&&(request.method==='PUT'||request.method==='DELETE'));
+  assert.deepEqual(writes(),[],'The receiver starts clean, with no stale PUT or queued conflict');
+
+  // The GET gate is reached after the clean queue scan/upload phase. Install
+  // the one-shot digest gate here so it cannot accidentally hold that scan.
+  // WebCrypto still computes the real hash; only delivery of its result waits.
+  let entered,releasePull;
+  const pulled=new Promise(resolve=>entered=resolve),released=new Promise(resolve=>releasePull=resolve);
+  f.model.pullGate={device:b.device,entered,release:released};
+  const syncing=b.sync();await pulled;
+  assert.equal(f.model.requests.filter(request=>request.device===b.device&&request.path==='/api/private-library/tracks').at(-1).privateHeader,'fixture-account');
+  await b.page.evaluate(()=>{
+    const digest=crypto.subtle.digest.bind(crypto.subtle);
+    window.__fixtureLiveHashEntered=false;window.__fixtureLiveHashInput=null;
+    crypto.subtle.digest=async function(...args){
+      crypto.subtle.digest=digest;
+      window.__fixtureLiveHashInput=new TextDecoder().decode(args[1]);
+      const value=await digest(...args);
+      window.__fixtureLiveHashEntered=true;
+      await new Promise(resolve=>window.__fixtureReleaseLiveHash=resolve);
+      return value;
+    };
+  });
+  releasePull();await eventually(()=>b.page.evaluate(()=>window.__fixtureLiveHashEntered));
+  assert.equal(await b.page.evaluate(()=>window.__fixtureLiveHashInput),JSON.stringify(f.track),'Hold the acknowledged local replica hash in ordinary GET reconciliation, not a conflict PUT');
+
+  const note='  Café 🧭\nLate live-pull note & spaces  ';
+  assert.ok(note.length<=40,'Exercise the editor limit without truncation');
+  // Both branches use actual textarea input -> saveTrackNote -> persistLibrary.
+  // With a loaded editor, that handler updates library.updatedAt but not the
+  // current clone's updatedAt. Keep this real divergence instead of injecting
+  // hidden state or normalizing metadata to force the direct-copy branch.
+  const queued=selected?await queueOfflineNote(f,b,note):null;
+  if(!selected)await b.note(note);
+  const edited=(await b.tracks())[0];
+  assert.equal(edited.id,f.track.id);assert.equal(edited.name,f.track.name);
+  assert.equal(edited.note,note);assert.deepEqual(edited.segments,f.track.segments);
+  assert.equal(await editorNoteValue(b,f.track.id),note);
+  // The unselected case never advances the 1200 ms debounce, so its readonly
+  // IDB snapshot proves this is ordinary pull recovery, not a stale PUT race.
+  // The selected case observes a real offline queue commit before releasing
+  // the hash, allowing its conservative editor-divergence deferral to settle.
+  const held=await b.workspace();
+  assert.deepEqual(held.outbox,selected?[queued]:[]);assert.deepEqual(held.sync,before.sync);
+  assert.equal(held.meta.find(meta=>meta.key==='boundAccountKey').value,'fixture-account');
+  assert.deepEqual(writes(),[]);assert.deepEqual(f.model.rows.get(f.track.id),remote);
+
+  await b.page.evaluate(()=>window.__fixtureReleaseLiveHash());
+  if(selected){
+    assert.equal(await syncing,false,'An offline deferred edit must remain pending, not report successful cloud sync');
+    assert.deepEqual(await b.tracks(),[edited]);
+    assert.equal(await editorNoteValue(b,f.track.id),note);
+    assert.equal(await b.page.locator('#statName').textContent(),f.track.name,'The loaded editor must not be replaced with the newer cloud clone');
+    assert.equal(await b.page.locator('.track-item.active').getAttribute('data-track-id'),f.track.id);
+    const deferred=await b.workspace();
+    assert.deepEqual(deferred.sync,before.sync,'A deferred cloud revision must not be falsely acknowledged');
+    assert.equal(deferred.outbox.length,1);
+    const pending=deferred.outbox[0];
+    assert.equal(pending.key,queued.key);assert.equal(pending.accountKey,'fixture-account');
+    assert.equal(pending.id,f.track.id);assert.equal(pending.op,'put');assert.equal(pending.baseRevision,1);
+    assert.deepEqual(pending.track,edited);assert.equal(pending.localHash,hash(edited));
+    assert.ok(pending.queuedAt>=queued.queuedAt,'The final scan may refresh queue time, never its owner, base, or content');
+    assert.equal(deferred.meta.find(meta=>meta.key==='boundAccountKey').value,'fixture-account');
+    assert.deepEqual(writes(),[]);assert.deepEqual(f.model.rows.get(f.track.id),remote);
+    // Reconnecting is not permission to replace a divergent editor clone.
+    // The full cycle has two upload passes, and each deliberately rejected
+    // old-base PUT must defer its live conflict GET without clearing the queue.
+    await b.setOffline(false);assert.equal(await b.sync(),false,'A live conflict with a divergent loaded editor must remain pending');
+    assert.deepEqual(await b.tracks(),[edited]);
+    assert.equal(await editorNoteValue(b,f.track.id),note);
+    assert.equal(await b.page.locator('#statName').textContent(),f.track.name,'Live conflict GET must retain the loaded local editor');
+    assert.equal(await b.page.locator('.track-item.active').getAttribute('data-track-id'),f.track.id);
+    const conflictDeferred=await b.workspace();
+    assert.deepEqual(conflictDeferred.sync,before.sync,'Neither live conflict GET may acknowledge the unapplied cloud revision');
+    assert.equal(conflictDeferred.meta.find(meta=>meta.key==='boundAccountKey').value,'fixture-account');
+    assert.equal(conflictDeferred.outbox.length,1);
+    const conflictPending=conflictDeferred.outbox[0];
+    assert.equal(conflictPending.key,queued.key);assert.equal(conflictPending.accountKey,'fixture-account');
+    assert.equal(conflictPending.id,f.track.id);assert.equal(conflictPending.op,'put');assert.equal(conflictPending.baseRevision,1);
+    assert.deepEqual(conflictPending.track,edited);assert.equal(conflictPending.localHash,hash(edited));
+    assert.ok(conflictPending.queuedAt>=pending.queuedAt);
+    assert.deepEqual(writes().map(request=>[request.method,request.id,request.data.base_revision,request.account,request.privateHeader]),[
+      ['PUT',f.track.id,1,'fixture-account','fixture-account'],
+      ['PUT',f.track.id,1,'fixture-account','fixture-account']
+    ],'Both full-cycle upload passes may reject only the unchanged old-base edit');
+    assert.ok(writes().every(request=>JSON.stringify(request.data.track)===JSON.stringify(edited)));
+    const conflictGets=f.model.requests.filter(request=>request.device===b.device&&request.method==='GET'&&request.id===f.track.id);
+    assert.deepEqual(conflictGets.map(request=>[request.account,request.privateHeader]),[
+      ['fixture-account','fixture-account'],['fixture-account','fixture-account']
+    ],'Each rejected PUT must read its authoritative row under the queued owner');
+    assert.deepEqual([...f.model.rows.values()],[remote],'Deferral must neither overwrite the original nor create a premature recovery copy');
+
+    // Explicit normal UI reselect is safe here: the complete note is already
+    // persisted in the library and durable queue. It reloads that saved row
+    // into the editor, including updatedAt, rather than fabricating state or
+    // silently discarding an unsaved edit. Recovery is not automatic.
+    await b.page.locator('[data-track-id="fixture-one"] .ti-name').evaluate(name=>name.click());
+    assert.deepEqual(await b.tracks(),[edited]);
+    assert.equal(await editorNoteValue(b,f.track.id),note);
+    assert.equal(await b.page.locator('#statName').textContent(),f.track.name);
+    assert.deepEqual((await b.workspace()).outbox,conflictDeferred.outbox,'Reselect must not alter the owner-bound queued content');
+    assert.equal(await b.sync(),true,'One sync after explicit reselect must recover and upload the preserved note');
+  }else assert.equal(await syncing,true,'One awaited ordinary sync must preserve and upload the late edit');
+  const copies=[...f.model.rows.values()].filter(row=>row.track_id!==f.track.id);
+  assert.equal(copies.length,1,'A late DOM note must not vanish or manufacture repeated recovery copies');
+  const copy=clone(copies[0]);
+  assert.equal(copy.revision,1);assert.equal(copy.deleted,false);
+  assert.equal(copy.track.id,copy.track_id);assert.notEqual(copy.track_id,f.track.id);
+  assert.equal(copy.track.name,edited.name+' (conflict copy)');assert.equal(copy.track.draft,true);
+  assert.equal(copy.track.note,note,'Recovery diagnostics must not replace the verbatim note');
+  assert.deepEqual(copy.track.segments,edited.segments);
+  assert.deepEqual(f.model.rows.get(f.track.id),remote,'The exact authoritative revision and content must remain unchanged');
+  const expectedLocal=[copy.track,remote.track];
+  assert.deepEqual(await b.tracks(),expectedLocal);
+  assert.equal(await editorNoteValue(b,copy.track_id),note);
+  const workspace=await b.workspace();
+  assert.deepEqual(workspace.outbox,[],'Successful completion must include the recovery upload commit');
+  assert.equal(workspace.meta.find(meta=>meta.key==='boundAccountKey').value,'fixture-account');
+  assert.equal(workspace.sync.length,2);
+  assert.ok(workspace.sync.every(meta=>meta.accountKey==='fixture-account'&&meta.key==='fixture-account|'+meta.id));
+  const originalMeta=workspace.sync.find(meta=>meta.id===f.track.id),copyMeta=workspace.sync.find(meta=>meta.id===copy.track_id);
+  assert.equal(originalMeta.revision,remote.revision);assert.equal(originalMeta.sha256,remote.sha256);assert.equal(originalMeta.deleted,false);
+  assert.equal(copyMeta.revision,1);assert.equal(copyMeta.sha256,hash(copy.track));assert.equal(copyMeta.deleted,false);
+  const expectedWrites=selected?[
+    ['PUT',f.track.id,1,'fixture-account','fixture-account'],
+    ['PUT',f.track.id,1,'fixture-account','fixture-account'],
+    ['PUT',f.track.id,1,'fixture-account','fixture-account'],
+    ['PUT',copy.track_id,0,'fixture-account','fixture-account']
+  ]:[['PUT',copy.track_id,0,'fixture-account','fixture-account']];
+  const writeSummary=()=>writes().map(request=>[request.method,request.id,request.data.base_revision,request.account,request.privateHeader]);
+  assert.deepEqual(writeSummary(),expectedWrites,selected?'Exactly two deferred old-base attempts, one post-reselect rejected attempt, and one fresh-ID upload, with no deletion or duplicate successful write':'Only one fresh-ID recovery upload is allowed: no stale original PUT, DELETE, or duplicate write');
+  if(selected)for(const request of writes().slice(0,3))assert.deepEqual(request.data.track,edited);
+  assert.deepEqual(writes().at(-1).data.track,copy.track);
+  assert.ok(writes().every(request=>request.data.device_id===b.device));
+
+  // A real browser reload, emitted startup/debounce timers, and one full sync
+  // must retain the same recovery ID and note without any new server write.
+  const serverSnapshot=clone([...f.model.rows.values()]);
+  await b.reload();await b.page.clock.runFor(1600);assert.equal(await b.sync(),true);
+  assert.deepEqual(await b.tracks(),expectedLocal);
+  assert.equal(await editorNoteValue(b,copy.track_id),note);
+  const reloaded=await b.workspace();
+  assert.deepEqual(reloaded.outbox,[]);assert.deepEqual(reloaded.sync,workspace.sync);
+  assert.equal(reloaded.meta.find(meta=>meta.key==='boundAccountKey').value,'fixture-account');
+  assert.deepEqual([...f.model.rows.values()],serverSnapshot);assert.deepEqual(writeSummary(),expectedWrites);
+  assert.deepEqual(a.errors,[]);assert.deepEqual(b.errors,[]);
+});
+
 test('event-driven rename flush makes overlapping sync wait for its held conflict and preserve one recovery copy',{timeout:30000},async t=>{
   const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
   await a.sync();await b.sync();await a.remove();
