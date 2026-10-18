@@ -63,11 +63,13 @@ async function eventually(predicate){const until=Date.now()+5000;while(Date.now(
 
 async function fixture(t) {
   const track=fixtureTrack();
-  const model={rows:new Map([[track.id,{track_id:track.id,revision:1,sha256:hash(track),deleted:false,track:clone(track),device_id:'fixture-origin',updated_at:1}]]),requests:[],pullGate:null,putGate:null};
+  const rows=new Map([[track.id,{track_id:track.id,revision:1,sha256:hash(track),deleted:false,track:clone(track),device_id:'fixture-origin',updated_at:1}]]);
+  const model={rows,accountRows:new Map([['fixture-account',rows]]),requests:[],pullGate:null,putGate:null};
   const clients=[];
   async function client(device, options={}) {
     const context=await browser.newContext({viewport:{width:1440,height:900}});t.after(()=>context.close());
     const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    const session={account:'fixture-account',offline:false};
     await context.route('**/*',async route=>{
       const request=route.request(),url=new URL(request.url()),method=request.method();
       if(url.origin!==ORIGIN){
@@ -76,22 +78,30 @@ async function fixture(t) {
       }
       if(url.pathname==='/fixture-setup')return route.fulfill({contentType:'text/html',body:'<!doctype html><body></body>'});
       if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:html});
-      if(url.pathname==='/api/private-library/health')return route.fulfill({json:{authenticated:true,authConfigured:true,storageReady:true,accountKey:'fixture-account',accountLabel:'Synthetic test account'}});
+      // Serve the fixed app shell during an offline reload, but never let a
+      // routed API response bypass the deliberately offline fixture network.
+      // This models a loaded/cached editor, not service-worker cache support.
+      if(url.pathname.startsWith('/api/')&&session.offline){
+        model.requests.push({device,account:session.account,method,path:url.pathname,offline:true});
+        return route.abort('internetdisconnected');
+      }
+      const account=session.account,accountRows=model.accountRows.get(account)||new Map();
+      if(url.pathname==='/api/private-library/health')return route.fulfill({json:{authenticated:true,authConfigured:true,storageReady:true,accountKey:account,accountLabel:'Synthetic '+account}});
       if(url.pathname==='/api/private-library/tracks'){
-        const rows=clone([...model.rows.values()]);
-        model.requests.push({device,method,path:url.pathname});
+        const rows=clone([...accountRows.values()]);
+        model.requests.push({device,account,method,path:url.pathname});
         if(model.pullGate?.device===device){const gate=model.pullGate;model.pullGate=null;gate.entered();await gate.release;}
         return route.fulfill({json:{items:rows,has_more:false}});
       }
       if(url.pathname.startsWith('/api/private-library/tracks/')){
-        const id=decodeURIComponent(url.pathname.split('/').pop()),row=model.rows.get(id);
-        const data=method==='GET'?null:request.postDataJSON();model.requests.push({device,method,id,data:clone(data)});
+        const id=decodeURIComponent(url.pathname.split('/').pop()),row=accountRows.get(id);
+        const data=method==='GET'?null:request.postDataJSON();model.requests.push({device,account,method,id,data:clone(data),accountHeader:request.headers()['x-mancardo-delete-account']});
         if(method==='GET')return route.fulfill({status:row?200:404,json:row||{error:'missing'}});
         if(method==='PUT'&&model.putGate?.device===device&&model.putGate.id===id){const gate=model.putGate;model.putGate=null;gate.entered({id,data:clone(data)});await gate.release;}
-        if(method==='DELETE'&&request.headers()['x-mancardo-delete-account']!=='fixture-account')throw new Error('Delete account binding missing');
+        if(method==='DELETE'&&request.headers()['x-mancardo-delete-account']!==account)return route.fulfill({status:409,json:{code:'delete_account_mismatch',error:'Fixture account changed'}});
         if(data.base_revision!==(row?.revision||0))return route.fulfill({status:409,json:{code:'revision_conflict',current:row?{revision:row.revision,deleted:row.deleted,content_sha256:row.sha256,updated_at:row.updated_at}:null}});
         const next={track_id:id,revision:(row?.revision||0)+1,sha256:method==='PUT'?hash(data.track):(row?.sha256||''),deleted:method==='DELETE',track:method==='PUT'?clone(data.track):null,device_id:data.device_id,updated_at:Date.now()};
-        model.rows.set(id,next);return route.fulfill({json:next});
+        accountRows.set(id,next);model.accountRows.set(account,accountRows);return route.fulfill({json:next});
       }
       if(url.pathname.startsWith('/api/'))return route.fulfill({json:{items:[],tracks:[],waypoints:[],storageReady:true,authenticated:true,authConfigured:true}});
       return route.fulfill({status:404,body:''});
@@ -115,7 +125,23 @@ async function fixture(t) {
       // Sync-now reload shim is not the subject of these tombstone tests.
       async sync(){return page.evaluate(()=>document.getElementById('mancardoPrivateSyncNow').onclick());},
       async tracks(){return page.evaluate(LIB=>JSON.parse(localStorage.getItem(LIB)||'[]'),LIB);},
-      async remove(){await page.locator('[data-track-id="fixture-one"] .track-more').evaluate(button=>button.click());page.once('dialog',dialog=>dialog.accept());await page.locator('[data-track-id="fixture-one"] .mancardo-menu-delete').evaluate(button=>button.click());await eventually(()=>page.evaluate(PENDING=>JSON.parse(localStorage.getItem(PENDING)||'[]')[0]?.confirmedRevision===2,PENDING));},
+      async pending(){return page.evaluate(PENDING=>JSON.parse(localStorage.getItem(PENDING)||'[]'),PENDING);},
+      async setOffline(value){session.offline=value;await context.setOffline(value);},
+      setAccount(account){session.account=account;},
+      async workspace(){return page.evaluate(()=>new Promise((resolve,reject)=>{
+        const opening=indexedDB.open('mancardo_private_sync_v2',1);opening.onerror=()=>reject(opening.error);
+        opening.onsuccess=()=>{const db=opening.result,tx=db.transaction(['meta','sync','outbox'],'readonly'),snapshot={};
+          for(const name of ['meta','sync','outbox']){const request=tx.objectStore(name).getAll();request.onsuccess=()=>{snapshot[name]=request.result;};}
+          tx.oncomplete=()=>{db.close();resolve(snapshot);};tx.onerror=tx.onabort=()=>{db.close();reject(tx.error||new Error('Cannot inspect fixture workspace'));};
+        };
+      }));},
+      async requestRemove(){
+        await page.locator('[data-track-id="fixture-one"] .track-more').evaluate(button=>button.click());
+        page.once('dialog',dialog=>dialog.accept());
+        await page.locator('[data-track-id="fixture-one"] .mancardo-menu-delete').evaluate(button=>button.click());
+        await eventually(()=>page.evaluate(({PENDING,LIB})=>JSON.parse(localStorage.getItem(PENDING)||'[]').some(x=>x.id==='fixture-one')&&!JSON.parse(localStorage.getItem(LIB)||'[]').some(x=>x.id==='fixture-one'),{PENDING,LIB}));
+      },
+      async remove(){await result.requestRemove();await eventually(()=>page.evaluate(PENDING=>JSON.parse(localStorage.getItem(PENDING)||'[]')[0]?.confirmedRevision===2,PENDING));},
       async rename(name){await page.locator('[data-track-id="fixture-one"] .track-more').evaluate(button=>button.click());page.once('dialog',dialog=>dialog.accept(name));await page.locator('[data-track-id="fixture-one"] .track-menu').getByRole('button',{name:'Rename',exact:true}).evaluate(button=>button.click());},
       async waitForOfflineRenameQueued(name){
         assert.equal(await page.evaluate(()=>navigator.onLine),false,'Keep the receiver offline until its rename event finishes queuing');
@@ -157,9 +183,9 @@ test('remote tombstone removes a clean second-device replica without uploading a
 test('full-editor receiver retains a real unsynced rename as a conflict copy',{timeout:30000},async t=>{
   const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
   await a.sync();await b.sync();await a.remove();
-  await b.context.setOffline(true);await b.rename('Synthetic unsynced rename');
+  await b.setOffline(true);await b.rename('Synthetic unsynced rename');
   await b.waitForOfflineRenameQueued('Synthetic unsynced rename');
-  await b.context.setOffline(false);assert.equal(await b.sync(),true,'The explicit sync must complete, not return early behind another upload');
+  await b.setOffline(false);assert.equal(await b.sync(),true,'The explicit sync must complete, not return early behind another upload');
   const live=[...f.model.rows.values()].filter(row=>!row.deleted);
   assert.equal(live.length,1);assert.notEqual(live[0].track_id,f.track.id);assert.match(live[0].track.name,/Synthetic unsynced rename/);
   assert.deepEqual(live[0].track.segments,f.track.segments);assert.equal(f.model.rows.get(f.track.id).deleted,true);assert.deepEqual(b.errors,[]);
@@ -184,12 +210,12 @@ test('full-editor rename during a pending tombstone hash is never discarded',{ti
     crypto.subtle.digest=async function(...args){crypto.subtle.digest=digest;const value=await digest(...args);window.__fixtureHashEntered=true;await new Promise(resolve=>window.__fixtureReleaseHash=resolve);return value;};
   });
   release();await eventually(()=>b.page.evaluate(()=>window.__fixtureHashEntered));
-  await b.context.setOffline(true);await b.rename('Synthetic edit during hash');
+  await b.setOffline(true);await b.rename('Synthetic edit during hash');
   await b.waitForOfflineRenameQueued('Synthetic edit during hash');
   await b.page.evaluate(()=>window.__fixtureReleaseHash());await syncing;
   // The edit can be preserved locally while offline; reconnect and complete
   // the actual generated queue/flush path before inspecting server records.
-  await b.context.setOffline(false);assert.equal(await b.sync(),true,'The explicit sync must complete, not return early behind another upload');
+  await b.setOffline(false);assert.equal(await b.sync(),true,'The explicit sync must complete, not return early behind another upload');
   const live=[...f.model.rows.values()].filter(row=>!row.deleted);
   assert.equal(live.length,1);assert.match(live[0].track.name,/Synthetic edit during hash/);assert.equal(f.model.rows.get(f.track.id).deleted,true);assert.deepEqual(b.errors,[]);
 });
@@ -225,4 +251,82 @@ test('event-driven rename flush makes overlapping sync return early until its he
   assert.deepEqual(live[0].track.segments,f.track.segments);assert.equal(f.model.rows.get(f.track.id).deleted,true);
   assert.deepEqual(f.model.requests.filter(request=>request.device===b.device&&request.method==='PUT').map(request=>[request.id,request.data.base_revision]),[[f.track.id,1],[live[0].track_id,0]]);
   assert.deepEqual(b.errors,[]);
+});
+
+test('full editor preserves an intervening cloud edit when a durable offline delete resumes after reload',{timeout:30000},async t=>{
+  const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
+  assert.equal(await a.sync(),true);assert.equal(await b.sync(),true);
+  await a.setOffline(true);await a.requestRemove();
+  const pending=await a.pending();
+  assert.equal(pending.length,1);assert.equal(pending[0].accountKey,'fixture-account');
+  assert.equal(pending[0].baseRevision,1);assert.equal(pending[0].confirmedRevision,undefined);
+  assert.deepEqual(await a.tracks(),[]);assert.equal(f.model.rows.get(f.track.id).deleted,false);
+  assert.equal(f.model.requests.filter(r=>r.method==='DELETE').length,0,'Offline intent must not reach a server');
+
+  // Make a real editor edit in the other browser. Await its committed queue
+  // before reconnecting, then complete one actual full sync, not a model edit.
+  await b.setOffline(true);await b.rename('Synthetic newer cloud revision');
+  await b.waitForOfflineRenameQueued('Synthetic newer cloud revision');
+  await b.setOffline(false);assert.equal(await b.sync(),true);
+  const newer=clone(f.model.rows.get(f.track.id));
+  assert.equal(newer.revision,2);assert.equal(newer.deleted,false);
+  assert.equal(newer.track.name,'Synthetic newer cloud revision');assert.deepEqual(newer.track.segments,f.track.segments);
+
+  await a.reload();assert.equal(await a.page.evaluate(()=>navigator.onLine),false);
+  assert.deepEqual(await a.pending(),pending,'The exact owner/revision/requested-at intent survives real localStorage reload');
+  assert.deepEqual(await a.tracks(),[]);
+  const offlineWorkspace=await a.workspace();
+  assert.equal(offlineWorkspace.sync.find(x=>x.key==='fixture-account|fixture-one').revision,1,'Do not acquire the newer revision while offline');
+  assert.equal(f.model.requests.filter(r=>r.method==='DELETE').length,0);
+
+  await a.setOffline(false);
+  // Run the emitted online/retry/startup timers, then wait for the actual
+  // cancellation and reconciliation result. Do not call the delete helper or
+  // repeatedly retry sync until an expectation happens to pass.
+  await a.page.clock.runFor(2000);
+  await eventually(async()=>!(await a.pending()).length&&(await a.tracks()).some(x=>x.id===f.track.id&&x.name===newer.track.name));
+  assert.deepEqual(f.model.rows.get(f.track.id),newer,'The server edit must remain byte-for-byte unchanged');
+  assert.deepEqual([...f.model.rows.keys()],[f.track.id],'Cancellation must not invent a recovery copy');
+  assert.deepEqual(f.model.requests.filter(r=>r.method==='DELETE').map(r=>[r.device,r.account,r.accountHeader,r.id,r.data.base_revision]),[[a.device,'fixture-account','fixture-account',f.track.id,1]],'Only the originally authorized revision may be attempted');
+  assert.equal(f.model.requests.filter(r=>r.device===a.device&&r.method==='PUT').length,0,'The stale deleting client must not overwrite the newer edit');
+  assert.deepEqual(await a.tracks(),[newer.track]);
+  await a.reload();assert.equal(await a.sync(),true);
+  assert.deepEqual(await a.tracks(),[newer.track]);assert.deepEqual(await a.pending(),[]);
+  assert.equal(f.model.requests.filter(r=>r.method==='DELETE').length,1,'Reload after cancellation must not escalate or repeat deletion');
+  assert.deepEqual(a.errors,[]);assert.deepEqual(b.errors,[]);
+});
+
+test('full editor pauses an account-switched profile with durable pending delete and resumes only for its bound owner',{timeout:30000},async t=>{
+  const f=await fixture(t),a=await f.client('fixture-device-a');assert.equal(await a.sync(),true);
+  const original=clone(f.model.rows.get(f.track.id));
+  const otherTrack={...clone(f.track),name:'Other account same-ID synthetic',segments:[[{lat:8,lon:9},{lat:8.001,lon:9.001}]]};
+  const other={track_id:f.track.id,revision:7,sha256:hash(otherTrack),deleted:false,track:otherTrack,device_id:'other-owner-device',updated_at:7};
+  f.model.accountRows.set('fixture-other-account',new Map([[f.track.id,clone(other)]]));
+  await a.setOffline(true);await a.requestRemove();const pending=await a.pending();
+  assert.equal(pending[0].accountKey,'fixture-account');assert.equal(pending[0].baseRevision,1);
+
+  // Change the fixture's authenticated identity, not the app's account/global
+  // state or IndexedDB. The same browser profile must detect its old binding.
+  a.setAccount('fixture-other-account');await a.reload();await a.setOffline(false);
+  await a.page.clock.runFor(2000);
+  await eventually(()=>a.page.locator('#mancardoPrivateSyncChip').getAttribute('data-state').then(state=>state==='paused'));
+  assert.equal(await a.sync(),false,'Actual bindAccount must refuse a different owner in the existing profile');
+  assert.deepEqual(await a.pending(),pending,'Another identity must not consume, rebind or confirm the pending intent');
+  const workspace=await a.workspace();
+  assert.equal(workspace.meta.find(x=>x.key==='boundAccountKey').value,'fixture-account');
+  assert.ok(workspace.sync.every(x=>!x.key.startsWith('fixture-other-account|')));
+  assert.ok(workspace.outbox.every(x=>!x.key.startsWith('fixture-other-account|')));
+  assert.deepEqual(f.model.rows.get(f.track.id),original);
+  assert.deepEqual(f.model.accountRows.get('fixture-other-account').get(f.track.id),other);
+  assert.deepEqual(f.model.requests.filter(r=>r.account==='fixture-other-account'&&r.path==='/api/private-library/tracks'),[],'Paused owner binding must stop cloud-library pulls as well as writes');
+  assert.deepEqual(f.model.requests.filter(r=>r.method==='PUT'||r.method==='DELETE'),[],'No owner may receive a write while the profile is mismatched');
+
+  // Returning to the original account may resume only that original intent.
+  await a.setOffline(true);a.setAccount('fixture-account');await a.setOffline(false);
+  await a.page.clock.runFor(2000);
+  await eventually(()=>a.pending().then(records=>records[0]?.confirmedRevision===2));
+  assert.deepEqual(f.model.requests.filter(r=>r.method==='DELETE').map(r=>[r.account,r.accountHeader,r.id,r.data.base_revision]),[['fixture-account','fixture-account',f.track.id,1]]);
+  assert.equal(f.model.rows.get(f.track.id).revision,2);assert.equal(f.model.rows.get(f.track.id).deleted,true);
+  assert.deepEqual(f.model.accountRows.get('fixture-other-account').get(f.track.id),other,'The same-ID other-owner record must remain unchanged');
+  assert.deepEqual(await a.tracks(),[]);assert.deepEqual(a.errors,[]);
 });
