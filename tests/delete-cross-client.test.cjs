@@ -85,17 +85,20 @@ async function fixture(t) {
         model.requests.push({device,account:session.account,method,path:url.pathname,offline:true});
         return route.abort('internetdisconnected');
       }
-      const account=session.account,accountRows=model.accountRows.get(account)||new Map();
+      const account=session.account,accountRows=model.accountRows.get(account)||new Map(),privateHeader=request.headers()['x-mancardo-private-account'];
+      const privateDenied=(method==='PUT'||privateHeader!==undefined)&&privateHeader!==account;
       if(url.pathname==='/api/private-library/health')return route.fulfill({json:{authenticated:true,authConfigured:true,storageReady:true,accountKey:account,accountLabel:'Synthetic '+account}});
       if(url.pathname==='/api/private-library/tracks'){
         const rows=clone([...accountRows.values()]);
-        model.requests.push({device,account,method,path:url.pathname});
+        model.requests.push({device,account,method,path:url.pathname,privateHeader});
+        if(privateDenied)return route.fulfill({status:409,json:{code:'private_account_mismatch',error:'Fixture workspace account changed'}});
         if(model.pullGate?.device===device){const gate=model.pullGate;model.pullGate=null;gate.entered();await gate.release;}
         return route.fulfill({json:{items:rows,has_more:false}});
       }
       if(url.pathname.startsWith('/api/private-library/tracks/')){
         const id=decodeURIComponent(url.pathname.split('/').pop()),row=accountRows.get(id);
-        const data=method==='GET'?null:request.postDataJSON();model.requests.push({device,account,method,id,data:clone(data),accountHeader:request.headers()['x-mancardo-delete-account']});
+        const data=method==='GET'?null:request.postDataJSON();model.requests.push({device,account,method,id,data:clone(data),accountHeader:request.headers()['x-mancardo-delete-account'],privateHeader});
+        if(method!=='DELETE'&&privateDenied)return route.fulfill({status:409,json:{code:'private_account_mismatch',error:'Fixture workspace account changed'}});
         if(method==='GET')return route.fulfill({status:row?200:404,json:row||{error:'missing'}});
         if(method==='PUT'&&model.putGate?.device===device&&model.putGate.id===id){const gate=model.putGate;model.putGate=null;gate.entered({id,data:clone(data)});await gate.release;}
         if(method==='DELETE'&&request.headers()['x-mancardo-delete-account']!==account)return route.fulfill({status:409,json:{code:'delete_account_mismatch',error:'Fixture account changed'}});
@@ -143,6 +146,11 @@ async function fixture(t) {
       },
       async remove(){await result.requestRemove();await eventually(()=>page.evaluate(PENDING=>JSON.parse(localStorage.getItem(PENDING)||'[]')[0]?.confirmedRevision===2,PENDING));},
       async rename(name){await page.locator('[data-track-id="fixture-one"] .track-more').evaluate(button=>button.click());page.once('dialog',dialog=>dialog.accept(name));await page.locator('[data-track-id="fixture-one"] .track-menu').getByRole('button',{name:'Rename',exact:true}).evaluate(button=>button.click());},
+      async note(value){
+        await page.locator('[data-track-id="fixture-one"] .track-more').evaluate(button=>button.click());
+        await page.locator('[data-track-id="fixture-one"] .track-menu').getByRole('button',{name:'Note',exact:true}).evaluate(button=>button.click());
+        await page.locator('[data-track-id="fixture-one"] .track-note textarea').evaluate((textarea,value)=>{textarea.value=value;textarea.dispatchEvent(new Event('input',{bubbles:true}));},value);
+      },
       async waitForOfflineRenameQueued(name){
         assert.equal(await page.evaluate(()=>navigator.onLine),false,'Keep the receiver offline until its rename event finishes queuing');
         // The DOM rename handler returns before its async queueScan completes.
@@ -329,4 +337,70 @@ test('full editor pauses an account-switched profile with durable pending delete
   assert.equal(f.model.rows.get(f.track.id).revision,2);assert.equal(f.model.rows.get(f.track.id).deleted,true);
   assert.deepEqual(f.model.accountRows.get('fixture-other-account').get(f.track.id),other,'The same-ID other-owner record must remain unchanged');
   assert.deepEqual(await a.tracks(),[]);assert.deepEqual(a.errors,[]);
+});
+
+test('full editor note edits use the bound revision-aware sync and survive receiver reload',{timeout:30000},async t=>{
+  const f=await fixture(t),a=await f.client('fixture-device-a'),b=await f.client('fixture-device-b');
+  assert.equal(await a.sync(),true);assert.equal(await b.sync(),true);
+  await a.note('Synthetic private note');await a.page.clock.runFor(1600);
+  await eventually(()=>f.model.rows.get(f.track.id).track.note==='Synthetic private note');
+  const puts=f.model.requests.filter(r=>r.device===a.device&&r.method==='PUT');
+  assert.equal(puts.length,1,'One account-aware upload, not an extra legacy note PUT');
+  assert.equal(puts[0].privateHeader,'fixture-account');assert.equal(puts[0].data.base_revision,1);
+  assert.equal(f.model.rows.get(f.track.id).revision,2);
+  assert.deepEqual(f.model.rows.get(f.track.id).track.segments,f.track.segments);
+  assert.equal(await b.sync(),true);await b.reload();assert.equal(await b.sync(),true);
+  assert.equal((await b.tracks())[0].note,'Synthetic private note');
+  assert.equal(await b.page.locator('[data-track-id="fixture-one"] .mancardo-note-icon').count(),1);
+  assert.deepEqual(a.errors,[]);assert.deepEqual(b.errors,[]);
+});
+
+test('full editor cached ready session cannot upload a note into a newly authenticated account',{timeout:30000},async t=>{
+  const f=await fixture(t),a=await f.client('fixture-device-a');
+  await a.page.clock.runFor(1000);assert.equal(await a.sync(),true);
+  const original=clone(f.model.rows.get(f.track.id));
+  const otherTrack={...clone(f.track),name:'Other owner same-ID note',note:'Other owner original',segments:[[{lat:8,lon:9},{lat:8.001,lon:9.001}]]};
+  const other={...clone(original),track:otherTrack,sha256:hash(otherTrack)};
+  f.model.accountRows.set('fixture-other-account',new Map([[f.track.id,clone(other)]]));
+  a.setAccount('fixture-other-account'); // No app reload or health refresh.
+  await a.note('Keep primary private edit');await a.page.clock.runFor(1600);
+  await eventually(()=>f.model.requests.some(r=>r.method==='PUT'&&r.account==='fixture-other-account'));
+  await eventually(async()=>{const w=await a.workspace();return w.outbox.some(op=>op.key==='fixture-account|fixture-one'&&op.track.note==='Keep primary private edit');});
+  await eventually(()=>a.page.locator('#mancardoPrivateSyncChip').getAttribute('data-state').then(state=>state==='offline'));
+  const blocked=f.model.requests.filter(r=>r.account==='fixture-other-account'&&r.id===f.track.id);
+  assert.deepEqual(blocked.map(r=>[r.method,r.privateHeader]),[['PUT','fixture-account'],['GET','fixture-account']],'Both upload and conflict read must retain the queued owner, never use the new session account');
+  assert.deepEqual(f.model.rows.get(f.track.id),original);assert.deepEqual(f.model.accountRows.get('fixture-other-account').get(f.track.id),other);
+  assert.equal((await a.tracks())[0].note,'Keep primary private edit');assert.equal((await a.tracks()).length,1);
+  const workspace=await a.workspace();assert.ok(workspace.outbox.every(op=>op.accountKey==='fixture-account'));
+  assert.ok(workspace.sync.every(meta=>meta.accountKey==='fixture-account'));
+  a.setAccount('fixture-account');assert.equal(await a.sync(),true);
+  assert.equal(f.model.rows.get(f.track.id).track.note,'Keep primary private edit');
+  assert.deepEqual(f.model.accountRows.get('fixture-other-account').get(f.track.id),other);
+  assert.deepEqual(a.errors,[]);
+});
+
+test('full editor account rejection during a held queue hash cannot relabel the pending owner',{timeout:30000},async t=>{
+  const f=await fixture(t),a=await f.client('fixture-device-a');
+  await a.page.clock.runFor(1000);assert.equal(await a.sync(),true);
+  const original=clone(f.model.rows.get(f.track.id));
+  f.model.accountRows.set('fixture-other-account',new Map());
+  await a.page.evaluate(()=>{
+    const digest=crypto.subtle.digest.bind(crypto.subtle);window.__fixtureHashEntered=false;
+    crypto.subtle.digest=async function(...args){crypto.subtle.digest=digest;const value=await digest(...args);window.__fixtureHashEntered=true;await new Promise(resolve=>window.__fixtureReleaseHash=resolve);return value;};
+  });
+  await a.note('Edit paused during owner check');await a.page.clock.runFor(1300);
+  await eventually(()=>a.page.evaluate(()=>window.__fixtureHashEntered));
+  a.setAccount('fixture-other-account');assert.equal(await a.sync(),false);
+  await a.page.evaluate(()=>window.__fixtureReleaseHash());
+  await eventually(async()=>{const w=await a.workspace();return w.outbox.some(op=>op.key==='fixture-account|fixture-one'&&op.track.note==='Edit paused during owner check');});
+  const workspace=await a.workspace();
+  assert.equal(workspace.meta.find(x=>x.key==='boundAccountKey').value,'fixture-account');
+  assert.ok(workspace.outbox.every(op=>op.accountKey==='fixture-account'));
+  assert.ok(workspace.sync.every(meta=>meta.accountKey==='fixture-account'));
+  assert.deepEqual(f.model.requests.filter(r=>r.account==='fixture-other-account'&&(r.method==='PUT'||r.method==='DELETE'||r.path==='/api/private-library/tracks')),[]);
+  assert.deepEqual(f.model.rows.get(f.track.id),original);assert.equal(f.model.accountRows.get('fixture-other-account').size,0);
+  assert.equal((await a.tracks())[0].note,'Edit paused during owner check');
+  a.setAccount('fixture-account');assert.equal(await a.sync(),true);
+  assert.equal(f.model.rows.get(f.track.id).track.note,'Edit paused during owner check');
+  assert.deepEqual(a.errors,[]);
 });

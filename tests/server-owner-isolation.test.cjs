@@ -186,6 +186,66 @@ test('actual server owner isolation', { concurrency: false }, async t => {
     expect(await f.remove('b', 'same-id', 1), 200);
   });
 
+  for (const mode of ['missing', 'wrong', 'pre-switch']) {
+    for (const target of ['new-to-b', 'collision']) {
+      await t.test(mode + ' PUT account header cannot ' + (target === 'collision' ? 'overwrite a colliding row' : 'create a new-account copy'), async t => {
+        const f = await fixture(t);
+        for (const owner of ['a', 'b']) await seed(f, owner, track('collision', 'Private ' + owner));
+        await seed(f, 'a', track('new-to-b', 'Only A owns this local content'));
+        const oldHealth = expect(await f.request('a', '/health'), 200);
+        const baseline = f.snapshot();
+        const headers = mode === 'missing' ? {} : {
+          'x-mancardo-private-account': mode === 'pre-switch' ? oldHealth.accountKey : 'arbitrary-account-key',
+        };
+        // An A-bound browser is now authenticated as B. A missing/incorrect
+        // binding must not create A's local track in B or overwrite B's row.
+        const result = await f.request('b', '/tracks/' + target, {
+          method: 'PUT', headers,
+          body: { base_revision: target === 'collision' ? 1 : 0, track: track(target, 'A-bound browser content') },
+        });
+        expect(result, mode === 'missing' ? 400 : 409,
+          mode === 'missing' ? 'private_account_required' : 'private_account_mismatch');
+        assert.equal(result.body.current, undefined, 'Guard rejection must not disclose current-account metadata');
+        assert.deepEqual(f.snapshot(), baseline, 'Rejected binding must not change either owner or revision history');
+        // Legitimate writes with an explicit matching binding still work.
+        const allowed = expect(await f.put('b', track(target, 'Intentional B edit'), target === 'collision' ? 1 : 0),
+          target === 'collision' ? 200 : 201);
+        assert.equal(allowed.revision, target === 'collision' ? 2 : 1);
+        assert.deepEqual(f.snapshot('a'), {
+          rows: baseline.rows.filter(row => row.owner_id === 'local-test-owner-a'),
+          history: baseline.history.filter(row => row.owner_id === 'local-test-owner-a'),
+        });
+      });
+    }
+  }
+
+  for (const route of ['/tracks/same-id', '/tracks?limit=1']) {
+    await t.test('mismatched explicit private-account binding blocks GET ' + route, async t => {
+      const f = await fixture(t);
+      for (const owner of ['a', 'b']) await seed(f, owner, track('same-id', 'Private ' + owner));
+      const baseline = f.snapshot();
+      for (const [owner, foreign] of [['a', 'b'], ['b', 'a']]) {
+        for (const expectedAccount of [f.accountKeys[foreign], 'arbitrary-account-key']) {
+          const rejected = expect(await f.request(owner, route, {
+            headers: { 'x-mancardo-private-account': expectedAccount },
+          }), 409, 'private_account_mismatch');
+          assert.equal(rejected.items, undefined);
+          assert.equal(rejected.track, undefined);
+          assert.equal(rejected.current, undefined);
+        }
+        // Missing read headers intentionally permit direct authenticated API
+        // reads; an explicit matching header has exactly the same scope.
+        for (const headers of [{}, { 'x-mancardo-private-account': f.accountKeys[owner] }]) {
+          const result = expect(await f.request(owner, route, { headers }), 200);
+          const values = route.includes('?') ? result.items : [result];
+          assert.equal(values.length, 1);
+          assert.equal(values[0].track.name, 'Private ' + owner);
+        }
+      }
+      assert.deepEqual(f.snapshot(), baseline, 'Read guards must never change rows or history');
+    });
+  }
+
   await t.test('invalid revision requests reject without changing either owner or history', async t => {
     const f = await fixture(t);
     for (const owner of ['a', 'b']) await seed(f, owner, track('same-id', 'Private ' + owner));
@@ -193,7 +253,8 @@ test('actual server owner isolation', { concurrency: false }, async t => {
     for (const owner of ['a', 'b']) {
       for (const revision of [undefined, -1, 1.5]) {
         expect(await f.request(owner, '/tracks/same-id', {
-          method: 'PUT', body: { base_revision: revision, track: track('same-id', 'Invalid revision') },
+          method: 'PUT', headers: { 'x-mancardo-private-account': f.accountKeys[owner] },
+          body: { base_revision: revision, track: track('same-id', 'Invalid revision') },
         }), 400, 'invalid_revision');
         expect(await f.remove(owner, 'same-id', revision), 400, 'invalid_revision');
         assert.deepEqual(f.snapshot(), baseline);
@@ -235,9 +296,12 @@ test('actual server owner isolation', { concurrency: false }, async t => {
       assert.equal(health.accountKey, undefined, label);
       for (const route of ['/tracks', '/tracks/same-id']) {
         expect(await f.request('b', route, { token, headers }), 401, 'authentication_required');
+        expect(await f.request('b', route, {
+          token, headers: { ...headers, 'x-mancardo-private-account': f.accountKeys.b },
+        }), 401, 'authentication_required');
       }
       expect(await f.request('b', '/tracks/same-id', {
-        method: 'PUT', token, headers,
+        method: 'PUT', token, headers: { ...headers, 'x-mancardo-private-account': f.accountKeys.b },
         body: { base_revision: 1, owner_id: 'local-test-owner-b', track: track('same-id', 'Forged write') },
       }), 401, 'authentication_required');
       // The outer wrapper rejects failed authentication at the same-request

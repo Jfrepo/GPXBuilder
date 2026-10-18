@@ -76,7 +76,7 @@ async function fixture(t) {
     assert.ok(externalRequests.every(request => request.url === issuer + '/cdn-cgi/access/certs' && request.method === 'GET'),
       'All network requests must remain inside the synthetic JWKS fixture');
   });
-  const worker = (await import(pathToFileURL(path.join(root, 'worker-delete-durable-fix.js')).href)).default;
+  const worker = (await import(pathToFileURL(process.env.MANCARDO_DELETE_TEST_ENTRY || path.join(root, 'worker-delete-durable-fix.js')).href)).default;
   const env = {
     PRIVATE_LIBRARY_DB: d1Binding(sqlite),
     CF_ACCESS_TEAM_DOMAIN: issuer,
@@ -106,7 +106,7 @@ async function fixture(t) {
     return { status: response.status, body: await response.json() };
   }
   const accountKeys = {};
-  // Positive controls: derive the deletion header through the actual signed
+  // Positive controls: derive private-account/delete headers through the signed
   // health path, then verify its expected identity binding independently.
   for (const owner of ['a', 'b']) {
     const health = await request(owner, '/health');
@@ -122,7 +122,8 @@ async function fixture(t) {
     env, request, token, tokens, accountKeys,
     put(owner, value, revision = 0, extras = {}) {
       return request(owner, '/tracks/' + encodeURIComponent(value.id), {
-        method: 'PUT', body: { base_revision: revision, track: value, device_id: 'local-device-' + owner, ...extras },
+        method: 'PUT', headers: { 'x-mancardo-private-account': accountKeys[owner] },
+        body: { base_revision: revision, track: value, device_id: 'local-device-' + owner, ...extras },
       });
     },
     remove(owner, id, revision) {

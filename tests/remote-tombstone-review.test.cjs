@@ -32,7 +32,7 @@ function fixture(options={}){
   let meta=Object.hasOwn(options,'meta')?clone(options.meta):{id:'one',accountKey:'A',revision:1,sha256:sha(original),deleted:false};
   let reads=0;
   const copies=[],removals=[],writes=[],outboxDeletes=[];
-  const context={state,accountKey:'A',crypto:webcrypto,TextEncoder,Uint8Array,window:{},
+  const context={state,accountKey:'A',ready:true,crypto:webcrypto,TextEncoder,Uint8Array,window:{},
     localById:id=>state.library.find(t=>t.id===id)||null,
     async getSyncMeta(){reads++;await options.onRead?.(reads,api);return clone(meta);},
     async putSyncMeta(id,value){writes.push({id,value:clone(value)});meta={...clone(value),id,accountKey:context.accountKey};},
@@ -91,6 +91,18 @@ test('editor and metadata changes after hashing are rechecked after the final aw
 test('account changes during metadata reads cannot remove a track or update metadata',async()=>{
   const f=fixture({onRead(n,api){if(n===2)api.context.accountKey='B';}});
   await assert.rejects(f.run(),/account changed/);assert.equal(f.removals.length,0);assert.equal(f.writes.length,0);assert.deepEqual(f.outboxDeletes,[]);
+});
+
+test('a paused binding after an awaited read aborts reconciliation even when the verified owner key is unchanged',async()=>{
+  for(const boundary of [1,2]){
+    const f=fixture({async onRead(n,api){if(n===boundary){await new Promise(resolve=>setImmediate(resolve));api.context.ready=false;}}});
+    f.state.currentId='one';f.state.current=clone(f.original);
+    const before=clone({state:f.state,meta:f.meta});
+    await assert.rejects(f.run(),/account changed/);
+    assert.equal(f.context.accountKey,'A','Rejecting a different login must not relabel the existing workspace');
+    assert.deepEqual({state:f.state,meta:f.meta},before,'A readiness change after either metadata read must preserve the library, editor and sync metadata');
+    assert.deepEqual(f.copies,[]);assert.deepEqual(f.removals,[]);assert.deepEqual(f.writes,[]);assert.deepEqual(f.outboxDeletes,[]);
+  }
 });
 
 test('an account switch while opening the final outbox transaction cannot delete another account queue',async()=>{

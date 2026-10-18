@@ -17,6 +17,7 @@ async function execute(options={}){
   // The real manual workflow checks out immutable 3d7a43b, not PR HEAD.
   files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-delete-runtime-3d7a43b.txt'));
   assert.equal(crypto.createHash('sha256').update(files['worker-delete-durable-fix.js']).digest('hex'),'3ea53546d9222af9a61d152d6c7a1827917b9d1938f8da3afeaecd07a41499f8');
+  if(options.currentRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(root,'worker-delete-durable-fix.js'));
   if(options.oldRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/deployed-delete-runtime-63dc68e.txt'));
   if(options.changedFile)files[options.changedFile]=Buffer.concat([files[options.changedFile],Buffer.from('\nchanged')]);
   const process={env:{CF_TOKEN:'fixture-token-not-a-credential',CF_ACCOUNT:'a'.repeat(32),DEV_DB:id,...options.env},exitCode:0};
@@ -86,4 +87,8 @@ test('legacy binding id is accepted only when it identifies the same verified De
 
 test('old deployed runtime is rejected by the newly approved reviewed-runtime guard',async()=>{
   const r=await execute({oldRuntime:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
+});
+
+test('current unapproved account-boundary runtime cannot pass the immutable deployment guard',async()=>{
+  const r=await execute({currentRuntime:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
 });

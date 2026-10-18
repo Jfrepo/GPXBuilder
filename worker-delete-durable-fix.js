@@ -227,7 +227,7 @@ const REMOTE_TOMBSTONE_RECONCILIATION = String.raw`
   function applyCloudTombstone(item){
     var id=String(item.track_id),owner=accountKey,revision=Number(item.revision),attempts=0;
     if(item.deleted!==true||!Number.isInteger(revision)||revision<1)return Promise.reject(new Error('Invalid cloud deletion revision.'));
-    function sameOwner(){if(!owner||accountKey!==owner)throw new Error('Private account changed during deletion reconciliation.');}
+    function sameOwner(){if(!ready||!owner||accountKey!==owner)throw new Error('Private account changed during deletion reconciliation.');}
     function inspect(){
       sameOwner();
       if(++attempts>3)return Promise.resolve(false); // Busy editor: defer, never discard a late edit.
@@ -270,6 +270,29 @@ function injectDurableDeletion(html){
   const boot=html.indexOf('// ---------- boot ----------');
   if(boot<0)return html;
   html=html.replace(OLD_DELETE_BRIDGE,'');
+  // The note decoration bridge used a second, unbound private replication
+  // path. Actual textarea edits already call saveTrackNote -> persistLibrary,
+  // which the revision/account-aware cloud client observes. Keep decoration
+  // and shared notes, but never let this legacy bridge read/write private data.
+  const noteScript=/<script id="mancardo-stable-note-ui">([\s\S]*?)<\/script>/;
+  const noteMatch=html.match(noteScript);
+  const noteSync=/^  function sync\(id,note,retry\)\{[^\n]*\}$/m;
+  const notePull=/^  function pull\(\)\{[^\n]*\}$/m;
+  if(!noteMatch||!noteSync.test(noteMatch[1])||!notePull.test(noteMatch[1]))throw new Error('Private note integration anchors missing; refusing an unbound note client.');
+  html=html.replace(noteScript,(_,script)=>'<script id="mancardo-stable-note-ui">'+script.replace(noteSync,'  function sync(){/* Private notes use the account-bound editor sync. */}').replace(notePull,'  function pull(){/* Private notes arrive through the account-bound editor sync. */}')+'</script>');
+  const privateApi="function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});return fetch('/api/private-library'+path,opts);}";
+  const bindAccount=/^  function bindAccount\(h\)\{[^\n]*\}$/m;
+  if(!html.includes(privateApi)||!bindAccount.test(html))throw new Error('Private account integration anchors missing; refusing an unbound sync client.');
+  // A health preflight can become stale when the browser's authenticated
+  // session changes. Pin every private track request to the durable workspace,
+  // not only the mutable last-health accountKey, and validate at the server.
+  html=html.replace(bindAccount,"  function bindAccount(h){var candidateKey=String(h.accountKey||''),candidateLabel=String(h.accountLabel||'');if(!candidateKey)return Promise.resolve(false);return getMetaValue(ACCOUNT_META).then(function(bound){if(bound&&bound!==candidateKey){ready=false;setStatus('paused','Paused','A different private account previously used this browser profile. Sync is paused. Use a separate browser profile; your local changes remain saved.');return false;}function activate(){privateWorkspaceAccount=candidateKey;accountKey=candidateKey;accountLabel=candidateLabel;return true;}return bound?activate():setMetaValue(ACCOUNT_META,candidateKey).then(activate);});}");
+  html=html.replace(privateApi,"var privateWorkspaceAccount='';\n  function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});if(/^\\/tracks(?:\\/|\\?|$)/.test(path)){var owner=opts.headers['x-mancardo-private-account']||privateWorkspaceAccount;if(!owner||owner!==privateWorkspaceAccount||accountKey!==owner)return Promise.reject(new Error('Private account changed; workspace sync is paused.'));opts.headers['x-mancardo-private-account']=owner;}return fetch('/api/private-library'+path,opts);}");
+  const queuedPut="return api('/tracks/'+encodeURIComponent(op.id),{method:'PUT',headers:{'content-type':'application/json'},";
+  const conflictGet="return api('/tracks/'+encodeURIComponent(op.id)).then(jsonOrEmpty)";
+  if(!html.includes(queuedPut)||!html.includes(conflictGet))throw new Error('Private operation-owner anchors missing; refusing an unbound upload.');
+  html=html.replace(queuedPut,"return api('/tracks/'+encodeURIComponent(op.id),{method:'PUT',headers:{'content-type':'application/json','x-mancardo-private-account':op.accountKey},");
+  html=html.replaceAll(conflictGet,"return api('/tracks/'+encodeURIComponent(op.id),{headers:{'x-mancardo-private-account':op.accountKey}}).then(jsonOrEmpty)");
   const apply='function applyCloudItem(item){';
   const scan='state.library.forEach(function(track){if(!track||!track.id)return;';
   const replace='function replaceLocal(id,track){';
@@ -299,6 +322,16 @@ function injectDurableDeletion(html){
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
+    const privateTrackPath=/^\/api\/private-library\/tracks(?:\/[^/]+)?$/.test(url.pathname);
+    const privateExpected=request.headers.get('x-mancardo-private-account');
+    if(privateTrackPath&&(request.method==='PUT'||(request.method==='GET'&&privateExpected!==null))){
+      if(!privateExpected)return Response.json({error:'An account-bound private workspace is required.',code:'private_account_required'},{status:400});
+      const healthUrl=new URL(request.url);healthUrl.pathname='/api/private-library/health';healthUrl.search='';
+      const probe=await baseWorker.fetch(new Request(healthUrl,{headers:request.headers}),env,ctx);
+      const health=await probe.json().catch(()=>({}));
+      if(!health.authenticated||!health.accountKey)return Response.json({error:'Private account authentication is required.',code:'authentication_required'},{status:401});
+      if(!probe.ok||health.accountKey!==privateExpected)return Response.json({error:'The signed-in account changed. Private workspace sync is paused.',code:'private_account_mismatch'},{status:409});
+    }
     // Check account identity on the SAME authenticated request that would mutate
     // D1, not only a previous browser health check (which can race a sign-in).
     if(request.method==='DELETE'&&/^\/api\/private-library\/tracks\/[^/]+$/.test(url.pathname)){
