@@ -14,16 +14,16 @@ const production='6ada726b-aae6-441b-a698-69dc0789c7b7';
 async function execute(options={}){
   const calls=[],writes=[],errors=[];
   const files=Object.fromEntries(['wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js'].map(file=>[file,fs.readFileSync(path.join(root,file))]));
-  // The real manual workflow checks out immutable fde3864c, not PR HEAD.
+  // The real manual workflow checks out immutable bffa68b7, not PR HEAD.
   // These fixtures preserve exact reviewed bytes even if later PR source changes.
-  files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-cadence-runtime-fde3864c.txt'));
-  assert.equal(crypto.createHash('sha256').update(files['worker-delete-durable-fix.js']).digest('hex'),'0872bd1b56c9cb279e1bd9d29706624d2c2428727a8784cecdfda98e9103ef2a');
+  files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-note-runtime-bffa68b7.txt'));
+  assert.equal(crypto.createHash('sha256').update(files['worker-delete-durable-fix.js']).digest('hex'),'f3332f09cb228240273c7551f022dd355228b33c8dfec52d66abc2846345381d');
   files['worker-request-cadence.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-cadence-helper-fde3864c.txt'));
   assert.equal(crypto.createHash('sha256').update(files['worker-request-cadence.js']).digest('hex'),'66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e');
   if(options.deployedAccountRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-account-runtime-91af34b.txt'));
   if(options.previousRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-delete-runtime-3d7a43b.txt'));
   if(options.oldRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/deployed-delete-runtime-63dc68e.txt'));
-  if(options.currentCandidate)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(root,'worker-delete-durable-fix.js'));
+  if(options.deployedCadenceRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-cadence-runtime-fde3864c.txt'));
   if(options.changedFile)files[options.changedFile]=Buffer.concat([files[options.changedFile],Buffer.from('\nchanged')]);
   if(options.missingFile)delete files[options.missingFile];
   const process={env:{CF_TOKEN:'fixture-token-not-a-credential',CF_ACCOUNT:'a'.repeat(32),DEV_DB:id,...options.env},exitCode:0};
@@ -44,8 +44,8 @@ async function execute(options={}){
 test('manual candidate route is exact-branch/event gated with fixed checkout and Development-only deploy',()=>{
   const manual=workflow.slice(workflow.indexOf('  deploy-reviewed-candidate:'));
   assert.match(manual,/if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/chatgpt\/mancardo-delete-qualification'/);
-  assert.match(manual,/ref: 'fde3864c5fb621b5c8c9a3ef28ad596b6202a3f6'/);
-  assert.match(manual,/test "\$\(git rev-parse HEAD\)" = 'fde3864c5fb621b5c8c9a3ef28ad596b6202a3f6'/);
+  assert.match(manual,/ref: 'bffa68b7624a504de03d335361d1467d80964ce5'/);
+  assert.match(manual,/test "\$\(git rev-parse HEAD\)" = 'bffa68b7624a504de03d335361d1467d80964ce5'/);
   const sourceCommand=manual.match(/node --test ([^\n]+)/)[1];
   assert.equal(sourceCommand,'tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs');
   assert.match(manual,/environment: development/);assert.match(manual,/persist-credentials: false/);
@@ -108,10 +108,10 @@ test('missing pinned helper or other source stops before API access and config w
   }
 });
 
-test('currently deployed account-bound runtime cannot pass the new cadence guard',async()=>{
+test('previous account-bound runtime cannot pass the reviewed note-preservation guard',async()=>{
   const r=await execute({deployedAccountRuntime:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
 });
 
-test('proposed note-preservation runtime cannot pass the unchanged deployed fde guard',async()=>{
-  const r=await execute({currentCandidate:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
+test('deployed note-lossy cadence runtime cannot pass the new reviewed note-preservation guard',async()=>{
+  const r=await execute({deployedCadenceRuntime:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
 });

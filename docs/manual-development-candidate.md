@@ -1,28 +1,70 @@
-# Prepare the reviewed request-cadence correction for Development
+# Guarded manual Development preparation: note preservation
 
-The user approved this preparation on 2026-10-18 at 06:43:52 UTC. **This update does not deploy automatically.** PR #80 remains draft and unmerged. Production and existing main/dev branches are unchanged. Until the user starts a new run successfully, Development still runs `91af34b8532609bbc5735aa9fd5718b7a23c50a2`, Worker version `bc2a6e2b-6c5d-492b-8dea-a44c15ba6c54`.
+The user approved this public preparation on 2026-10-18 at 08:44:16 UTC.
+**This update does not deploy automatically.** PR #80 remains draft and
+unmerged. Production and existing main/dev branches are unchanged.
+Development still runs `fde3864c5fb621b5c8c9a3ef28ad596b6202a3f6`, Worker
+version `a9e7dba3-43ea-43a1-9bda-e8c601778ea3`, until a new user-started run
+successfully deploys the reviewed correction.
 
-## Exact runtime, destination and safeguards
+## Fixed target and checks
 
-- Runtime: immutable tested commit `fde3864c5fb621b5c8c9a3ef28ad596b6202a3f6`, verified by 147 source/client/guard checks and 40 Chromium cases in [CI 39103649930](https://github.com/Jfrepo/GPXBuilder/actions/runs/39103649930).
-- Wrapper SHA256: `0872bd1b56c9cb279e1bd9d29706624d2c2428727a8784cecdfda98e9103ef2a`.
-- New helper SHA256: `66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e`.
+- Runtime: immutable tested commit `bffa68b7624a504de03d335361d1467d80964ce5`.
+  [Exact-head CI 39111794504](https://github.com/Jfrepo/GPXBuilder/actions/runs/39111794504)
+  passed 159 source checks and 42 Chromium cases, zero failures, cancellations
+  or skips. The tested merge tree equals this runtime's tree.
+  Application bytes are identical to the previously reviewed note correction
+  at `b292df32ec5e5306c6312a31390729f990a3e5df`. This successor changes only
+  the test fixture to wait for a committed outbox transaction rather than a
+  fixed number of event-loop turns. A held real digest regression retains the
+  original content, owner, revision and server assertions.
+- Development Worker: `mancardo-dev-test` only.
+- Database: existing `mancardo-private-library-dev`, with its secret UUID
+  checked against the read-only API response and the existing Worker's exact
+  D1 binding. The Production UUID is rejected case-insensitively.
+- Wrapper SHA256: `f3332f09cb228240273c7551f022dd355228b33c8dfec52d66abc2846345381d`.
+- Unchanged helper SHA256: `66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e`.
 - Unchanged Dev config SHA256: `e5237a94e142e693b8a3697b8259787adf35b7faba877a950ff21321aef78bea`.
-- Workflow: **Deploy Mancardo Development Worker**, `.github/workflows/cloudflare-dev.yml`.
-- Selected branch: `chatgpt/mancardo-delete-qualification`; exact manual-only job `deploy-reviewed-candidate`.
-- Destination: only existing Worker `mancardo-dev-test`, configuration `wrangler.dev.toml`, Wrangler 4.151.1, existing D1 `mancardo-private-library-dev`.
-- The identity guard still rejects the Production UUID case-insensitively, verifies actual D1 UUID/name, verifies the existing Development Worker's exact single D1 binding, and now attests both immutable runtime files plus config before any API access or configuration injection. It uses GET only, rejects redirects, and never logs credential values. Missing or changed helper bytes fail closed.
-- Existing credentials, permissions and environment access are reused, not expanded. Failed protection, identity or source checks stop before deployment. No live D1 SQL queries, migrations, resets, reseeding or track writes occur; tests use disposable in-memory SQLite only.
-- The pinned runtime checkout reruns all 147 checks, including the historical guard suite stored at fde3864c. That historical suite tests the older 91af34b deployment pin, not the newly selected workflow. The newly selected workflow's 12 guard tests run independently in preparation PR CI, bringing that source suite to 149 checks; all 40 Chromium cases also rerun. The actual selected inline identity guard executes during the user-dispatched deployment.
-- This changes active Development code, not an isolated preview. The dedicated database and its existing records remain in place. Subsequent tests are limited to newly created disposable synthetic tracks. A green deployment is not live traffic or data-preservation acceptance.
+- Both runtime files and configuration must match before API access or local
+  config injection. Missing/changed helper or wrapper fails closed.
+- The pinned checkout reruns all **159** checks, including the historical guard
+  suite stored at bffa68b7. That suite tests the previous fde3864c pin, not the
+  newly selected workflow. The selected workflow's **13** guard tests run
+  separately in preparation PR CI, which also runs all 159 source checks and
+  42 Chromium cases. The actual selected inline identity guard executes during
+  the later user-dispatched deployment.
+- Event, exact feature-branch, environment, credentials, permissions, targets,
+  read-only identity checks and pinned Wrangler deploy command are unchanged.
+  No live D1 SQL queries, migrations, resets, reseeding or track writes occur
+  in this workflow. Source tests use disposable in-memory SQLite only.
 
-## User steps only after preparation review and CI pass
+## User action after independent preparation CI passes
 
-1. Open [Deploy Mancardo Development Worker](https://github.com/Jfrepo/GPXBuilder/actions/workflows/cloudflare-dev.yml). Do not choose the separate Production workflow.
-2. Start a **NEW Run workflow**. Select exactly `chatgpt/mancardo-delete-qualification` under **Use workflow from**, then click **Run workflow**. Do not use **Re-run jobs** on an earlier run: reruns keep that run's older workflow and runtime pin.
-3. Open the new run. Original job `deploy` must be skipped; only `deploy-reviewed-candidate` may deploy. Checkout must be exactly `fde3864c5fb621b5c8c9a3ef28ad596b6202a3f6`.
-4. If protection/identity checks block it, stop and report the result. Do not broaden access, change targets, bypass guards or substitute Production credentials.
-5. On success, record the new run URL and Worker version. Green deployment alone does not prove live note/deletion persistence or bounded request traffic.
-6. Before testing, fully refresh or close **every existing Development tab/browser/device**, including background clients, without clearing storage or losing unsaved work. Old clients can retain the prior request-feedback behavior. If a client cannot be refreshed safely, postpone testing. Continue using separate account profiles.
+1. Open [the Development workflow](https://github.com/Jfrepo/GPXBuilder/actions/workflows/cloudflare-dev.yml).
+2. Choose **Run workflow**, then **Use workflow from**
+   `chatgpt/mancardo-delete-qualification`. Start a **NEW** run, not Re-run jobs;
+   a rerun keeps the old workflow/pin.
+3. In the new run, original job `deploy` must be skipped. Only
+   `deploy-reviewed-candidate` may deploy. Checkout must be exactly
+   `bffa68b7624a504de03d335361d1467d80964ce5`.
+4. Wait for successful integrity/identity gates and the exact Development
+   version receipt. Do not treat preparation CI alone as a deployment.
+5. Save unsynced work, then refresh or close all older Development clients
+   before a new live test. Do not clear storage, alter identities or touch
+   Production. A new login is not part of these instructions.
 
-The user must start the workflow in their authenticated GitHub session; no automatic dispatch is performed. Existing branch allowlisting is unchanged. Any irreversible synthetic deletion needs separate confirmation for the exact named track. Never test on existing tracks or Production. Unresolved-request recovery, intermediate status clarity, the Sync-now capture/reload shim, and broader live account-switch/write-isolation remain separate release limits.
+## Acceptance remains separate
+
+The correction retains notes verbatim in conflict copies and leaves recovery
+reasons in the existing session-local conflict indicator. It has passed
+isolated fixtures, not live unsynced-note acceptance. After a separately
+approved deployment and safe refresh, use one new disposable synthetic track
+for a bounded offline-note test. Any irreversible online deletion needs exact
+named action-time approval. Preserve the original tombstone and the recovered
+copy; no cleanup or existing-track mutation is implied.
+
+Live foreign-account writes, same-workspace account switching, broader device
+coverage, backup/restore proof and pending/conflict UX remain separate release
+gates. The unrelated Cloudflare Workers Builds failure has no exposed cause;
+do not equate it with the no-deploy Actions results or deployment identity
+checks.
