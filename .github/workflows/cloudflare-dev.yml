@@ -58,15 +58,15 @@ jobs:
       - name: Check out the exact tested runtime, not the moving branch tip
         uses: actions/checkout@v4
         with:
-          ref: 'fe10024e79143d47fbaf86a3864f69db60fa7200'
+          ref: 'ecc776998a6ae1cbca92b92714e42a74cff6c9f1'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Verify immutable candidate and rerun its source checks
         run: |
-          test "$(git rev-parse HEAD)" = 'fe10024e79143d47fbaf86a3864f69db60fa7200'
-          node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs tests/owner-qualification-server.test.cjs tests/owner-qualification-client.test.cjs
+          test "$(git rev-parse HEAD)" = 'ecc776998a6ae1cbca92b92714e42a74cff6c9f1'
+          node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs tests/owner-qualification-server.test.cjs tests/owner-qualification-client.test.cjs tests/d1-mutation-ack.test.cjs tests/live-pull-review.test.cjs tests/shared-mutation-ack.test.cjs tests/workflow-boundaries.test.cjs
           git diff --exit-code
       - name: Verify existing Development database identity and binding (read only)
         env:
@@ -89,7 +89,9 @@ jobs:
             const expected={
               '.assetsignore':'b5abc5b4c9dffc6819fd542711396a4734fe52ce295d75b032cef3edf4eacce6',
               'wrangler.dev.toml':'e5237a94e142e693b8a3697b8259787adf35b7faba877a950ff21321aef78bea',
-              'worker-delete-durable-fix.js':'f3332f09cb228240273c7551f022dd355228b33c8dfec52d66abc2846345381d',
+              'worker-delete-durable-fix.js':'f4f308b02da20ecad956b6d8e588f21fdf2aa128af25e9a978b2eb6570bd42bd',
+              'worker-private-library-sync.js':'e56eba2c67972294678442f8822d7818e5d907d67668b47c92a3c9f4cec95191',
+              'worker-shared-library-cloud.js':'8239c8d8b9bff0298c7195747c1fc4aaedf8a60996ab8ac7023c971e4d6ee449',
               'worker-request-cadence.js':'66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e',
               'worker-owner-qualification.js':'8c1f2f39458a71cc155b96c5a2ace2abf0b638e2c0b2ece5613d43410d89ebd5'
             };

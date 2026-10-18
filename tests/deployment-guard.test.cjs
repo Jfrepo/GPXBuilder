@@ -14,15 +14,20 @@ const ownerA='a'.repeat(24),ownerB='b'.repeat(24);
 const production='6ada726b-aae6-441b-a698-69dc0789c7b7';
 async function execute(options={}){
   const calls=[],writes=[],errors=[],logs=[];
-  const files=Object.fromEntries(['.assetsignore','wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js','worker-owner-qualification.js'].map(file=>[file,fs.readFileSync(path.join(root,file))]));
-  // The real manual workflow checks out immutable fe10024e, not PR HEAD.
+  const files=Object.fromEntries(['.assetsignore','wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js'].map(file=>[file,fs.readFileSync(path.join(root,file))]));
+  // The real manual workflow checks out immutable ecc77699, not PR HEAD.
   // These fixtures preserve exact reviewed bytes even if later PR source changes.
-  files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-note-runtime-bffa68b7.txt'));
-  assert.equal(crypto.createHash('sha256').update(files['worker-delete-durable-fix.js']).digest('hex'),'f3332f09cb228240273c7551f022dd355228b33c8dfec52d66abc2846345381d');
+  files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-live-reconciliation-ecc77699.txt'));
+  assert.equal(crypto.createHash('sha256').update(files['worker-delete-durable-fix.js']).digest('hex'),'f4f308b02da20ecad956b6d8e588f21fdf2aa128af25e9a978b2eb6570bd42bd');
   files['worker-request-cadence.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-cadence-helper-fde3864c.txt'));
   assert.equal(crypto.createHash('sha256').update(files['worker-request-cadence.js']).digest('hex'),'66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e');
   files['worker-owner-qualification.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-owner-entry-fe10024e.txt'));
   assert.equal(crypto.createHash('sha256').update(files['worker-owner-qualification.js']).digest('hex'),'8c1f2f39458a71cc155b96c5a2ace2abf0b638e2c0b2ece5613d43410d89ebd5');
+  files['worker-private-library-sync.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-private-ack-ecc77699.txt'));
+  assert.equal(crypto.createHash('sha256').update(files['worker-private-library-sync.js']).digest('hex'),'e56eba2c67972294678442f8822d7818e5d907d67668b47c92a3c9f4cec95191');
+  files['worker-shared-library-cloud.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-shared-ack-ecc77699.txt'));
+  assert.equal(crypto.createHash('sha256').update(files['worker-shared-library-cloud.js']).digest('hex'),'8239c8d8b9bff0298c7195747c1fc4aaedf8a60996ab8ac7023c971e4d6ee449');
+  if(options.deployedNoteRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-note-runtime-bffa68b7.txt'));
   if(options.deployedAccountRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-account-runtime-91af34b.txt'));
   if(options.previousRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-delete-runtime-3d7a43b.txt'));
   if(options.oldRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/deployed-delete-runtime-63dc68e.txt'));
@@ -47,10 +52,10 @@ async function execute(options={}){
 test('manual candidate route is exact-branch/event gated with fixed checkout and Development-only deploy',()=>{
   const manual=workflow.slice(workflow.indexOf('  deploy-reviewed-candidate:'));
   assert.match(manual,/if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/chatgpt\/mancardo-delete-qualification'/);
-  assert.match(manual,/ref: 'fe10024e79143d47fbaf86a3864f69db60fa7200'/);
-  assert.match(manual,/test "\$\(git rev-parse HEAD\)" = 'fe10024e79143d47fbaf86a3864f69db60fa7200'/);
+  assert.match(manual,/ref: 'ecc776998a6ae1cbca92b92714e42a74cff6c9f1'/);
+  assert.match(manual,/test "\$\(git rev-parse HEAD\)" = 'ecc776998a6ae1cbca92b92714e42a74cff6c9f1'/);
   const sourceCommand=manual.match(/node --test ([^\n]+)/)[1];
-  assert.equal(sourceCommand,'tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs tests/owner-qualification-server.test.cjs tests/owner-qualification-client.test.cjs');
+  assert.equal(sourceCommand,'tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs tests/owner-qualification-server.test.cjs tests/owner-qualification-client.test.cjs tests/d1-mutation-ack.test.cjs tests/live-pull-review.test.cjs tests/shared-mutation-ack.test.cjs tests/workflow-boundaries.test.cjs');
   assert.match(manual,/environment: development/);assert.match(manual,/persist-credentials: false/);
   assert.match(manual,/spawnSync\('npx',\['--yes','wrangler@4\.151\.1','deploy','--config','wrangler\.dev\.toml','--name','mancardo-dev-test'\]/);
   assert.equal((manual.match(/QUAL_OWNER_A: \$\{\{ secrets\.MANCARDO_QUALIFICATION_ACCOUNT_A \}\}/g)||[]).length,2);
@@ -81,7 +86,7 @@ test('missing credentials, invalid IDs and Production UUID in either case stop b
 });
 
 test('changed pinned configuration, wrapper or helper stops before API access',async()=>{
-  for(const changedFile of ['.assetsignore','wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js','worker-owner-qualification.js']){const r=await execute({changedFile});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);}
+  for(const changedFile of ['.assetsignore','wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js']){const r=await execute({changedFile});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);}
 });
 
 test('wrong or missing API database UUID/name fails closed without changing config',async()=>{
@@ -115,7 +120,7 @@ test('previous note-unbound deployed runtime cannot pass the new immutable guard
 
 
 test('missing pinned helper or other source stops before API access and config writes',async()=>{
-  for(const missingFile of ['.assetsignore','worker-request-cadence.js','worker-delete-durable-fix.js','worker-owner-qualification.js','wrangler.dev.toml']){
+  for(const missingFile of ['.assetsignore','worker-request-cadence.js','worker-delete-durable-fix.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js','wrangler.dev.toml']){
     const r=await execute({missingFile});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);assert.equal(r.errors.length,1);
   }
 });
@@ -128,6 +133,10 @@ test('deployed note-lossy cadence runtime cannot pass the new reviewed note-pres
   const r=await execute({deployedCadenceRuntime:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
 });
 
+
+test('currently deployed fe100 wrapper cannot pass the reviewed late-edit guard',async()=>{
+  const r=await execute({deployedNoteRuntime:true});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);
+});
 
 test('private owner bindings must be present, exact lowercase 24-hex, and distinct before any API access',async()=>{
   for(const env of [{QUAL_OWNER_A:''},{QUAL_OWNER_B:''},{QUAL_OWNER_A:'a'.repeat(23)},{QUAL_OWNER_B:'b'.repeat(25)},{QUAL_OWNER_A:ownerA.toUpperCase()},{QUAL_OWNER_B:'not-an-account-binding'},{QUAL_OWNER_B:ownerA},{QUAL_OWNER_A:'private-invalid-value\n[vars]'}]){

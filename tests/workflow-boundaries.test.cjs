@@ -180,14 +180,14 @@ test('ordinary guard still rejects absent credentials, malformed IDs and wrong t
 test('ordinary Development change is limited to two case-normalized Production UUID comparisons', () => {
   assert.equal(ordinary.split('test "${DEV_DB,,}" !=').length - 1, 1);
   assert.equal(ordinary.split('t.toLowerCase().includes("' + production + '")').length - 1, 1);
-  const restored = developmentWorkflow.replace('test "${DEV_DB,,}" !=', 'test "$DEV_DB" !=')
+  const restored = ordinary.replace('test "${DEV_DB,,}" !=', 'test "$DEV_DB" !=')
     .replace('t.toLowerCase().includes("' + production + '")', 't.includes("' + production + '")');
-  assert.equal(sha256(restored), '2f1c23d88b344d8b9aa9762102cd2975b6dda1a2cb321b20db42686d643b0a61');
+  assert.equal(sha256(restored), '5458931ca490d25b50e260c8a6e3e21e1b8592bd4ad5d48dad69de3c4243989a');
 });
 
-test('immutable manual Development route is byte-for-byte unchanged', () => {
+test('immutable manual Development route matches the separately reviewed ecc77699 preparation', () => {
   assert.equal(sha256(developmentWorkflow.split('  deploy-reviewed-candidate:')[1]),
-    'ba38b9202ce46525468445ca682f37e973e5c7f48fe06b8cd63da299718ed7a2');
+    '6c350ea07af65c38ef6e379d18a5cd85d743d16e65e1f3d83416320962e84305');
 });
 
 test('combined no-deploy qualification adds only the three reviewed suites without changing triggers or jobs', () => {
