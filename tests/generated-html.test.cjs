@@ -424,3 +424,160 @@ for (const entry of [durableEntry, productionEntry]) test(entry + ' keeps 2D, Go
     lines3d.length=0;context.addTrack3D(item,true);assert.equal(lines3d.length,0);
   }
 });
+
+// Responsive toolbar integration uses the exact emitted base/v2/v3 functions.
+// The DOM adapter enforces direct-child insertBefore and preserves node identity;
+// real DOM/CSS/viewport qualification requires the separate Chromium definitions
+// to execute; a source pass does not establish that browser result.
+class ToolbarDomNode {
+  constructor(tag = 'div', id = '', className = '') {
+    Object.assign(this, { tag, id, className, children: [], parentNode: null, style: {}, attributes: {}, listeners: {}, scrollLeft: 0, clientWidth: 300, scrollWidth: 800 });
+    this.classList = {
+      contains: name => this.className.split(' ').includes(name),
+      toggle: name => {
+        const names = new Set(this.className.split(' ').filter(Boolean));
+        const present = !names.has(name);
+        if (present) names.add(name); else names.delete(name);
+        this.className = [...names].join(' '); return present;
+      },
+    };
+  }
+  get nextSibling() { const nodes = this.parentNode?.children || []; return nodes[nodes.indexOf(this) + 1] || null; }
+  get parentElement() { return this.parentNode; }
+  remove() { if (this.parentNode) { const nodes = this.parentNode.children; nodes.splice(nodes.indexOf(this), 1); this.parentNode = null; } }
+  appendChild(node) { node.remove(); this.children.push(node); node.parentNode = this; return node; }
+  insertBefore(node, reference) {
+    if (reference !== null && reference.parentNode !== this) throw new DOMException('Reference is not a direct child', 'NotFoundError');
+    if (reference === node) return node;
+    node.remove(); this.children.splice(reference === null ? this.children.length : this.children.indexOf(reference), 0, node); node.parentNode = this; return node;
+  }
+  matches(selector) { return selector.startsWith('.') ? this.classList.contains(selector.slice(1)) : this.id === selector.slice(1); }
+  querySelector(selector) { for (const node of this.children) { if (node.matches(selector)) return node; const found = node.querySelector(selector); if (found) return found; } return null; }
+  closest(selector) { return this.matches(selector) ? this : this.parentNode?.closest(selector); }
+  setAttribute(name, value) { this.attributes[name] = value; }
+  addEventListener(name, fn) { (this.listeners[name] ||= []).push(fn); }
+  scrollBy({ left }) { this.scrollLeft += left; }
+}
+function toolbarIife(html, name) {
+  const start = html.indexOf('(function ' + name + '(){');
+  const end = html.indexOf('\n})();', start);
+  assert.ok(start >= 0 && end > start, 'Exact emitted layout function ' + name);
+  return html.slice(start, end + 6);
+}
+function toolbarFixture(html, width, { wrappers = true, displacedToggle = false, missingToggle = false } = {}) {
+  const body = new ToolbarDomNode('body');
+  const mapWrap = body.appendChild(new ToolbarDomNode('div', 'mapWrap'));
+  const host = mapWrap.appendChild(new ToolbarDomNode('div', 'desktopToolbarHost'));
+  const dock = body.appendChild(new ToolbarDomNode('div', '', 'dock'));
+  const stats = dock.appendChild(new ToolbarDomNode('div', '', 'stats-row'));
+  const toolbar = dock.appendChild(new ToolbarDomNode('div', '', 'toolbar'));
+  const toggle = dock.appendChild(new ToolbarDomNode('button', 'pointsToggle'));
+  const points = dock.appendChild(new ToolbarDomNode('div', 'pointsWrap', 'hidden'));
+  const controlHome = mapWrap.appendChild(new ToolbarDomNode('div', 'synthetic-control-home'));
+  const zoom = controlHome.appendChild(new ToolbarDomNode('div', '', 'leaflet-control-zoom'));
+  const overlayControl = controlHome.appendChild(new ToolbarDomNode('div', '', 'leaflet-control'));
+  const overlay = overlayControl.appendChild(new ToolbarDomNode('button', '', 'overlay-control-btn'));
+  const originalButton = toolbar.appendChild(new ToolbarDomNode('button', 'synthetic-editing-button'));
+  let buttonClicks = 0; originalButton.onclick = () => buttonClicks++;
+  const queries = [], listeners = {}, errors = [], timers = [], ioAttempts = [];
+  const forbid = name => { ioAttempts.push(name); assert.fail('Unexpected layout side effect: ' + name); };
+  let currentWidth = width, invalidations = 0, pointRenders = 0;
+  const document = { getElementById: id => body.querySelector('#' + id), querySelector: selector => body.querySelector(selector), createElement: tag => new ToolbarDomNode(tag) };
+  const window = {
+    matchMedia(query) {
+      const media = { query, callbacks: [], get matches() { return query.includes('min-width') ? currentWidth >= 768 : currentWidth < 768; }, addEventListener(_, fn) { this.callbacks.push(fn); }, addListener(fn) { this.callbacks.push(fn); } };
+      queries.push(media); return media;
+    },
+    addEventListener(name, fn) { (listeners[name] ||= []).push(fn); },
+  };
+  const state = { library: [{ id: 'synthetic-hidden', visible: false }, { id: 'synthetic-shown', visible: true }, { id: 'synthetic-null', visible: null }, { id: 'synthetic-absent' }], current: { id: 'synthetic-hidden', visible: false } };
+  const serialized = JSON.stringify(state), digest = createHash('sha256').update(serialized).digest('hex');
+  const context = vm.createContext({ window, document, state,
+    els: { desktopToolbarHost: host, pointsToggle: toggle, pointsWrap: points },
+    map: { invalidateSize() { invalidations++; } }, renderPointsTable() { pointRenders++; },
+    setTimeout(fn) { timers.push(fn); }, setInterval(fn) { timers.push(fn); }, clearInterval() {},
+    fetch() { forbid('fetch'); },
+    localStorage: new Proxy({}, { get() { forbid('localStorage'); } }),
+    indexedDB: new Proxy({}, { get() { forbid('indexedDB'); } }),
+    persistLibrary() { forbid('persistLibrary'); },
+    scheduleScan() { forbid('scheduleScan'); },
+  });
+  if (displacedToggle) { host.appendChild(toolbar); stats.appendChild(toggle); }
+  if (missingToggle) toggle.remove();
+  const start = html.indexOf("var toolbarEl=document.querySelector('.toolbar');");
+  const end = html.indexOf('// ---------- helpers ----------', start);
+  assert.ok(start >= 0 && end > start);
+  vm.runInContext(html.slice(start, end), context);
+  if (wrappers) {
+    vm.runInContext(toolbarIife(html, 'installMancardoMobileLayoutV2'), context);
+    vm.runInContext(toolbarIife(html, 'installMancardoMobileLayoutV3'), context);
+  }
+  const pointStart = html.indexOf('els.pointsToggle.onclick = function(){');
+  const pointEnd = html.indexOf('\n};', pointStart);
+  assert.ok(pointStart > 0 && pointEnd > pointStart);
+  vm.runInContext(html.slice(pointStart, pointEnd + 3), context);
+  const call = fn => { try { fn(); } catch (error) { errors.push(error); } };
+  const f = {
+    body, toolbar, dock, host, stats, toggle, points, zoom, overlay, overlayControl, controlHome, context,
+    get nav() { return document.getElementById('mancardoMobileToolbarNav'); },
+    get viewport() { return document.getElementById('mancardoMobileToolbarViewport'); },
+    resize(nextWidth, order) {
+      const changed = queries.filter(q => q.matches !== (q.query.includes('min-width') ? nextWidth >= 768 : nextWidth < 768)); currentWidth = nextWidth;
+      const media = () => changed.forEach(q => q.callbacks.forEach(call));
+      const event = () => [...(listeners.resize || [])].forEach(call);
+      if (order === 'resize-first') { event(); media(); } else { media(); event(); }
+      for (const timer of timers.splice(0)) call(timer);
+    },
+    assertLayout() {
+      assert.deepEqual(errors, [], 'Every resize/media/timer callback must complete');
+      assert.deepEqual(ioAttempts, [], 'Even caught attempts to access persistence/network are forbidden');
+      assert.equal(toolbar.parentNode, currentWidth < 768 ? f.viewport : host);
+      assert.equal(f.nav.parentNode, dock, 'Ribbon remains in dock even after desktop startup');
+      assert.equal(f.viewport.parentNode, f.nav);
+      assert.equal(f.nav.style.display, currentWidth < 768 ? 'grid' : 'none');
+      assert.equal(toggle.parentNode, currentWidth < 768 ? stats : dock);
+      const count = predicate => { let n = 0; function walk(node) { if (predicate(node)) n++; node.children.forEach(walk); } walk(body); return n; };
+      assert.equal(count(node => node.className === 'toolbar'), 1);
+      assert.equal(count(node => node.id === 'mancardoMobileToolbarNav'), 1);
+      assert.equal(count(node => node.id === 'pointsToggle'), 1);
+      assert.equal(toolbar.children[0], originalButton, 'Controls retain identity/listeners');
+      originalButton.onclick(); assert.ok(buttonClicks > 0);
+      toggle.onclick(); assert.equal(points.classList.contains('hidden'), false); assert.equal(toggle.textContent, 'Hide point list');
+      toggle.onclick(); assert.equal(points.classList.contains('hidden'), true); assert.equal(toggle.textContent, 'Show point list');
+      assert.ok(pointRenders > 0);
+      assert.equal(JSON.stringify(state), serialized);
+      assert.equal(createHash('sha256').update(JSON.stringify(state)).digest('hex'), digest);
+      assert.ok(invalidations > 0, 'Existing map sizing callback remains active');
+      assert.equal(zoom.parentNode, currentWidth < 768 ? document.getElementById('mancardoMobileZoomTray') : controlHome);
+      assert.equal(overlayControl.parentNode, currentWidth < 768 ? document.getElementById('mancardoMobileBottomTools') : controlHome);
+    },
+  };
+  return f;
+}
+for (const entry of [durableEntry, productionEntry]) {
+  for (const width of [767, 768]) {
+    for (const order of ['media-first', 'resize-first']) {
+      test(entry + ': toolbar startup and repeated responsive transitions from ' + width + ' (' + order + ')', async () => {
+        const html = await (await render(entry)).text();
+        const f = toolbarFixture(html, width);
+        f.assertLayout();
+        for (const next of [width, width, 767, 766, 766, 768, 1200, 1200, 767, 768, 767]) {
+          f.resize(next, order); f.assertLayout();
+        }
+        const nav = f.nav;
+        vm.runInContext(toolbarIife(html, 'installMancardoMobileLayoutV2'), f.context);
+        f.assertLayout(); assert.equal(f.nav, nav, 'Repeated installation is idempotent');
+      });
+    }
+  }
+  test(entry + ': safe pre-install mobile fallback accepts a point toggle already in the stats row', async () => {
+    const f = toolbarFixture(await (await render(entry)).text(), 767, { wrappers: false, displacedToggle: true });
+    assert.equal(f.toolbar.parentNode, f.dock);
+    assert.equal(f.toggle.parentNode, f.stats);
+  });
+  test(entry + ': safe pre-install mobile fallback tolerates an absent point toggle', async () => {
+    const f = toolbarFixture(await (await render(entry)).text(), 767, { wrappers: false, displacedToggle: true, missingToggle: true });
+    assert.equal(f.toolbar.parentNode, f.dock);
+    assert.equal(f.toggle.parentNode, null);
+  });
+}

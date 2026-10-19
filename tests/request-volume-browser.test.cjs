@@ -127,7 +127,7 @@ function gate() {
 }
 
 async function fixture(t, options = {}) {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
+  const context = await browser.newContext({ viewport: options.viewport || { width: 1440, height: 900 }, serviceWorkers: 'block' });
   const page = await context.newPage();
   const track = trackFixture(), shared = sharedFixture();
   if (Object.prototype.hasOwnProperty.call(options, 'visible')) {
@@ -844,4 +844,208 @@ for (const visible of [false, true]) {
       });
     }
   }
+}
+
+
+// Toolbar regressions use the complete emitted page, native Chromium viewport
+// changes and the real DOM handlers. The observation handle below retains DOM
+// identities and counts delivered resize events only; no application function,
+// matchMedia, state, storage, hash or synchronization implementation is replaced.
+const TOOLBAR_CONTROL_IDS = [
+  'splitAfterBtn', 'joinNextBtn', 'joinToPointBtn', 'movePointBtn',
+  'extendTrackBtn', 'completeChangeBtn', 'deletePointBtn', 'deleteSegBtn',
+  'reverseBtn', 'undoBtn', 'redoBtn', 'exportBtn', 'deleteTrackBtn',
+];
+const TOOLBAR_SELECTORS = [
+  '.toolbar', '.dock', '.stats-row', '#desktopToolbarHost',
+  '#mancardoMobileToolbarNav', '#mancardoMobileToolbarViewport', '#pointsToggle',
+  ...TOOLBAR_CONTROL_IDS.map(id => '#' + id),
+];
+
+async function observeToolbarNodes(page) {
+  return page.evaluateHandle(selectors => {
+    const observation = {
+      nodes: selectors.map(selector => [selector, document.querySelector(selector)]),
+      resizeEvents: 0,
+    };
+    window.addEventListener('resize', () => { observation.resizeEvents++; });
+    return observation;
+  }, TOOLBAR_SELECTORS);
+}
+
+async function assertToolbarLayout(f, viewport, observation) {
+  const narrow = viewport.width < 768;
+  const actual = await f.page.evaluate(({ selectors, controls }) => {
+    const toolbar = document.querySelector('.toolbar');
+    const dock = document.querySelector('.dock');
+    const nav = document.getElementById('mancardoMobileToolbarNav');
+    const ribbon = document.getElementById('mancardoMobileToolbarViewport');
+    const points = document.getElementById('pointsToggle');
+    return {
+      viewport: { width: innerWidth, height: innerHeight },
+      narrow: matchMedia('(max-width:767px)').matches,
+      counts: selectors.map(selector => [selector, document.querySelectorAll(selector).length]),
+      toolbarParent: toolbar?.parentElement?.id,
+      navInDock: !!nav && nav.parentElement === dock,
+      viewportInNav: !!ribbon && ribbon.parentElement === nav,
+      pointsParent: points?.parentElement === dock ? 'dock' : points?.parentElement?.className,
+      controlsInToolbar: controls.map(id => [id, document.getElementById(id)?.closest('.toolbar') === toolbar]),
+      toolbarControls: Array.from(toolbar?.querySelectorAll('button[id]') || [], button => button.id).sort(),
+    };
+  }, { selectors: TOOLBAR_SELECTORS, controls: TOOLBAR_CONTROL_IDS });
+  assert.deepEqual(actual.viewport, viewport, 'The real browser viewport must match the requested size');
+  assert.equal(actual.narrow, narrow, 'The actual media query must use the 767/768 boundary');
+  assert.deepEqual(actual.counts, TOOLBAR_SELECTORS.map(selector => [selector, 1]), 'Toolbar, ribbon, hosts and every control must remain singletons');
+  assert.equal(actual.toolbarParent, narrow ? 'mancardoMobileToolbarViewport' : 'desktopToolbarHost', 'Only the intended responsive host may own the editing toolbar');
+  assert.equal(actual.navInDock, true, 'The mobile navigation must stay in the dock even after desktop startup');
+  assert.equal(actual.viewportInNav, true);
+  assert.equal(actual.pointsParent, narrow ? 'stats-row' : 'dock', 'The point-list control must follow its independent mobile/desktop placement');
+  assert.deepEqual(actual.controlsInToolbar, TOOLBAR_CONTROL_IDS.map(id => [id, true]));
+  assert.deepEqual(actual.toolbarControls, [...TOOLBAR_CONTROL_IDS].sort());
+  assert.equal(await f.page.locator('.toolbar').isVisible(), true, 'The toolbar must not be stranded inside a hidden host');
+  assert.equal(await f.page.locator('#mancardoMobileToolbarNav').isVisible(), narrow);
+  assert.equal(await f.page.locator('#pointsToggle').isVisible(), true);
+  if (observation) {
+    const identities = await observation.evaluate(value => value.nodes.map(([selector, node]) => [selector, !!node && node.isConnected && document.querySelector(selector) === node]));
+    assert.deepEqual(identities, TOOLBAR_SELECTORS.map(selector => [selector, true]), 'Resizing must move the original nodes, not replace controls or duplicate listeners');
+  }
+  f.assertSafe();
+}
+
+async function resizeToolbar(f, viewport, observation) {
+  const before = await observation.evaluate(value => value.resizeEvents);
+  await f.page.setViewportSize(viewport);
+  // Run the application's real resize-related timers and animation frames.
+  // A delivered native resize event is required, not just an overridden query.
+  await f.page.clock.runFor(250);
+  await observed(async () => (await observation.evaluate(value => value.resizeEvents)) > before, 'Chromium must deliver the requested native resize event');
+  await assertToolbarLayout(f, viewport, observation);
+}
+
+async function exerciseToolbarControls(f, duringEditing) {
+  const points = f.page.locator('#pointsToggle');
+  const pointsHidden = () => f.page.locator('#pointsWrap').evaluate(element => element.classList.contains('hidden'));
+  const modeHidden = () => f.page.locator('#modeBanner').evaluate(element => element.classList.contains('hidden'));
+  assert.equal(await pointsHidden(), true);
+  await points.press('Enter');
+  assert.equal(await pointsHidden(), false, 'The relocated point-list button must still open the real point table');
+  assert.equal(await points.textContent(), 'Hide point list');
+  assert.equal(await f.page.locator('#pointsBody tr').count(), 2);
+  // Point rows are not keyboard controls. Click the actual emitted row listener.
+  await f.page.locator('#pointsBody tr').first().evaluate(row => row.click());
+  assert.equal(await f.page.locator('#pointsBody tr').first().evaluate(row => row.classList.contains('sel')), true);
+  assert.equal(await f.page.locator('#movePointBtn').isEnabled(), true);
+  assert.equal(await f.page.locator('#extendTrackBtn').isEnabled(), true);
+
+  await f.page.locator('#movePointBtn').press('Enter');
+  assert.equal(await modeHidden(), false);
+  assert.match(await f.page.locator('#modeBanner span').textContent(), /^Move point:/);
+  assert.equal(await f.page.locator('#finishDrawBtn').textContent(), 'Cancel');
+  assert.equal(await f.page.locator('#movePointBtn').isEnabled(), false);
+  await f.page.locator('#finishDrawBtn').press('Enter');
+  assert.equal(await modeHidden(), true, 'Cancel must leave editing without a track mutation');
+
+  await f.page.locator('#extendTrackBtn').press('Enter');
+  assert.equal(await modeHidden(), false);
+  assert.match(await f.page.locator('#modeBanner span').textContent(), /^Extend Track:/);
+  assert.equal(await f.page.locator('#completeChangeBtn').isVisible(), true);
+  if (duringEditing) {
+    await duringEditing();
+    assert.equal(await modeHidden(), false, 'A responsive host change must not cancel the active editing mode');
+    assert.match(await f.page.locator('#modeBanner span').textContent(), /^Extend Track:/);
+    assert.equal(await pointsHidden(), false, 'The open point list must survive resizing');
+    assert.equal(await f.page.locator('#pointsBody tr').count(), 2);
+    assert.equal(await f.page.locator('#pointsBody tr').first().evaluate(row => row.classList.contains('sel')), true);
+  }
+  // Complete without placing a map point: prove the moved editing handler works
+  // while keeping this layout regression strictly free of track edits.
+  await f.page.locator('#completeChangeBtn').press('Enter');
+  assert.equal(await modeHidden(), true);
+  assert.equal(await f.page.locator('#completeChangeBtn').isVisible(), false);
+  assert.equal(await f.page.locator('#movePointBtn').isEnabled(), true);
+  assert.equal(await f.page.locator('#extendTrackBtn').isEnabled(), true);
+  await points.press('Enter');
+  assert.equal(await pointsHidden(), true, 'The point-list button must still close the real table after reparenting');
+  assert.equal(await points.textContent(), 'Show point list');
+  f.assertSafe();
+}
+
+async function assertToolbarDataUnchanged(f, baseline, server) {
+  assert.deepEqual(await f.durableState(), baseline, 'Layout and edit-mode transitions must not change canonical library bytes, sync hash/revision, pending deletion or outbox');
+  assert.deepEqual(await f.tracks(), [f.track], 'The saved visibility and complete canonical track must remain unchanged');
+  assert.deepEqual(f.model.row, server, 'Layout must not change synthetic server content, hash or revision');
+  assert.equal(f.requests('put').length, 0, 'Responsive layout must issue zero PUTs, including delayed or compensating uploads');
+  assert.deepEqual(f.writes(), [], 'Responsive layout must not write, publish or delete anything');
+  const shown = f.track.visible !== false;
+  assert.equal(await f.page.locator('[data-track-id="' + f.track.id + '"] .track-show').isChecked(), shown);
+  assert.equal(await f.page.locator('#selectAllTracks').isChecked(), shown);
+  f.assertSafe();
+}
+
+for (const scenario of [
+  {
+    name: 'cold mobile and repeated narrow width/height-only resizing',
+    visible: false,
+    viewport: { width: 390, height: 844 },
+    resizes: [
+      { width: 390, height: 640 }, { width: 390, height: 844 },
+      { width: 375, height: 844 }, { width: 767, height: 844 },
+      { width: 767, height: 640 }, { width: 390, height: 844 },
+    ],
+  },
+  {
+    name: 'cold desktop and repeated 767/768 crossings in both directions',
+    visible: true,
+    viewport: { width: 1440, height: 900 },
+    resizes: [
+      { width: 767, height: 900 }, { width: 768, height: 900 },
+      { width: 767, height: 640 }, { width: 768, height: 640 },
+      { width: 1024, height: 700 }, { width: 390, height: 844 },
+      { width: 768, height: 900 },
+    ],
+  },
+]) {
+  test('full editor: toolbar ' + scenario.name + ' preserves functional controls and canonical data through sync/reload', { timeout: 60000 }, async t => {
+    const f = await fixture(t, { viewport: scenario.viewport, visible: scenario.visible });
+    const baseline = await f.durableState(), server = clone(f.model.row);
+    assert.equal(baseline.library, JSON.stringify([f.track]));
+    assert.equal(baseline.sync.sha256, hash(f.track));
+    assert.equal(baseline.sync.revision, 4);
+    assert.deepEqual(baseline.outbox, []);
+    assert.equal(server.sha256, hash(f.track));
+    assert.equal(server.revision, 4);
+    await assertToolbarLayout(f, scenario.viewport);
+    const observation = await observeToolbarNodes(f.page);
+    await f.identify('name');
+    await f.page.clock.runFor(1000); // Let the real identification flash finish.
+    assert.equal(await f.page.locator('#statName').textContent(), f.track.name);
+    await exerciseToolbarControls(f);
+    await assertToolbarDataUnchanged(f, baseline, server);
+
+    for (const viewport of scenario.resizes) {
+      await exerciseToolbarControls(f, async () => {
+        await resizeToolbar(f, viewport, observation);
+        await assertToolbarDataUnchanged(f, baseline, server);
+      });
+      await assertToolbarLayout(f, viewport, observation);
+      await assertToolbarDataUnchanged(f, baseline, server);
+    }
+    await f.page.clock.runFor(2000); // Include real delayed persistence scans.
+    await f.startSync();
+    assert.equal(await f.finishSync(), true, 'A complete private sync must succeed after repeated responsive changes');
+    await assertToolbarDataUnchanged(f, baseline, server);
+    await assertToolbarLayout(f, scenario.resizes.at(-1), observation);
+    await observation.dispose();
+
+    await f.reloadAndSettle();
+    await assertToolbarLayout(f, scenario.resizes.at(-1));
+    await assertToolbarDataUnchanged(f, baseline, server);
+    await f.identify('name');
+    await f.page.clock.runFor(1000);
+    await exerciseToolbarControls(f);
+    await f.page.clock.runFor(2000);
+    await f.startSync();
+    assert.equal(await f.finishSync(), true);
+    await assertToolbarDataUnchanged(f, baseline, server);
+  });
 }
