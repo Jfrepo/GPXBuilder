@@ -3,86 +3,91 @@ import baseWorker from './worker-ui-optimizations-v2.js';
 const TRACK_POINT_MIN_ZOOM = 14;
 
 const TRACK_CLICK_FLASH_FEATURE = String.raw`
-// ---------- Flash a track when its Library row is pressed ----------
+// ---------- Render-only track identification ----------
+// This override belongs to the view, never to a track payload or sync queue.
+var mancardoTrackFlash=null;
+function mancardoTrackRenderVisible(item){
+  if(!item)return false;
+  if(mancardoTrackFlash&&String(item.id)===mancardoTrackFlash.id)return mancardoTrackFlash.visible;
+  return item.visible!==false;
+}
 (function installMancardoTrackClickFlash(){
   if(window.__mancardoTrackClickFlashInstalled)return;
   window.__mancardoTrackClickFlashInstalled=true;
 
-  var flashTimers=[];
-  var activeFlash=null;
-
-  function clearFlashTimers(){
-    while(flashTimers.length)clearTimeout(flashTimers.pop());
-  }
-
+  var startTimer=null,flashTimer=null,generation=0;
   function findLibraryItem(id){
     if(!Array.isArray(state.library))return null;
     return state.library.find(function(item){return String(item&&item.id)===String(id);})||null;
   }
-
-  function setTransientVisibility(id,visible){
-    var item=findLibraryItem(id);
-    if(item)item.visible=visible;
-    if(String(state.currentId)===String(id)&&state.current)state.current.visible=visible;
-  }
-
-  function restoreActiveFlash(){
-    clearFlashTimers();
-    if(!activeFlash)return;
-    setTransientVisibility(activeFlash.id,activeFlash.originalVisible);
-    activeFlash=null;
+  function clearFlash(){
+    generation++;
+    clearTimeout(startTimer);clearTimeout(flashTimer);
+    startTimer=null;flashTimer=null;
+    if(!mancardoTrackFlash)return;
+    mancardoTrackFlash=null;
     if(typeof render==='function')render();
   }
-
-  function flashTrack(id){
-    restoreActiveFlash();
+  function flashTrack(id,token){
+    if(token!==generation)return;
+    startTimer=null;
     var item=findLibraryItem(id);
     if(!item||typeof render!=='function')return;
-
-    var originalVisible=item.visible!==false;
-    activeFlash={id:id,originalVisible:originalVisible};
-
-    // Flash once for 0.75 seconds, then return to the saved Show state.
-    // Visible tracks go off then back on. Hidden tracks briefly appear then hide again.
-    setTransientVisibility(id,!originalVisible);
+    var flash={id:String(id),visible:item.visible===false};
+    mancardoTrackFlash=flash;
     render();
-
-    flashTimers.push(setTimeout(function(){
-      if(!activeFlash||String(activeFlash.id)!==String(id))return;
-      setTransientVisibility(id,originalVisible);
-      activeFlash=null;
+    flashTimer=setTimeout(function(){
+      if(token!==generation||mancardoTrackFlash!==flash)return;
+      mancardoTrackFlash=null;flashTimer=null;
       render();
-    },750));
+    },750);
   }
-
-  // Cancel any in-progress flash before the user deliberately changes Show state.
-  document.addEventListener('pointerdown',function(ev){
-    var target=ev.target;
-    if(target&&target.closest&&target.closest('#trackList .track-show'))restoreActiveFlash();
-  },true);
-
-  // Capture the Library card BEFORE the base row handler runs. The base handler calls
-  // renderLibrary(), which replaces the clicked DOM node before a bubbling document
-  // listener would see it. Capturing here makes the identify flash reliable.
+  function isShowControl(target){
+    return !!(target&&target.closest&&target.closest('#trackList .track-show,#selectAllTracks'));
+  }
+  // Mouse, keyboard and change-driven Show controls cancel even the delayed
+  // selection callback before the normal durable visibility handler runs.
+  document.addEventListener('pointerdown',function(ev){if(isShowControl(ev.target))clearFlash();},true);
+  document.addEventListener('change',function(ev){if(isShowControl(ev.target))clearFlash();},true);
   document.addEventListener('click',function(ev){
     var target=ev.target;
+    if(isShowControl(target)){clearFlash();return;}
     if(!target||!target.closest)return;
     var card=target.closest('#trackList .track-item');
     if(!card)return;
-
-    // Only a row/name press is an identify action. Do not flash for colour, Show,
-    // options, notes or buttons inside the track card.
-    if(target.closest('button,input,textarea,select,.track-menu,.track-palette,.track-note-wrap'))return;
-
+    if(target.closest('button,input,textarea,select,.track-menu,.track-palette,.track-note,.track-note-wrap'))return;
     var id=card.getAttribute('data-track-id');
     if(!id)return;
-
-    // Run after the base row click has loaded/selected the track so this works even
-    // when the same already-selected track is pressed again.
-    setTimeout(function(){flashTrack(id);},30);
+    clearFlash();
+    var token=generation;
+    // Let the existing row handler select and zoom without changing its data.
+    startTimer=setTimeout(function(){flashTrack(id,token);},30);
   },true);
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState!=='visible')clearFlash();});
 })();
 `;
+
+export function repairTrackIdentification(html){
+  // Non-editor maintenance pages have no selection/rendering surface to patch.
+  if(!html.includes('// ---------- boot ----------')&&!html.includes('function renderLibrary(){'))return html;
+  if(html.includes('// ---------- Render-only track identification ----------'))return html;
+  const replacements=[
+    ['if(item.visible===false||item.id===state.currentId||(state.current&&item.id===state.current.id))return;',
+      'if(!mancardoTrackRenderVisible(item)||item.id===state.currentId||(state.current&&item.id===state.current.id))return;'],
+    ['if(state.current && state.current.visible!==false){','if(state.current && mancardoTrackRenderVisible(state.current)){'],
+    ['if(!item||item.visible===false||!Polyline3DElement||!map3d)return;',
+      'if(!item||!mancardoTrackRenderVisible(item)||!Polyline3DElement||!map3d)return;'],
+    ['if(item.visible==null)item.visible=true;',
+      '// Missing/null visibility displays as visible without changing saved data.']
+  ];
+  for(const [before,after] of replacements){
+    if(html.split(before).length!==2)throw new Error('Track identification render anchor mismatch');
+    html=html.replace(before,after);
+  }
+  const close=html.lastIndexOf('})();');
+  if(close<0||html.includes('installMancardoTrackClickFlash'))throw new Error('Track identification installation anchor mismatch');
+  return html.slice(0,close)+TRACK_CLICK_FLASH_FEATURE+'\n'+html.slice(close);
+}
 
 function suppressZoomedOutTrackPoints(html){
   if(!html.includes('__mancardoTrackPointMinZoom')){
@@ -125,11 +130,7 @@ function suppressZoomedOutTrackPoints(html){
     }
   }
 
-  if(!html.includes('installMancardoTrackClickFlash')){
-    const close=html.lastIndexOf('})();');
-    if(close!==-1)html=html.slice(0,close)+TRACK_CLICK_FLASH_FEATURE+'\n'+html.slice(close);
-  }
-  return html;
+  return repairTrackIdentification(html);
 }
 
 export default {

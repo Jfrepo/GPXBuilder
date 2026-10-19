@@ -333,3 +333,94 @@ test('transformed HTML retains status/custom headers but removes stale entity me
   assert.match(response.headers.get('cache-control'), /no-store/);
   compileInlineScripts(await response.text(), 'header-preserving durable response');
 });
+
+// Identification is presentation-only in both entrypoint chains. Provider
+// adapters below observe exact emitted render functions, not SDK/network output.
+const identificationAnchors = [
+  'if(item.visible===false||item.id===state.currentId||(state.current&&item.id===state.current.id))return;',
+  'if(state.current && state.current.visible!==false){',
+  'if(!item||item.visible===false||!Polyline3DElement||!map3d)return;',
+  'if(item.visible==null)item.visible=true;',
+];
+async function identificationInput() {
+  return (await render('worker-ui-optimizations-v2.js')).text();
+}
+function between(html, start, end) {
+  const begin = html.indexOf(start), finish = html.indexOf(end, begin + start.length);
+  assert.ok(begin >= 0 && finish > begin, start);
+  return html.slice(begin, finish);
+}
+function identificationPrelude(html) {
+  return between(html, '// ---------- Render-only track identification ----------', '(function installMancardoTrackClickFlash(){');
+}
+
+test('identification transformer uses four exact anchors and is idempotent', async () => {
+  const { repairTrackIdentification } = await import(pathToFileURL(path.join(root, 'worker-waypoint-zoom.js')).href);
+  const before = await identificationInput(), after = repairTrackIdentification(before);
+  for (const anchor of identificationAnchors) assert.equal(before.split(anchor).length, 2);
+  for (const anchor of identificationAnchors) assert.equal(after.includes(anchor), false);
+  assert.equal(repairTrackIdentification(after), after);
+  compileInlineScripts(after, 'render-only identification transformation');
+  assert.equal(repairTrackIdentification('<html><body>Maintenance</body></html>'), '<html><body>Maintenance</body></html>');
+});
+for (const [index, anchor] of identificationAnchors.entries()) {
+  for (const fault of ['missing', 'duplicated']) test('identification fails closed for ' + fault + ' render anchor ' + index, async () => {
+    const { repairTrackIdentification } = await import(pathToFileURL(path.join(root, 'worker-waypoint-zoom.js')).href);
+    const before = await identificationInput();
+    const altered = before.replace(anchor, fault === 'missing' ? '/* deliberately removed fixture anchor */' : anchor + '\n' + anchor);
+    assert.throws(() => repairTrackIdentification(altered), /Track identification render anchor mismatch/);
+  });
+}
+
+test('emitted render predicate never adds or changes a durable visibility property', async () => {
+  const html = await (await render(durableEntry)).text();
+  const context = vm.createContext({}); vm.runInContext(identificationPrelude(html), context);
+  for (const item of [{id:'a'}, {id:'a',visible:null}, {id:'a',visible:false}, {id:'a',visible:true}]) {
+    const before = JSON.stringify(item), visible = item.visible !== false;
+    assert.equal(context.mancardoTrackRenderVisible(item), visible);
+    context.mancardoTrackFlash = {id:'a',visible:!visible};
+    assert.equal(context.mancardoTrackRenderVisible(item), !visible);
+    assert.equal(context.mancardoTrackRenderVisible({id:'other',visible:false}), false);
+    context.mancardoTrackFlash = null;
+    assert.equal(context.mancardoTrackRenderVisible(item), visible);
+    assert.equal(JSON.stringify(item), before);
+  }
+});
+
+for (const entry of [durableEntry, productionEntry]) test(entry + ' keeps 2D, Google conversion and 3D identification on render-only visibility', async () => {
+  const html = await (await render(entry)).text(), layers = [], googleFeatures = [], lines3d = [];
+  class Polyline {
+    constructor(points, options){this.points=points;this.options={...options};}
+    addTo(){layers.push(this);return this;} on(){return this;}
+    getLatLngs(){return this.points.map(p=>({lat:p[0],lng:p[1]}));}
+    setStyle(options){Object.assign(this.options,options);return this;}
+  }
+  class CircleMarker extends Polyline {
+    getLatLng(){return {lat:this.points[0],lng:this.points[1]};} getElement(){return null;}
+  }
+  const other={id:'other',visible:false,segments:[[{lat:1,lon:2},{lat:2,lon:3}]]};
+  const current={id:'current',visible:false,segments:[[{lat:4,lon:5},{lat:5,lon:6}]]};
+  const state={library:[other,current],current:JSON.parse(JSON.stringify(current)),currentId:'current',selection:null};
+  const before=JSON.stringify(state);
+  const context=vm.createContext({state,trackLayerGroup:{clearLayers(){layers.length=0;},eachLayer(fn){layers.forEach(fn);}},
+    L:{Polyline,CircleMarker,polyline:(p,o)=>new Polyline(p,o),circleMarker:(p,o)=>new CircleMarker(p,o)},
+    defaultTrackColour:()=> '#123456',refreshDock(){},getCss:()=> '#123456',map:{getZoom:()=>16},
+    clearGoogleTrackData(){googleFeatures.length=0;},googleTrackData:{add(feature){googleFeatures.push(feature);}},
+    google:{maps:{LatLng:class {constructor(lat,lng){this.lat=lat;this.lng=lng;}},Data:{Feature:class{constructor(v){Object.assign(this,v);}},LineString:class{constructor(path){this.path=path;}},Point:class{constructor(point){this.point=point;}}}}},
+    Polyline3DElement:class{constructor(options){Object.assign(this,options);}},map3d:{append(line){lines3d.push(line);}},track3d:[]});
+  vm.runInContext(identificationPrelude(html) + '\n' + between(html,'function render(){','function getCss(') + '\n' +
+    between(html,'function syncGoogleTrackVisuals(){',"if(typeof render==='function')") + '\n' +
+    between(html,'function addTrack3D(item,isCurrent){','function sync3DTracks(){'),context);
+  context.render();assert.equal(layers.length,0);
+  for (const item of [other,state.current]) {
+    context.mancardoTrackFlash={id:item.id,visible:true};context.render();
+    assert.equal(layers.filter(x=>x.constructor===Polyline&&x.options.opacity>0).length,1);
+    context.syncGoogleTrackVisuals();assert.equal(googleFeatures.filter(x=>x.properties.kind==='line').length,1);
+    assert.deepEqual(JSON.parse(JSON.stringify(googleFeatures.find(x=>x.properties.kind==='line').geometry.path)),item.segments[0].map(p=>({lat:p.lat,lng:p.lon})));
+    lines3d.length=0;context.addTrack3D(item,item.id==='current');assert.equal(lines3d.length,1);
+    assert.deepEqual(JSON.parse(JSON.stringify(lines3d[0].path)),item.segments[0].map(p=>({lat:p.lat,lng:p.lon})));
+    assert.equal(JSON.stringify(state),before,'Rendering must not mutate either durable object');
+    context.mancardoTrackFlash=null;context.render();assert.equal(layers.length,0);
+    lines3d.length=0;context.addTrack3D(item,true);assert.equal(lines3d.length,0);
+  }
+});

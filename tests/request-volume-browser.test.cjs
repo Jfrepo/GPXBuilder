@@ -34,8 +34,33 @@ let browser, html;
 // Rendering/event surface only: no editor, storage or synchronization logic.
 function leafletFixture() {
   const handlers = new WeakMap();
-  function layer() { handlers.set(this, {}); this.options = {}; }
+  const layers = [], fits = [];
+  function layer(kind = 'layer', points = null, options = {}) {
+    handlers.set(this, {}); this.options = options;
+    this._fixtureKind = kind; this._fixturePoints = points;
+    this._fixtureChildren = new Set(); this._fixtureParent = null;
+    layers.push(this);
+  }
+  // Observe only the rendering platform's inputs, never editor state or helpers.
+  // A line counts as displayed only while attached to an actual map through its
+  // layer group. Retain the real application's clear/add order between renders.
+  function attached(item) { return item._fixtureKind === 'map' || !!(item._fixtureParent && attached(item._fixtureParent)); }
+  window.__trafficLeaflet = {
+    snapshot() {
+      return JSON.parse(JSON.stringify({
+        lines: layers.filter(item => item._fixtureKind === 'polyline' && attached(item) && Number(item.options.opacity) > 0)
+          .map(item => ({ points: item._fixturePoints, options: item.options })),
+        fits,
+      }));
+    },
+  };
   for (const name of ['setView','flyTo','fitBounds','panTo','invalidateSize','setLatLng','setLatLngs','setStyle','setIcon','bindPopup','openPopup','setContent','setOpacity','redraw','bringToFront','bringToBack','remove','clearLayers','addLayer','removeLayer','closePopup','setZoom','zoomIn','zoomOut','setZIndex']) layer.prototype[name] = function(){ return this; };
+  layer.prototype.fitBounds = function(points, options){ fits.push({ points, options }); return this; };
+  layer.prototype.clearLayers = function(){ for(const child of this._fixtureChildren)child._fixtureParent=null; this._fixtureChildren.clear(); return this; };
+  layer.prototype.addLayer = function(child){ if(child._fixtureParent)child._fixtureParent.removeLayer(child); this._fixtureChildren.add(child); child._fixtureParent=this; return this; };
+  layer.prototype.removeLayer = function(child){ this._fixtureChildren.delete(child); if(child._fixtureParent===this)child._fixtureParent=null; return this; };
+  layer.prototype.remove = function(){ if(this._fixtureParent)this._fixtureParent.removeLayer(this); return this; };
+  layer.prototype.setStyle = function(options){ Object.assign(this.options,options); return this; };
   layer.prototype.on = function(name,fn){ handlers.get(this)[name]=fn; return this; };
   layer.prototype.off = function(){return this;};
   layer.prototype.whenReady = function(fn){fn.call(this);return this;};
@@ -43,7 +68,7 @@ function leafletFixture() {
   layer.prototype.removeControl = function(){return this;};
   layer.prototype.getMaxZoom = function(){return 20;};
   layer.prototype.getMinZoom = function(){return 0;};
-  layer.prototype.addTo = function(target){if(this.onAdd){const el=this.onAdd(target);if(el instanceof HTMLElement){el.classList.add('leaflet-control');this._container=el;document.body.appendChild(el);}}return this;};
+  layer.prototype.addTo = function(target){if(target&&target._fixtureChildren)target.addLayer(this);if(this.onAdd){const el=this.onAdd(target);if(el instanceof HTMLElement){el.classList.add('leaflet-control');this._container=el;document.body.appendChild(el);}}return this;};
   layer.prototype.eachLayer = function(){};
   layer.prototype.hasLayer = function(){return false;};
   layer.prototype.getZoom = function(){return 6;};
@@ -58,7 +83,7 @@ function leafletFixture() {
   layer.prototype.containerPointToLatLng = function(){return {lat:1,lng:2};};
   layer.extend = function(proto){function Sub(){layer.call(this);}Sub.prototype=Object.assign(Object.create(layer.prototype),proto);Sub.extend=layer.extend;return Sub;};
   const make=()=>new layer();
-  window.L={map:make,layerGroup:make,tileLayer:make,polyline:make,marker:make,circleMarker:make,circle:make,popup:make,Polyline:layer,CircleMarker:layer,Control:layer,TileLayer:layer,divIcon:x=>x,point:(x,y)=>({x,y}),latLng:(lat,lng)=>({lat,lng,distanceTo:()=>0}),control:{scale:make},DomUtil:{create(tag,cls,parent){const el=document.createElement(tag);el.className=cls||'';if(parent)parent.appendChild(el);return el;}},DomEvent:{disableClickPropagation(){},disableScrollPropagation(){},stopPropagation(ev){ev?.stopPropagation?.();},preventDefault(ev){ev?.preventDefault?.();},on(el,event,fn){el.addEventListener(event,fn);}}};
+  window.L={map:()=>new layer('map'),layerGroup:make,tileLayer:make,polyline:(points,options)=>new layer('polyline',points,options),marker:make,circleMarker:make,circle:make,popup:make,Polyline:layer,CircleMarker:layer,Control:layer,TileLayer:layer,divIcon:x=>x,point:(x,y)=>({x,y}),latLng:(lat,lng)=>({lat,lng,distanceTo:()=>0}),control:{scale:make},DomUtil:{create(tag,cls,parent){const el=document.createElement(tag);el.className=cls||'';if(parent)parent.appendChild(el);return el;}},DomEvent:{disableClickPropagation(){},disableScrollPropagation(){},stopPropagation(ev){ev?.stopPropagation?.();},preventDefault(ev){ev?.preventDefault?.();},on(el,event,fn){el.addEventListener(event,fn);}}};
 }
 
 test.before(async () => {
@@ -105,6 +130,10 @@ async function fixture(t, options = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
   const page = await context.newPage();
   const track = trackFixture(), shared = sharedFixture();
+  if (Object.prototype.hasOwnProperty.call(options, 'visible')) {
+    if (options.visible === undefined) delete track.visible;
+    else track.visible = options.visible;
+  }
   if (options.linkedShared) Object.assign(track, { sharedId: shared.id, sharedBaseVersion: 1, note: shared.note });
   const intent = { id: track.id, accountKey: ACCOUNT, baseRevision: 4, authorizedUserDelete: true, requestedAt: EPOCH - 1000 };
   const row = { track_id: track.id, revision: 4, sha256: hash(track), deleted: false, track: clone(track), device_id: 'synthetic-origin-device', updated_at: 1 };
@@ -216,6 +245,48 @@ async function fixture(t, options = {}) {
     writes() { return model.requests.filter(request => !['GET', 'HEAD'].includes(request.method)); },
     async tracks() { return page.evaluate(LIB => JSON.parse(localStorage.getItem(LIB) || '[]'), LIB); },
     async pending() { return page.evaluate(PENDING => JSON.parse(localStorage.getItem(PENDING) || '[]'), PENDING); },
+    // Read real browser persistence in one readonly transaction. No storage,
+    // hashing, synchronization, rendering or application helper is replaced.
+    async durableState() {
+      return page.evaluate(async ({ LIB, PENDING, ACCOUNT, id }) => {
+        const db = await new Promise((resolve, reject) => {
+          const opening = indexedDB.open('mancardo_private_sync_v2', 1);
+          opening.onsuccess = () => resolve(opening.result);
+          opening.onerror = () => reject(opening.error);
+        });
+        try {
+          return await new Promise((resolve, reject) => {
+            const result = { library: localStorage.getItem(LIB), pending: localStorage.getItem(PENDING) };
+            const tx = db.transaction(['sync', 'outbox'], 'readonly');
+            const sync = tx.objectStore('sync').get(ACCOUNT + '|' + id);
+            const outbox = tx.objectStore('outbox').getAll();
+            sync.onsuccess = () => { result.sync = sync.result; };
+            outbox.onsuccess = () => { result.outbox = outbox.result; };
+            tx.oncomplete = () => resolve(result);
+            tx.onerror = tx.onabort = () => reject(tx.error);
+          });
+        } finally { db.close(); }
+      }, { LIB, PENDING, ACCOUNT, id: track.id });
+    },
+    async rendering() { return page.evaluate(() => window.__trafficLeaflet.snapshot()); },
+    async identify(target = 'name') {
+      const selector = '[data-track-id="' + track.id + '"]' + (target === 'name' ? ' .ti-name' : ' .track-row');
+      await page.locator(selector).evaluate(element => element.click());
+    },
+    async visibilityControl(control, activation = 'pointer') {
+      const selector = control === 'Show all' ? '#selectAllTracks' : '[data-track-id="' + track.id + '"] .track-show';
+      if (activation === 'keyboard') return page.locator(selector).press('Space');
+      await page.locator(selector).evaluate(element => {
+        element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        element.click();
+      });
+    },
+    async reloadAndSettle() {
+      await page.reload();
+      await page.clock.runFor(2000);
+      await this.startSync();
+      assert.equal(await this.finishSync(), true, 'Reload must finish a real complete private synchronization');
+    },
     async advanceTo(ms) {
       const now = await page.evaluate(() => Date.now());
       assert.ok(EPOCH + ms >= now, 'Fixture clock cannot move backwards');
@@ -598,3 +669,179 @@ test('full editor: successful shared note publication invalidates an older in-fl
   assert.equal((await f.tracks())[0].note, 'Synthetic published note after old GET');
   f.assertSafe();
 });
+
+
+// Identification regression: all actions below enter through actual emitted DOM
+// listeners and the installed private-sync onclick. There are no injected state
+// accessors, extracted/redefined application helpers or storage/hash shims.
+async function assertTrackRendered(f, expected, message) {
+  const rendering = await f.rendering();
+  const points = f.track.segments[0].map(point => [point.lat, point.lon]);
+  const lines = rendering.lines.filter(line => JSON.stringify(line.points) === JSON.stringify(points));
+  assert.equal(lines.length, expected ? 1 : 0, message);
+  if (expected) assert.equal(lines[0].options.weight, 5, 'The selected route must retain its current-track rendering');
+}
+
+async function assertIdentificationUnchanged(f, baseline, server, expectedSavedVisibility) {
+  assert.deepEqual(await f.durableState(), baseline, 'Identification must not change saved track bytes, sync metadata/hash, pending deletion or the outbox');
+  assert.deepEqual(f.model.row, server, 'Identification must not change any cloud content, hash or revision');
+  assert.deepEqual(f.writes(), [], 'Identification must not PUT the target or issue any other write');
+  assert.equal(await f.page.locator('[data-track-id="' + f.track.id + '"] .track-show').isChecked(), expectedSavedVisibility, 'Show always represents the saved choice, never the flash override');
+  assert.equal(await f.page.locator('#selectAllTracks').isChecked(), expectedSavedVisibility, 'Show-all must continue representing saved visibility');
+}
+
+for (const savedVisibility of [false, true, null, undefined]) {
+  for (const target of ['row', 'name']) {
+    const savedLabel = savedVisibility === undefined ? 'absent' : String(savedVisibility);
+    test('full editor: ' + target + ' identification with saved visibility ' + savedLabel + ' survives overlapping sync, repeat, timers and reload without writes', { timeout: 30000 }, async t => {
+      const f = await fixture(t, { visible: savedVisibility });
+      const shown = savedVisibility !== false;
+      const baseline = await f.durableState(), server = clone(f.model.row);
+      const requestsBefore = f.model.requests.length;
+      const fitCount = (await f.rendering()).fits.length;
+      assert.deepEqual(baseline.outbox, []);
+      assert.equal(baseline.sync.revision, 4);
+      assert.equal(baseline.sync.sha256, hash(f.track));
+      assert.equal(baseline.library, JSON.stringify([f.track]));
+
+      await f.identify(target);
+      assert.equal(await f.page.locator('#trackList .track-item.active').getAttribute('data-track-id'), f.track.id, 'A row/name press must still select the route');
+      const rendering = await f.rendering();
+      assert.equal(rendering.fits.length, fitCount + 1, 'A row/name press must still focus the map exactly once');
+      assert.deepEqual(rendering.fits.at(-1), { points: [[1, 2], [1.001, 2.001]], options: { padding: [30, 30] } });
+      await f.page.clock.runFor(29);
+      await assertTrackRendered(f, shown, 'Identification must retain the existing 30 ms post-selection delay');
+      await f.page.clock.runFor(1);
+      await assertTrackRendered(f, !shown, 'The track must visibly identify itself, not merely avoid persistence');
+      assert.equal(f.model.requests.length, requestsBefore, 'Selection itself must not initiate a sync or shared refresh');
+      await assertIdentificationUnchanged(f, baseline, server, shown);
+      assert.equal(await f.page.locator('#saveBtn').evaluate(button => button.classList.contains('save-state-clean') && !button.classList.contains('save-state-dirty')), true, 'A rendering-only flash must not make the selected editor copy dirty');
+
+      // Freeze time inside the real 750 ms flash while the actual full
+      // health/hash/queue/upload/pull/merge pipeline runs asynchronously.
+      await f.startSync();
+      assert.equal(await f.finishSync(), true);
+      await assertIdentificationUnchanged(f, baseline, server, shown);
+      await assertTrackRendered(f, !shown, 'A complete sync must not suppress an in-progress identification');
+
+      await f.page.clock.runFor(300);
+      await f.identify(target); // Repeat an already-selected track, as in normal browsing.
+      await f.page.clock.runFor(30);
+      assert.equal((await f.rendering()).fits.length, fitCount + 2, 'Repeated presses must preserve normal selection/focus behavior');
+      await f.startSync();
+      assert.equal(await f.finishSync(), true);
+      await assertIdentificationUnchanged(f, baseline, server, shown);
+      await f.page.clock.runFor(420); // The first flash's original expiry, now superseded.
+      await assertTrackRendered(f, !shown, 'An obsolete timeout must not end the replacement flash');
+      await f.page.clock.runFor(329);
+      await assertTrackRendered(f, !shown, 'The replacement flash must remain active through its 749th ms');
+      await f.page.clock.runFor(1);
+      await assertTrackRendered(f, shown, 'At 750 ms the track must return to the saved visibility');
+      await f.page.clock.runFor(1500); // Include delayed scans and real Save/status timers.
+      await f.startSync();
+      assert.equal(await f.finishSync(), true);
+      await assertIdentificationUnchanged(f, baseline, server, shown);
+
+      // Reload before another flash can restore itself, so a passing result
+      // cannot be explained by a compensating upload or timeout repair.
+      await f.identify(target);
+      await f.page.clock.runFor(30);
+      await assertTrackRendered(f, !shown, 'The third press must still identify the track');
+      await f.reloadAndSettle();
+      await assertIdentificationUnchanged(f, baseline, server, shown);
+      assert.deepEqual(await f.tracks(), [f.track], 'Reload must preserve even a null or absent visibility property exactly');
+      f.assertSafe();
+    });
+  }
+}
+
+test('full editor: the actual 60-second background sync overlaps identification without making visibility durable', { timeout: 30000 }, async t => {
+  const f = await fixture(t, { visible: false });
+  const baseline = await f.durableState(), server = clone(f.model.row);
+  await f.advanceTo(59950);
+  const start = { health: f.requests('health').length, pull: f.requests('pull').length };
+  const held = f.hold('health');
+  await f.identify('name');
+  await f.page.clock.runFor(30); // Flash starts at 59,980 ms.
+  await assertTrackRendered(f, true, 'The hidden route must briefly appear');
+  await f.advanceTo(60000); // Let the actual installed periodic timer initiate sync.
+  await held.entered;
+  await f.startSync(); // Join, rather than substitute for, the timer-started cycle.
+  await f.overlapSync();
+  await f.page.evaluate(() => {
+    window.dispatchEvent(new Event('online'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await f.page.clock.runFor(400); // Real online/visibility retry timers join it too.
+  assert.equal(f.requests('health').length - start.health, 1);
+  f.release('health');
+  assert.equal(await f.finishSync(), true);
+  assert.equal(f.requests('pull').length - start.pull, 1);
+  await assertIdentificationUnchanged(f, baseline, server, false);
+  await assertTrackRendered(f, true, 'The flash must survive the complete background sync');
+  await f.advanceTo(60729);
+  await assertTrackRendered(f, true, 'The 750 ms flash must not end early');
+  await f.advanceTo(60730);
+  await assertTrackRendered(f, false, 'The hidden route must disappear again at expiry');
+  await f.advanceTo(120000); // Observe the next real periodic cycle after restoration.
+  await f.startSync();
+  assert.equal(await f.finishSync(), true);
+  await assertIdentificationUnchanged(f, baseline, server, false);
+  f.assertSafe();
+});
+
+for (const visible of [false, true]) {
+  for (const control of ['Show', 'Show all']) {
+    for (const phase of ['pending', 'active']) {
+      const activation = phase === 'pending' ? 'keyboard' : 'pointer';
+      test('full editor: deliberate ' + control + ' from ' + (visible ? 'shown' : 'hidden') + ' via ' + activation + ' during ' + phase + ' identification persists and uploads exactly once', { timeout: 30000 }, async t => {
+        const f = await fixture(t, { visible });
+        const baseline = await f.durableState();
+        const expected = { ...clone(f.track), visible: !visible };
+        await f.identify('name');
+        await f.page.clock.runFor(phase === 'pending' ? 10 : 30);
+        const held = f.hold('put');
+        await f.visibilityControl(control, activation);
+        assert.deepEqual(await f.tracks(), [expected], 'A deliberate Show change must save immediately');
+        await assertTrackRendered(f, !visible, 'A deliberate control must cancel pending/active identification before rendering the new choice');
+        await f.page.clock.runFor(800); // Both the pending start and old restoration are now due.
+        await assertTrackRendered(f, !visible, 'No stale identification callback may undo the explicit choice');
+        assert.deepEqual(await f.tracks(), [expected]);
+        await f.page.clock.runFor(400); // Fire the actual 1200 ms persistence queue scan.
+        const request = await held.entered;
+        assert.equal(request.body.base_revision, 4);
+        assert.equal(request.headers['x-mancardo-private-account'], ACCOUNT);
+        assert.deepEqual(request.body.track, expected, 'Only the intended saved visibility may be uploaded');
+        const queued = await f.durableState();
+        assert.deepEqual(queued.sync, baseline.sync, 'An unresolved upload must retain its previous revision/hash');
+        assert.equal(queued.outbox.length, 1, 'Positive control must exercise the actual durable upload queue');
+        assert.equal(queued.outbox[0].id, f.track.id);
+        assert.equal(queued.outbox[0].op, 'put');
+        assert.equal(queued.outbox[0].baseRevision, 4);
+        assert.equal(queued.outbox[0].localHash, hash(expected));
+        assert.deepEqual(queued.outbox[0].track, expected);
+        f.release('put');
+        await observed(() => f.model.row.revision === 5 && f.page.evaluate(() => document.getElementById('mancardoPrivateSyncChip').dataset.state === 'synced'));
+        await f.startSync();
+        assert.equal(await f.finishSync(), true);
+        await f.page.clock.runFor(2000);
+        assert.equal(f.requests('put').length, 1, 'The intended visibility change must not create duplicate or compensating uploads');
+        assert.deepEqual(f.writes().map(request => request.method), ['PUT']);
+        assert.deepEqual(f.model.row.track, expected);
+        assert.equal(f.model.row.sha256, hash(expected));
+        assert.equal(f.model.row.revision, 5);
+        const saved = await f.durableState();
+        assert.equal(saved.library, JSON.stringify([expected]));
+        assert.equal(saved.sync.revision, 5);
+        assert.equal(saved.sync.sha256, hash(expected));
+        assert.deepEqual(saved.outbox, []);
+        await f.reloadAndSettle();
+        assert.deepEqual(await f.tracks(), [expected], 'An intentional Show choice must survive reload');
+        assert.deepEqual(await f.durableState(), saved);
+        assert.equal(await f.page.locator('[data-track-id="' + f.track.id + '"] .track-show').isChecked(), !visible);
+        assert.equal(f.requests('put').length, 1, 'Reload must not upload an already acknowledged choice again');
+        f.assertSafe();
+      });
+    }
+  }
+}
