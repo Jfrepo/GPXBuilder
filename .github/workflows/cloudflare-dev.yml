@@ -58,14 +58,14 @@ jobs:
       - name: Check out the exact tested runtime, not the moving branch tip
         uses: actions/checkout@v4
         with:
-          ref: '583badd5be6c760c8824b4ebec1a92f515a35742'
+          ref: '492f222a7ffa8c1337786b8b699ef5c7f56d54d1'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Verify immutable candidate and rerun its source checks
         run: |
-          test "$(git rev-parse HEAD)" = '583badd5be6c760c8824b4ebec1a92f515a35742'
+          test "$(git rev-parse HEAD)" = '492f222a7ffa8c1337786b8b699ef5c7f56d54d1'
           node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs tests/owner-qualification-server.test.cjs tests/owner-qualification-client.test.cjs tests/d1-mutation-ack.test.cjs tests/live-pull-review.test.cjs tests/shared-mutation-ack.test.cjs tests/workflow-boundaries.test.cjs
           git diff --exit-code
       - name: Verify existing Development database identity and binding (read only)
@@ -94,7 +94,9 @@ jobs:
               'worker-shared-library-cloud.js':'8239c8d8b9bff0298c7195747c1fc4aaedf8a60996ab8ac7023c971e4d6ee449',
               'worker-request-cadence.js':'66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e',
               'worker-owner-qualification.js':'8c1f2f39458a71cc155b96c5a2ace2abf0b638e2c0b2ece5613d43410d89ebd5',
-              'worker-waypoint-zoom.js':'5edbb603b7454d521a55b26a55b5bf39e6c78a9111625d93b80fa9dd4805d40d'
+              'worker-waypoint-zoom.js':'5edbb603b7454d521a55b26a55b5bf39e6c78a9111625d93b80fa9dd4805d40d',
+              'index.html':'35fb0b1604007e342b294fc41dd8c1352312eba55bded4a9c252964b58a03da3',
+              'worker-mobile-layout.js':'5e76ccbe66d15f93c0dc3beea3d6d850fedbd1bebbd8a4eb9833bf9c5730acad'
             };
             for(const [file,hash] of Object.entries(expected)){
               if(crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')!==hash)throw new Error('The pinned Development source/configuration changed.');

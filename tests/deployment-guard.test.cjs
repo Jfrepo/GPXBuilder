@@ -14,8 +14,8 @@ const ownerA='a'.repeat(24),ownerB='b'.repeat(24);
 const production='6ada726b-aae6-441b-a698-69dc0789c7b7';
 async function execute(options={}){
   const calls=[],writes=[],errors=[],logs=[];
-  const files=Object.fromEntries(['.assetsignore','wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js','worker-waypoint-zoom.js'].map(file=>[file,fs.readFileSync(path.join(root,file))]));
-  // The real manual workflow checks out immutable 583badd5, not PR HEAD.
+  const files=Object.fromEntries(['.assetsignore','wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js','worker-waypoint-zoom.js','index.html','worker-mobile-layout.js'].map(file=>[file,fs.readFileSync(path.join(root,file))]));
+  // The real manual workflow checks out immutable 492f222a, not PR HEAD.
   // These fixtures preserve exact reviewed bytes even if later PR source changes.
   files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-live-reconciliation-ecc77699.txt'));
   assert.equal(crypto.createHash('sha256').update(files['worker-delete-durable-fix.js']).digest('hex'),'f4f308b02da20ecad956b6d8e588f21fdf2aa128af25e9a978b2eb6570bd42bd');
@@ -29,6 +29,10 @@ async function execute(options={}){
   assert.equal(crypto.createHash('sha256').update(files['worker-shared-library-cloud.js']).digest('hex'),'8239c8d8b9bff0298c7195747c1fc4aaedf8a60996ab8ac7023c971e4d6ee449');
   files['worker-waypoint-zoom.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-selection-highlight-583badd5.txt'));
   assert.equal(crypto.createHash('sha256').update(files['worker-waypoint-zoom.js']).digest('hex'),'5edbb603b7454d521a55b26a55b5bf39e6c78a9111625d93b80fa9dd4805d40d');
+  files['index.html']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-toolbar-index-492f222a.txt'));
+  assert.equal(crypto.createHash('sha256').update(files['index.html']).digest('hex'),'35fb0b1604007e342b294fc41dd8c1352312eba55bded4a9c252964b58a03da3');
+  files['worker-mobile-layout.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-mobile-layout-492f222a.txt'));
+  assert.equal(crypto.createHash('sha256').update(files['worker-mobile-layout.js']).digest('hex'),'5e76ccbe66d15f93c0dc3beea3d6d850fedbd1bebbd8a4eb9833bf9c5730acad');
   if(options.deployedNoteRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-note-runtime-bffa68b7.txt'));
   if(options.deployedAccountRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-account-runtime-91af34b.txt'));
   if(options.previousRuntime)files['worker-delete-durable-fix.js']=fs.readFileSync(path.join(__dirname,'fixtures/reviewed-delete-runtime-3d7a43b.txt'));
@@ -54,8 +58,8 @@ async function execute(options={}){
 test('manual candidate route is exact-branch/event gated with fixed checkout and Development-only deploy',()=>{
   const manual=workflow.slice(workflow.indexOf('  deploy-reviewed-candidate:'));
   assert.match(manual,/if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/chatgpt\/mancardo-delete-qualification'/);
-  assert.match(manual,/ref: '583badd5be6c760c8824b4ebec1a92f515a35742'/);
-  assert.match(manual,/test "\$\(git rev-parse HEAD\)" = '583badd5be6c760c8824b4ebec1a92f515a35742'/);
+  assert.match(manual,/ref: '492f222a7ffa8c1337786b8b699ef5c7f56d54d1'/);
+  assert.match(manual,/test "\$\(git rev-parse HEAD\)" = '492f222a7ffa8c1337786b8b699ef5c7f56d54d1'/);
   const sourceCommand=manual.match(/node --test ([^\n]+)/)[1];
   assert.equal(sourceCommand,'tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs tests/owner-qualification-server.test.cjs tests/owner-qualification-client.test.cjs tests/d1-mutation-ack.test.cjs tests/live-pull-review.test.cjs tests/shared-mutation-ack.test.cjs tests/workflow-boundaries.test.cjs');
   assert.match(manual,/environment: development/);assert.match(manual,/persist-credentials: false/);
@@ -88,7 +92,7 @@ test('missing credentials, invalid IDs and Production UUID in either case stop b
 });
 
 test('changed pinned configuration, wrapper or helper stops before API access',async()=>{
-  for(const changedFile of ['.assetsignore','wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js','worker-waypoint-zoom.js']){const r=await execute({changedFile});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);}
+  for(const changedFile of ['.assetsignore','wrangler.dev.toml','worker-delete-durable-fix.js','worker-request-cadence.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js','worker-waypoint-zoom.js','index.html','worker-mobile-layout.js']){const r=await execute({changedFile});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);}
 });
 
 test('wrong or missing API database UUID/name fails closed without changing config',async()=>{
@@ -122,7 +126,7 @@ test('previous note-unbound deployed runtime cannot pass the new immutable guard
 
 
 test('missing pinned helper or other source stops before API access and config writes',async()=>{
-  for(const missingFile of ['.assetsignore','worker-request-cadence.js','worker-delete-durable-fix.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js','worker-waypoint-zoom.js','wrangler.dev.toml']){
+  for(const missingFile of ['.assetsignore','worker-request-cadence.js','worker-delete-durable-fix.js','worker-owner-qualification.js','worker-private-library-sync.js','worker-shared-library-cloud.js','worker-waypoint-zoom.js','index.html','worker-mobile-layout.js','wrangler.dev.toml']){
     const r=await execute({missingFile});assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);assert.equal(r.errors.length,1);
   }
 });
@@ -198,6 +202,20 @@ test('deployment output wrapper rejects absent or invalid private bindings witho
 test('selection rendering dependency is explicitly attested and fails closed before identity reads or config writes',async()=>{
   assert.match(code,/'worker-waypoint-zoom\.js':'5edbb603b7454d521a55b26a55b5bf39e6c78a9111625d93b80fa9dd4805d40d'/);
   for(const options of [{changedFile:'worker-waypoint-zoom.js'},{missingFile:'worker-waypoint-zoom.js'}]){
+    const r=await execute(options);assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);assert.equal(r.errors.length,1);
+  }
+});
+
+test('index.html responsive-toolbar dependency is explicitly attested and fails closed before identity reads or config writes',async()=>{
+  assert.ok(code.includes("'index.html':'35fb0b1604007e342b294fc41dd8c1352312eba55bded4a9c252964b58a03da3'"));
+  for(const options of [{changedFile:'index.html'},{missingFile:'index.html'}]){
+    const r=await execute(options);assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);assert.equal(r.errors.length,1);
+  }
+});
+
+test('worker-mobile-layout.js responsive-toolbar dependency is explicitly attested and fails closed before identity reads or config writes',async()=>{
+  assert.ok(code.includes("'worker-mobile-layout.js':'5e76ccbe66d15f93c0dc3beea3d6d850fedbd1bebbd8a4eb9833bf9c5730acad'"));
+  for(const options of [{changedFile:'worker-mobile-layout.js'},{missingFile:'worker-mobile-layout.js'}]){
     const r=await execute(options);assert.equal(r.exitCode,1);assert.equal(r.calls.length,0);assert.equal(r.writes.length,0);assert.equal(r.errors.length,1);
   }
 });

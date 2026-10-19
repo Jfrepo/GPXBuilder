@@ -1,54 +1,63 @@
-# Guarded Development preparation for selection-highlight isolation
+# Guarded Development preparation for responsive toolbar ownership
 
-This five-file preparation pins immutable runtime
-`583badd5be6c760c8824b4ebec1a92f515a35742`. Publication and preparation CI do not
+This six-file preparation pins immutable runtime
+`492f222a7ffa8c1337786b8b699ef5c7f56d54d1`. Publication and preparation CI do not
 authorize or start deployment, merge, migration, private configuration changes,
 live tests, or a PR-description edit.
 
 ## Current versus proposed state
 
-Development currently runs `ecc776998a6ae1cbca92b92714e42a74cff6c9f1`, Worker
-version `060d5646-144f-4e5f-842c-a718ec0eab78`, from the verified
-[user-started deployment](https://github.com/Jfrepo/GPXBuilder/actions/runs/39166337889).
+Development currently runs `583badd5be6c760c8824b4ebec1a92f515a35742`, Worker
+version `ed770bc6-bc42-4f5b-abe3-8c9ae5957c10`, from the verified
+[user-started deployment](https://github.com/Jfrepo/GPXBuilder/actions/runs/39212038703).
 The existing ownership harness and private identifier bindings remain present.
 Do not recreate baseline records, change sign-ins, or clear application storage.
 
-The proposed runtime separates temporary selection highlighting from saved
-track visibility. Explicit Show and Show-all changes still persist. Its exact
-published tree is `64db35e113811ddf11ee75226d0e2faf9981af6f`.
-[Runtime CI 39190188595](https://github.com/Jfrepo/GPXBuilder/actions/runs/39190188595)
-independently passed **362 source checks and 81 Chromium test nodes**, zero
+The proposed runtime gives the existing toolbar one responsive placement owner,
+keeps the mobile ribbon under the dock, and safely checks fallback anchors. It
+corrects repeated-narrow-resize exceptions and cold-desktop mobile initialization
+without changing saved track visibility or persistence. Its exact published tree
+is `96d406cbca0e9c7bbcd3a8770d7931638d073655`.
+[Runtime CI 39246193094](https://github.com/Jfrepo/GPXBuilder/actions/runs/39246193094)
+independently passed **375 source checks and 83 Chromium test nodes**, zero
 failures, cancellations or skips, on attempt 1. Both jobs checked out merge
-`a6f6bd13fab32cd1c56db1c483b4baf397450651`, whose tree equals the reviewed head.
-All 17 new browser cases executed. Fourteen separate independent emitted-client
-regressions passed against the correction and failed their preservation
-assertions against the older code; these are not added to the CI totals.
+`ef3ea103ffde12e49dbddeedad6ece4d7faf93bd`, whose tree equals the reviewed head.
+Both new full-page toolbar cases executed. The 12 new emitted source cases
+produce 10 failures and two passing controls against the prior runtime; they
+are included in the 375 total, not additional tests. Eight separate independent
+responsive-layout checks passed the correction and failed the old behavior;
+base-only controls passed both versions and are not added to CI totals.
 
-These checks use isolated fixtures. They do not establish physical-pointer
-behavior, real map-provider performance, live selection acceptance, or the
-cause of the previously observed visibility-only live write. The rendering
-module is shared by Development and Production import chains, but this
-preparation deploys neither and does not establish Production readiness.
+These checks use isolated fixtures. Native browser DOM, viewport events,
+IndexedDB and WebCrypto execute, but remote APIs and map-provider behavior are
+substituted. Physical-pointer targets, mobile swipe/overflow, real map-provider
+performance and live toolbar/reload acceptance remain separate. The original
+live user action sequence is not established. Both changed application files
+are shared with the Production composition, but this preparation deploys neither
+and does not establish Production readiness. No favicon or Maps-loader fix is
+included.
 
-## Exact five-file preparation
+## Exact six-file preparation
 
 1. `.github/workflows/cloudflare-dev.yml`: update only the two fixed
-   checkout/assertion values and add the rendering dependency's eighth hash.
-   The full pinned source command stays byte-identical.
+   checkout/assertion values and add index/mobile dependencies' ninth and tenth
+   hashes. The full pinned source command stays byte-identical.
 2. `tests/deployment-guard.test.cjs`: select the new immutable pin and exact
-   rendering fixture; prove changed/missing rendering bytes fail before any
-   API call or runner-local configuration write.
+   fixtures; prove changed/missing index/mobile bytes fail before any API call
+   or runner-local configuration write.
 3. `tests/workflow-boundaries.test.cjs`: update only the reviewed manual-job
    byte hash and its descriptive label. All other boundary assertions remain.
-4. `tests/fixtures/reviewed-selection-highlight-583badd5.txt`: the exact already
-   published `worker-waypoint-zoom.js` bytes, not a runtime import.
-5. This document.
+4. `tests/fixtures/reviewed-toolbar-index-492f222a.txt`: exact published
+   `index.html` bytes, not a runtime import.
+5. `tests/fixtures/reviewed-mobile-layout-492f222a.txt`: exact published
+   `worker-mobile-layout.js` bytes, not a runtime import.
+6. This document.
 
-All seven prior hashes and all prior fixtures remain unchanged. No application
+All eight prior hashes and all prior fixtures remain unchanged. No application
 source, committed Wrangler configuration, Production workflow, permission,
 event trigger, database schema, or private binding value changes here.
 
-## Eight integrity attestations
+## Ten integrity attestations
 
 | File | SHA-256 |
 |---|---|
@@ -60,6 +69,8 @@ event trigger, database schema, or private binding value changes here.
 | `worker-request-cadence.js` | `66679a8340c33f53b85dfc27823c461cb720e900c5c5c2c08ac453346438f53e` |
 | `worker-owner-qualification.js` | `8c1f2f39458a71cc155b96c5a2ace2abf0b638e2c0b2ece5613d43410d89ebd5` |
 | `worker-waypoint-zoom.js` | `5edbb603b7454d521a55b26a55b5bf39e6c78a9111625d93b80fa9dd4805d40d` |
+| `index.html` | `35fb0b1604007e342b294fc41dd8c1352312eba55bded4a9c252964b58a03da3` |
+| `worker-mobile-layout.js` | `5e76ccbe66d15f93c0dc3beea3d6d850fedbd1bebbd8a4eb9833bf9c5730acad` |
 
 The immutable checkout fixes all imported dependency bytes. These hashes
 additionally attest named safety-critical files. Missing or changed attested
@@ -90,32 +101,34 @@ Development safeguards remain byte-identical.
 
 ## Pinned runtime checks versus selected preparation checks
 
-A later approved manual run checks out **583badd5** and reruns its **362** source
+A later approved manual run checks out **492f222a** and reruns its **375** source
 checks, followed by a clean diff assertion. Its historical guard tests exercise
-the earlier ecc-pinned workflow stored in that commit, not the newly selected
+the earlier 583badd5-pinned workflow stored in that commit, not the newly selected
 workflow definition.
 
 The selected preparation is tested separately. Local selected-guard and
-workflow-boundary tests pass **53/53** (20 guard checks plus 33 boundary checks).
-The full local preparation command passes **363/363**, zero failures,
-cancellations or skips. The additional test is the selected rendering-dependency
-guard. Exact-head preparation CI and independent verification are required before
-any manual run instructions; local results do not imply hosted browser completion.
+workflow-boundary tests pass **55/55** (22 guard checks plus 33 boundary checks).
+The full local preparation command passes **377/377**, zero failures,
+cancellations or skips. The two additional tests cover the newly attested
+responsive-toolbar dependencies. Exact-head preparation CI and independent
+verification are required before any manual run instructions; local results do
+not imply hosted browser completion.
 
 ## Separate Cloudflare build uncertainty
 
-The separate `Workers Builds: mancardo` check **117861137681** on the runtime
-commit failed with null diagnostic text and zero annotations. Successful Actions
-do not erase it. A read-only attempt to inspect its exact dashboard build reached
-a Cloudflare sign-in page; no new login or build retry was performed. Its cause
-and whether it reached a deployment phase remain unverified. A `/production/`
-dashboard path alone proves neither a deployment attempt nor a live change.
-This uncertainty remains a deployment hold until separately resolved; this
-preparation and its CI are not clearance to proceed.
+The separate `Workers Builds: mancardo` check **118038661203** on runtime 492f222a
+failed with null diagnostic text and zero annotations. Successful Actions do not
+erase it. The exact new build is `f759533d-1feb-420e-906a-bfb74cbeb824`.
+Only its GitHub metadata has been inspected; its dashboard log, command, cause
+and whether it reached upload or deployment remain unverified. Prior builds'
+missing-preview-configuration diagnosis does not establish this new build's
+cause. A `/production/` dashboard path alone proves neither a deployment attempt
+nor a live change. No login, build retry or preview configuration change is
+included. This separate uncertainty must be assessed before deployment clearance.
 
 ## Later user-started run, only after separate clearance and approval
 
-After resolving the separate build uncertainty and verifying preparation CI:
+After assessing the separate build uncertainty and verifying preparation CI:
 
 1. Obtain explicit approval for Development deployment. Preparation approval is
    not deployment approval. Retain the existing private bindings without new
@@ -124,16 +137,17 @@ After resolving the separate build uncertainty and verifying preparation CI:
    select `chatgpt/mancardo-delete-qualification`, and start a **NEW Run workflow**.
    Do not use Re-run jobs, which retains the old selected workflow and pin.
 3. Confirm ordinary `deploy` is skipped and only `deploy-reviewed-candidate`
-   executes at exact checkout `583badd5be6c760c8824b4ebec1a92f515a35742`.
-4. Verify 362 pinned checks, all eight hashes, the real Worker/D1 identity gate,
+   executes at exact checkout `492f222a7ffa8c1337786b8b699ef5c7f56d54d1`.
+4. Verify 375 pinned checks, all ten hashes, the real Worker/D1 identity gate,
    redacted retained bindings and a successful version receipt. A passing
    preflight is not deployment success.
 5. Preserve unsynced work before safely refreshing Development clients. Do not
    clear storage, switch a populated workspace, or touch main Production.
 
-Live selection, note, sharing, account-switch, multi-tab/durability, hung-request
-and map/device checks remain separate from deployment. Previously bounded live
-passes do not qualify all of these gates. No new record creation, edit, delete,
-Shared publication or cleanup is authorized by this preparation. Irreversible
-deletion requires named action-time confirmation. PR #80 stays draft and unmerged;
-Production composition, backup/restore and release acceptance remain on hold.
+Live toolbar, selection, note, sharing, account-switch, multi-tab/durability,
+hung-request and map/device checks remain separate from deployment. Previously
+bounded live passes do not qualify all of these gates. No new record creation,
+edit, delete, Shared publication or cleanup is authorized by this preparation.
+Irreversible deletion requires named action-time confirmation. PR #80 stays draft
+and unmerged; Production composition, narrow asset packaging, backup/restore and
+release acceptance remain on hold.

@@ -1,0 +1,1950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ManCardo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --surface-2:#e3e7ea; --border:#c9ced3;
+  --text:#1a2226; --text-muted:#5c6670;
+  --accent:#1f6f6c; --accent-contrast:#ffffff;
+  --danger:#c1442d; --warn:#b7791e; --good:#2f7d4f;
+  --line-track:#2563a8; --line-selected:#c1442d;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#12171b; --surface:#1b2227; --surface-2:#232b31; --border:#333d44;
+    --text:#e7ebee; --text-muted:#9aa5ac;
+    --accent:#3fa39e; --accent-contrast:#08201f;
+    --danger:#e2694f; --warn:#d99a3d; --good:#4fae76;
+    --line-track:#5b9bd9; --line-selected:#e2694f;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box;}
+html,body{height:100%; margin:0;}
+body{background:var(--bg); color:var(--text); font-family:'Source Sans 3',system-ui,sans-serif;}
+.hidden{display:none!important;}
+h1,h2,h3,.disp{font-family:'Barlow Condensed',sans-serif; font-weight:700; letter-spacing:.01em;}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace; font-variant-numeric:tabular-nums;}
+.label-caps{font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-muted);}
+button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
+.app{display:flex; flex-direction:column; height:100vh;}
+.topbar{display:flex; align-items:center; gap:.6rem; padding:.55rem .8rem; background:var(--surface); border-bottom:1px solid var(--border); position:relative; z-index:900;}
+.brand{display:flex; align-items:baseline; gap:.4rem; margin-right:auto;}
+.brand .name{font-size:1.35rem; line-height:1;}
+.brand .tag{font-size:.68rem; color:var(--text-muted); letter-spacing:.04em;}
+.icon-btn{display:inline-flex; align-items:center; justify-content:center; gap:.35rem; border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:3px; padding:.5rem .65rem; min-height:38px; font-size:.85rem;}
+.icon-btn:hover{border-color:var(--accent);}
+.icon-btn.primary{background:var(--accent); color:var(--accent-contrast); border-color:var(--accent); font-weight:600;}
+.icon-btn.danger{background:rgba(193,68,45,.10);color:var(--danger);border-color:var(--danger);font-weight:600;}
+.icon-btn.danger.confirming{background:var(--danger);color:#fff;}
+.icon-btn:disabled{opacity:1;cursor:not-allowed;background:var(--surface-2);color:var(--text-muted);border-color:var(--border);}
+.icon-btn.danger:disabled{background:var(--surface-2);color:var(--text-muted);border-color:var(--border);}
+.local-chip{display:flex; align-items:center; gap:.35rem; font-size:.72rem; padding:.3rem .55rem; border-radius:20px; background:var(--surface-2); color:var(--text-muted);}
+.layout{display:flex; flex:1; min-height:0; position:relative;}
+.drawer{width:280px; flex:none; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0;}
+.drawer-head{padding:.8rem .9rem .5rem; display:flex; align-items:center; justify-content:space-between;}
+.track-list{overflow-y:auto;flex:1;padding:.18rem .3rem;}
+.library-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:.38rem .55rem;border-bottom:1px solid var(--border)}
+.library-tab{min-height:32px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font:700 .74rem 'Source Sans 3',sans-serif;cursor:pointer}
+.library-tab.on{background:var(--accent);border-color:var(--accent);color:var(--accent-contrast)}
+.shared-toolbar{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:.38rem .55rem;border-bottom:1px solid var(--border);font-size:.68rem;color:var(--text-muted)}
+.shared-item{padding:.42rem .5rem;border-bottom:1px solid var(--border)}.shared-item.active{background:var(--surface-2);box-shadow:inset 4px 0 0 var(--accent)}
+.shared-item-name{font-weight:700;font-size:.8rem;line-height:1.15}
+.shared-item-meta{font-size:.66rem;color:var(--text-muted);margin:.18rem 0 .32rem}
+.shared-item-actions{display:flex;gap:5px}.shared-item-actions .icon-btn{min-height:28px;padding:.2rem .42rem;font-size:.68rem}
+.shared-readonly{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+
+.track-item{display:flex;flex-direction:column;gap:.05rem;padding:.28rem .45rem;border-radius:4px;border:1px solid transparent;margin-bottom:.06rem;}
+.track-item:hover{background:var(--surface-2);}
+.track-item.active{border-color:var(--accent);background:var(--surface-2);box-shadow:inset 4px 0 0 var(--accent)}
+.track-hit-popup{font:600 12px/1.3 'Source Sans 3',sans-serif;min-width:150px}.track-hit-popup .hit-title{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#68737d;margin-bottom:4px}.track-hit-option{display:flex;width:100%;align-items:center;gap:7px;border:0;background:transparent;padding:5px 2px;text-align:left;cursor:pointer;color:#222}.track-hit-option:hover{background:#f1f4f6}.track-hit-swatch{width:10px;height:10px;border-radius:50%;flex:none;border:1px solid rgba(0,0,0,.25)}
+.track-item .row1{display:flex; align-items:center; gap:.4rem;}
+.type-dot{width:9px; height:9px; border-radius:2px; flex:none;}
+.type-dot.track{background:var(--line-track);}
+.type-dot.route{background:var(--warn);}
+.track-item .ti-name{font-weight:600; font-size:.92rem; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.track-item .ti-meta{font-size:.68rem;color:var(--text-muted);padding-left:2.05rem;line-height:1.05rem;}.track-row{display:flex;align-items:center;gap:.38rem;min-height:30px}.track-show{width:18px;height:18px;flex:none;margin:0}.track-swatch{width:14px;height:14px;min-height:14px;flex:none;border:1px solid rgba(0,0,0,.35);border-radius:2px;padding:0}.track-more{margin-left:auto;width:26px;height:26px;min-height:26px;padding:0;border:0;background:transparent;color:var(--text);font-size:1.25rem;font-weight:700}.track-menu{display:flex;flex-wrap:wrap;gap:.28rem;padding:.4rem 0 0 2rem}.track-menu button{min-height:30px;padding:.25rem .48rem;font-size:.72rem;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:3px}.track-menu button.danger{color:var(--danger);border-color:var(--danger)}.track-palette{display:flex;gap:.38rem;padding:.38rem 0 0 2rem}.track-palette button{width:24px;height:24px;min-height:24px;border:2px solid rgba(0,0,0,.22);border-radius:3px;padding:0}.track-palette button.on{outline:2px solid var(--text);outline-offset:1px}
+.empty-note{padding:1rem; font-size:.85rem; color:var(--text-muted);}
+.main{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
+.map-wrap{flex:1; position:relative; min-height:0;}
+#mapDiv{width:100%; height:100%;}
+.leaflet-control-attribution{display:none!important;}
+.mode-banner{position:absolute; left:50%; top:.8rem; transform:translateX(-50%); background:var(--accent); color:var(--accent-contrast); padding:.4rem .8rem; border-radius:20px; font-size:.8rem; font-weight:600; z-index:750; display:flex; gap:.5rem; align-items:center;}
+.layer-toggle{position:absolute; right:.7rem; top:.8rem; z-index:750; background:var(--surface); border:1px solid var(--border); border-radius:4px; overflow:hidden; display:flex;}
+.layer-toggle button{border:none; background:var(--surface); padding:.4rem .7rem; font-size:.78rem; color:var(--text);}
+.layer-toggle button.on{background:var(--accent); color:var(--accent-contrast);}
+.overlay-panel{position:absolute;left:4.35rem;top:.8rem;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.45rem .55rem;display:flex;align-items:center;gap:.45rem;font-size:.76rem;box-shadow:0 1px 5px rgba(0,0,0,.12)}
+.overlay-panel{flex-direction:column;align-items:stretch}.overlay-row{display:grid;grid-template-columns:92px 140px;align-items:center;gap:.45rem}.overlay-row label{white-space:nowrap}.overlay-panel input[type=range]{width:140px}.radar-credit{font-size:.62rem;color:var(--text-muted);line-height:1.15}.radar-credit a{color:var(--accent)}.radar-controls{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}.radar-controls.hidden{display:none}.radar-controls select{font:600 .68rem 'Source Sans 3',sans-serif;max-width:170px;padding:.2rem}.radar-controls .icon-btn{min-height:25px;padding:.18rem .4rem;font-size:.68rem}.radar-controls #radarTime{font:600 .66rem 'IBM Plex Mono',monospace;color:var(--text-muted);min-width:58px}.overlay-panel.hidden{display:none}.overlay-control-btn{background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:4px;width:42px;height:34px;line-height:30px;text-align:center;font:700 18px/30px 'Source Sans 3',sans-serif;color:#333;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.25)}.overlay-control-btn.on{background:var(--accent);color:var(--accent-contrast)}.slope-legend{position:absolute;left:.7rem;bottom:.7rem;z-index:760;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.4rem .5rem;font-size:.68rem;line-height:1.35}
+.slope-ramp{width:150px;height:10px;margin:.2rem 0;background:linear-gradient(90deg,#888 0%,#ddd35a 20%,#eea044 45%,#d45b32 70%,#7b2d20 100%)}.contour-elev-label{background:transparent!important;border:0!important}.contour-elev-label span{display:inline-block;background:rgba(255,250,235,.9);color:#5b3518;border:1px solid rgba(91,53,24,.25);border-radius:2px;padding:0 2px;font:700 10px/13px 'IBM Plex Mono',monospace;white-space:nowrap}
+@media(max-width:700px){.overlay-panel{left:4.35rem;top:.8rem}.overlay-row{grid-template-columns:88px 90px}.overlay-panel input[type=range]{width:90px}.slope-legend{font-size:.62rem}.slope-ramp{width:120px}}
+.dock{background:var(--surface); border-top:1px solid var(--border); padding:.7rem .8rem;}
+.stats-row{display:flex; flex-wrap:wrap; gap:1.1rem; margin-bottom:.6rem;}
+.stat{display:flex; flex-direction:column; gap:.05rem; min-width:64px;}
+.stat .v{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; font-size:1.05rem; font-weight:500;}
+.stat .k{font-size:.66rem; letter-spacing:.07em; text-transform:uppercase; color:var(--text-muted);}
+.toolbar{display:flex; flex-wrap:wrap; gap:.4rem;}
+.toolbar .grp{display:flex; gap:.3rem; padding-right:.5rem; margin-right:.2rem; border-right:1px solid var(--border);}
+.toolbar .grp:last-child{border-right:none;}
+.points-toggle{margin-top:.5rem; font-size:.78rem; color:var(--accent); background:none; border:none; padding:.2rem 0; text-decoration:underline;}
+.points-table-wrap{max-height:160px; overflow:auto; margin-top:.4rem; border:1px solid var(--border); border-radius:4px;}
+table.points{width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:.74rem;}
+table.points th{position:sticky; top:0; background:var(--surface-2); text-align:left; padding:.3rem .5rem; font-family:'Source Sans 3',sans-serif; font-weight:600;}
+table.points td{padding:.25rem .5rem; border-top:1px solid var(--border);}
+table.points tr.sel{background:var(--surface-2); outline:1px solid var(--accent);}
+table.points tr:hover{background:var(--surface-2); cursor:pointer;}
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; z-index:2000; padding:1rem;}
+.dialog{background:var(--surface); border-radius:6px; padding:1.1rem; width:100%; max-width:380px; border:1px solid var(--border);}
+.dialog h3{margin:0 0 .7rem; font-size:1.15rem;}
+.dialog input[type=text]{width:100%; padding:.55rem .6rem; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text); font-size:.95rem; margin-bottom:.7rem;}
+.dialog .btnrow{display:flex; gap:.5rem; justify-content:flex-end;}
+.import-list{max-height:220px; overflow:auto; margin:.6rem 0;}
+.import-row{display:flex; align-items:center; gap:.5rem; padding:.4rem 0; border-bottom:1px solid var(--border); font-size:.85rem;}
+.import-row .im-name{flex:1;}
+.help-text{font-size:.78rem; color:var(--text-muted); margin-top:.4rem; line-height:1.4;}
+.drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:800;}
+@media (max-width: 899px){
+  .drawer{position:fixed; left:0; top:0; bottom:0; z-index:850; transform:translateX(-100%); transition:transform .2s ease; box-shadow:2px 0 12px rgba(0,0,0,.2);}
+  .drawer.open{transform:translateX(0);}
+  .brand .tag{display:none;}
+}
+@media (min-width: 900px){ .drawer-close, .hamburger{display:none;} }
+.tiny{font-size:.7rem;}
+.leaflet-marker-sel{filter:drop-shadow(0 0 2px var(--line-selected));}
+.mobile-library-toggle{display:none}
+@media(max-width:899px){
+ .mobile-library-toggle{display:flex;position:absolute;left:10px;top:10px;z-index:910;width:46px;height:46px;min-width:46px;align-items:center;justify-content:center;border:1px solid #c8cdd2;border-radius:6px;background:#fff;color:#222;box-shadow:0 1px 6px rgba(0,0,0,.3);font:700 24px/1 sans-serif;padding:0}
+ .drawer.open~.main{}
+ .drawer-close{display:none!important}
+ .leaflet-top.leaflet-left{top:58px}
+}
+/* ---------- Mobile UI v1.1: 80% map / compact controls ---------- */
+@media (max-width:767px){
+ .topbar{min-height:48px;height:48px;padding:max(.2rem,env(safe-area-inset-top)) .45rem .2rem}
+ .brand .name{font-size:1.18rem}.hamburger{width:38px;min-width:38px;height:38px}
+ .local-chip{width:26px!important;height:26px!important;min-width:26px!important;max-width:26px!important;padding:0!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:0!important;overflow:hidden!important;white-space:nowrap!important;flex:0 0 26px!important}
+ .local-chip-label{display:none!important}
+ .local-chip-icon{display:block!important;font-size:13px!important;line-height:1!important;width:16px;text-align:center}
+ .main{display:flex;flex-direction:column;height:calc(100dvh - 48px)}
+ .map-wrap{flex:0 0 80%;height:80%;min-height:0}
+ .dock{flex:0 0 20%;height:20%;max-height:20%;box-sizing:border-box;padding:.25rem .4rem calc(.25rem + env(safe-area-inset-bottom));overflow-y:auto}
+ .stats-row{grid-template-columns:1.7fr repeat(3,1fr);gap:.12rem .35rem;margin:0 0 .18rem}
+ .stat:first-child{grid-column:auto}.stat .k{font-size:.52rem;line-height:1}.stat .v{font-size:.78rem;line-height:1.05}.stat:first-child .v{font-size:.82rem}
+ .mobile-actions{grid-template-columns:repeat(3,1fr);gap:.25rem;margin:0}
+ .mobile-actions .icon-btn{min-height:34px;height:34px;padding:.15rem .2rem;font-size:.76rem}
+ .toolbar{grid-template-columns:repeat(4,1fr);gap:.2rem;margin-top:.2rem}
+ .toolbar .icon-btn{min-height:38px;height:38px;padding:.18rem .35rem;font-size:.76rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-width:1.5px}
+ .points-toggle{min-height:28px;height:28px;margin-top:.18rem;padding:.1rem .3rem;font-size:.7rem}
+ .points-table-wrap{max-height:22dvh}
+}
+
+/* Track library compact override */
+.track-colours{display:none!important}
+.track-list{padding:0!important}
+.track-item{padding:.18rem .45rem!important;margin:0!important;gap:0!important;border-radius:0!important;min-height:0!important}
+.track-row{min-height:28px!important;height:28px!important}
+.track-item .ti-meta{line-height:14px!important;margin:0!important;padding:0 0 .12rem 2.05rem!important}
+.track-more{height:26px!important;min-height:26px!important}
+.track-item:not(.active){border-color:transparent!important}
+
+
+/* ---------- Desktop right editing toolbar prototype ---------- */
+@media (min-width:768px){
+  .main{position:relative}
+  .map-wrap{flex:1;min-height:0}
+  .dock{padding:.32rem .75rem .25rem;border-top:1px solid var(--border);flex:none}
+  .stats-row{display:flex;align-items:center;gap:1.15rem;flex-wrap:nowrap;margin:0}
+  .stat{min-width:58px;gap:0}
+  .stat .v{font-size:.9rem;line-height:1.05}
+  .stat .k{font-size:.58rem;line-height:1.05}
+  .toolbar{position:absolute;right:.7rem;top:4.2rem;width:62px;z-index:740;display:flex;flex-direction:column;gap:.28rem;padding:.38rem;background:rgba(255,255,255,.97);border:1px solid var(--border);border-radius:5px;box-shadow:0 2px 8px rgba(0,0,0,.16);overflow:visible}
+  .toolbar .grp{display:flex;flex-direction:column;gap:.24rem;padding:0 0 .28rem;margin:0;border-right:0;border-bottom:1px solid var(--border)}
+  .toolbar .grp:last-child{border-bottom:0;padding-bottom:0}
+  .toolbar .icon-btn{position:relative;width:100%;height:40px;min-height:40px;padding:0;font-size:1.35rem;font-weight:700;line-height:1;color:#111827;background:#fff;border-color:#8b98a3;overflow:visible}
+  .toolbar .tool-svg{width:28px;height:28px;display:block;margin:auto}
+  .toolbar .reverse-svg{width:30px;height:30px}
+  .toolbar .undo-redo-svg{width:30px;height:30px}
+  .toolbar .icon-btn.danger{color:#8f2618;background:#fff4f1;border-color:#b8685b}
+  .toolbar .icon-btn:disabled{color:#4b5563;background:#e5e7eb;border-color:#9ca3af;font-weight:700}
+  .toolbar .tool-icon::after{content:attr(data-tooltip);position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%);z-index:3000;display:none;white-space:nowrap;padding:.38rem .55rem;border-radius:4px;background:#111827;color:#fff;font:700 .8rem/1.2 'Source Sans 3',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.28);pointer-events:none}
+  .toolbar .tool-icon::before{content:'';position:absolute;right:calc(100% + 2px);top:50%;transform:translateY(-50%);z-index:3001;display:none;border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:8px solid #111827;pointer-events:none}
+  .toolbar .tool-icon:hover::after,.toolbar .tool-icon:hover::before,.toolbar .tool-icon:focus-visible::after,.toolbar .tool-icon:focus-visible::before{display:block}
+  .points-toggle{margin-top:.18rem;padding:.1rem 0;font-size:.72rem}
+  .points-table-wrap{max-height:160px;margin-top:.2rem}
+  .slope-legend{right:9.7rem;left:auto}
+}
+@media (prefers-color-scheme:dark) and (min-width:768px){
+  .toolbar{background:rgba(27,34,39,.95)}
+}
+
+@media (min-width:768px){
+ #desktopToolbarHost{position:absolute;right:.7rem;top:4.2rem;width:62px;z-index:740;pointer-events:none;overflow:visible}
+ #desktopToolbarHost .toolbar{position:static!important;right:auto!important;top:auto!important;bottom:auto!important;width:100%!important;pointer-events:auto;overflow:visible}
+}
+@media (max-width:767px){#desktopToolbarHost{display:none}}
+
+.draft-badge{display:inline-flex;align-items:center;justify-content:center;color:var(--danger);font:700 .72rem 'IBM Plex Mono',monospace;margin-left:.12rem;flex:none}
+.track-note{padding:.28rem .4rem .35rem 2.05rem}
+.track-note textarea{width:100%;min-height:48px;resize:vertical;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--text);padding:.35rem .45rem;font:500 .76rem 'Source Sans 3',sans-serif}
+.track-note-meta{font-size:.62rem;color:var(--text-muted);text-align:right;margin-top:.1rem}
+
+.fuel-control-btn{display:block;width:34px;height:34px;border:0;border-radius:3px;background:#fff;color:#333;box-shadow:0 1px 5px rgba(0,0,0,.35);font:700 11px/34px 'Source Sans 3',sans-serif;text-align:center;cursor:pointer}
+.fuel-control-btn.on{background:#b91c1c;color:#fff}
+.fuel-control-btn.loading{opacity:.65}
+.fuel-marker{background:#b91c1c;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45);width:14px;height:14px}
+.fuel-direct{display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:5px 8px;border-radius:16px;background:#2563a8;color:#fff!important;text-decoration:none!important;font-weight:700;font-size:11px}.fuel-direct svg{width:14px;height:14px;fill:currentColor}.fuel-control-btn.error{background:#b91c1c!important;color:#fff!important}
+.fuel-popup{font:500 12px/1.35 'Source Sans 3',sans-serif;min-width:180px}.fuel-popup strong{font-size:13px}.fuel-popup .muted{color:#68737d;font-size:11px}
+.location-controls{display:flex;flex-direction:column;gap:4px;margin-bottom:22px!important}
+.location-control-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:0;border-radius:50%;background:#fff;color:#333;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:pointer;padding:0}
+.location-control-btn svg{width:18px;height:18px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.location-control-btn .nav-fill{fill:currentColor;stroke:currentColor}
+.location-control-btn.on{background:#2563a8;color:#fff}
+.location-control-btn.error{background:#b91c1c;color:#fff}
+.user-location-dot{width:16px;height:16px;border:3px solid #fff;border-radius:50%;background:#2563a8;box-shadow:0 1px 5px rgba(0,0,0,.55)}
+.user-heading-arrow{width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:18px solid #2563a8;filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));transform-origin:50% 70%}
+#mapDiv.heading-up .leaflet-map-pane{will-change:transform}
+@media(max-width:767px){.location-control-btn{width:32px;height:32px}.location-controls{margin-bottom:18px!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <button class="icon-btn hamburger" id="hamburgerBtn" title="Library">&#9776;</button>
+    <div class="brand">
+      <span class="name disp">ManCardo</span>
+      <span class="tag">Local edition &middot; real OpenStreetMap tiles</span>
+    </div>
+    <span class="local-chip" title="Saved on this device only" aria-label="Saved on this device only"><span class="local-chip-icon" aria-hidden="true">&#128190;</span><span class="local-chip-label">saved on this device only</span></span>
+    <input type="file" id="fileInput" accept=".gpx" multiple class="hidden">
+    <button class="icon-btn" id="importBtn">Import</button>
+    <button class="icon-btn primary" id="saveBtn">Save</button>
+  </div>
+
+  <div class="layout">
+    <button class="mobile-library-toggle" id="mobileLibraryToggle" type="button" aria-label="Open track library" title="Track library">&#9776;</button>
+    <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
+    <div class="drawer" id="drawer">
+      <div class="drawer-head">
+        <span class="label-caps">Library</span>
+        <div style="display:flex; gap:.3rem;">
+          <button class="icon-btn" id="newRouteBtn">+ Route</button>
+          <button class="icon-btn" id="exportSelectedBtn" title="Export all selected tracks">Export Selected</button>
+          <button class="icon-btn danger" id="deleteSelectedBtn" title="Delete all selected tracks">Delete</button>
+          <button class="icon-btn drawer-close" id="drawerCloseBtn">&times;</button>
+        </div>
+      </div>
+      <div class="library-tabs"><button class="library-tab on" id="myLibraryTab" type="button">My Library</button><button class="library-tab" id="sharedLibraryTab" type="button">Shared Library</button></div>
+      <div id="myLibraryPanel">
+        <label id="selectAllWrap" style="display:flex;align-items:center;gap:.45rem;padding:.45rem .6rem;border-bottom:1px solid var(--border);font-size:.78rem;font-weight:600;"><input type="checkbox" id="selectAllTracks"> <span>Select / Deselect all tracks</span></label>
+        <div class="track-list" id="trackList"><div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div></div>
+      </div>
+      <div id="sharedLibraryPanel" class="hidden">
+        <div class="shared-toolbar"><label>User <select id="sharedUserSelect" title="Shared Library identity"><option value="Justin">Justin</option><option value="Paul">Paul</option></select></label><span class="shared-readonly">Read only</span><button class="icon-btn" id="refreshSharedBtn" type="button">Refresh</button></div>
+        <div class="track-list" id="sharedTrackList"><div class="empty-note">Loading shared tracks…</div></div>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="map-wrap" id="mapWrap">
+        <div class="mode-banner hidden" id="modeBanner">
+          <span>Drawing new route &mdash; click the map to add points</span>
+          <button class="icon-btn" id="finishDrawBtn" style="min-height:26px; padding:.2rem .5rem;">Done</button>
+        </div>
+        <div class="layer-toggle">
+          <button id="layerStreetsBtn" class="on">Streets</button>
+          <button id="layerTerrainBtn">Terrain</button>
+        </div>
+        <div class="overlay-panel hidden" id="overlayPanel">
+          <div class="overlay-row">
+            <label><input type="checkbox" id="slopeOverlayToggle"> Contours</label>
+            <input type="range" id="slopeReveal" min="0" max="100" value="50" title="Contour opacity">
+          </div>
+          <div class="overlay-row">
+            <label><input type="checkbox" id="radarOverlayToggle"> BOM Rain</label>
+            <input type="range" id="radarOpacity" min="0" max="100" value="65" title="Rain radar opacity">
+          </div>
+          <div class="radar-credit hidden" id="radarCredit">Weather data © Bureau of Meteorology</div>
+          <div class="radar-controls hidden" id="radarControls">
+            <select id="radarMode" title="BOM rain layer">
+              <option value="observed">Observed radar</option>
+              <option value="forecast">Forecast rain 50% · 3hr</option>
+              <option value="chance">Chance of rain · 3hr</option>
+            </select>
+            <button class="icon-btn" id="radarPrevBtn" type="button" title="Previous frame">◀</button>
+            <button class="icon-btn" id="radarPlayBtn" type="button" title="Play / pause">Play</button>
+            <button class="icon-btn" id="radarNextBtn" type="button" title="Next frame">▶</button>
+            <span id="radarTime">—</span>
+          </div>
+        </div>
+        <div class="slope-legend hidden" id="slopeLegend"><strong>NSW contours</strong><br><span>Labels = elevation (m)<br>Closer lines = steeper terrain</span></div>
+        <div id="desktopToolbarHost"></div>
+        <div id="mapDiv"></div>
+      </div>
+
+      <div class="dock">
+        <div class="stats-row">
+          <div class="stat"><span class="v" id="statName">&mdash;</span><span class="k">Name</span></div>
+          <div class="stat"><span class="v" id="statDist">0.0 km</span><span class="k">Distance</span></div>
+          <div class="stat"><span class="v" id="statPoints">0</span><span class="k">Points</span></div>
+          <div class="stat"><span class="v" id="statSegs">0</span><span class="k">Segments</span></div>
+          <div class="stat"><span class="v" id="statElev">&mdash;</span><span class="k">Ascent</span></div>
+          <div class="stat"><span class="v" id="statSel">&mdash;</span><span class="k">Selected point</span></div>
+        </div>
+        <div class="toolbar">
+          <div class="grp">
+            <button class="icon-btn tool-icon" id="splitAfterBtn" disabled aria-label="Split at point" data-tooltip="Split at point" title="Split at point">✂</button>
+            <button class="icon-btn tool-icon" id="joinNextBtn" disabled aria-label="Join next" data-tooltip="Join next" title="Join next"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M8 6h11c4 0 6 2 6 5s-2 5-6 5H11c-4 0-6 2-6 5s2 5 6 5h7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 22l7 4-7 4z" fill="currentColor"/><path d="M6 3.8c-2.4 0-4.2 1.8-4.2 4.1 0 3.1 4.2 7.2 4.2 7.2s4.2-4.1 4.2-7.2c0-2.3-1.8-4.1-4.2-4.1zm0 2.2a1.9 1.9 0 1 1 0 3.8A1.9 1.9 0 0 1 6 6z" fill="currentColor"/><path d="M27 20c-2.4 0-4.2 1.8-4.2 4.1 0 3.1 4.2 7.2 4.2 7.2s4.2-4.1 4.2-7.2c0-2.3-1.8-4.1-4.2-4.1zm0 2.2a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8z" fill="currentColor"/></svg></button>
+            <button class="icon-btn tool-icon" id="joinToPointBtn" disabled aria-label="Join To Point" data-tooltip="Join To Point" title="Join To Point"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M6.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/><rect x="12.5" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><rect x="18.2" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><rect x="23.9" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><path d="M25.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/></svg></button>
+            <button class="icon-btn tool-icon" id="movePointBtn" disabled aria-label="Move point" data-tooltip="Move point" title="Move point">✥</button>
+            <button class="icon-btn tool-icon" id="extendTrackBtn" disabled aria-label="Extend Track" data-tooltip="Extend Track" title="Extend Track"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><rect x="9.2" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><rect x="15.4" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><path d="M25.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/></svg></button>
+            <button class="icon-btn primary hidden tool-icon" id="completeChangeBtn" aria-label="Complete Change" data-tooltip="Complete Change" title="Complete Change">✓</button>
+          </div>
+          <div class="grp">
+            <button class="icon-btn danger tool-icon" id="deletePointBtn" disabled aria-label="Delete point" data-tooltip="Delete point" title="Delete point">⊖</button>
+            <button class="icon-btn danger tool-icon" id="deleteSegBtn" disabled aria-label="Delete segment" data-tooltip="Delete segment" title="Delete segment">⌫</button>
+          </div>
+          <div class="grp">
+            <button class="icon-btn tool-icon" id="reverseBtn" disabled aria-label="Reverse" data-tooltip="Reverse" title="Reverse"><svg class="tool-svg reverse-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 9h18" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M20 5l7 4-7 4z" fill="currentColor"/><path d="M28 23H10" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M12 19l-7 4 7 4z" fill="currentColor"/></svg></button>
+            <button class="icon-btn tool-icon" id="undoBtn" disabled aria-label="Undo" data-tooltip="Undo" title="Undo"><svg class="tool-svg undo-redo-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M13.8 7.2L5.8 13.6l8 6.4v-4.1h4.1c4.8 0 8.1 2.5 8.1 7.4 0 1.4-.2 2.6-.6 3.7 1.8-1.9 2.8-4.5 2.8-7.2 0-6.1-4.7-10.1-10.7-10.1h-3.7V7.2z" fill="currentColor"/></svg></button>
+            <button class="icon-btn tool-icon" id="redoBtn" disabled aria-label="Redo" data-tooltip="Redo" title="Redo"><svg class="tool-svg undo-redo-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M18.2 7.2l8 6.4-8 6.4v-4.1h-4.1c-4.8 0-8.1 2.5-8.1 7.4 0 1.4.2 2.6.6 3.7-1.8-1.9-2.8-4.5-2.8-7.2 0-6.1 4.7-10.1 10.7-10.1h3.7V7.2z" fill="currentColor"/></svg></button>
+          </div>
+          <div class="grp">
+            <button class="icon-btn tool-icon" id="exportBtn" disabled aria-label="Export GPX" data-tooltip="Export GPX" title="Export GPX">⇩</button>
+            <button class="icon-btn danger tool-icon" id="deleteTrackBtn" disabled aria-label="Delete track" data-tooltip="Delete track" title="Delete track">🗑</button>
+          </div>
+        </div>
+        <button class="points-toggle" id="pointsToggle">Show point list</button>
+        <div class="points-table-wrap hidden" id="pointsWrap">
+          <table class="points">
+            <thead><tr><th>#</th><th>Seg</th><th>Lat</th><th>Lon</th><th>Ele (m)</th><th>Dist (km)</th></tr></thead>
+            <tbody id="pointsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="nameOverlay">
+  <div class="dialog">
+    <h3 id="nameDialogTitle">Save to library</h3>
+    <input type="text" id="nameInput" placeholder="e.g. Blue Ridge Loop">
+    <div class="help-text" id="nameHelp"></div>
+    <div class="btnrow">
+      <button class="icon-btn" id="nameCancelBtn">Cancel</button>
+      <button class="icon-btn primary" id="nameSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="importOverlay">
+  <div class="dialog" style="max-width:420px;">
+    <h3>Import from GPX</h3>
+    <div class="help-text">Found the following in your file(s). Pick which ones to add.</div>
+    <div class="import-list" id="importList"></div>
+    <div class="btnrow">
+      <button class="icon-btn" id="importCancelBtn">Cancel</button>
+      <button class="icon-btn primary" id="importConfirmBtn">Add selected</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  if (typeof L === 'undefined') {
+    document.write('<div style="padding:2rem;font-family:sans-serif;max-width:560px;margin:2rem auto;background:#fff3f0;border:1px solid #c1442d;border-radius:6px;color:#1a2226;">'
+      + '<strong>Map library failed to load.</strong><br><br>This file needs an internet connection the first time it opens (it fetches the map engine and tiles from the web). Check your connection and reload the page. If it still fails, your browser or network may be blocking cdnjs.cloudflare.com or tile.openstreetmap.org.'
+      + '</div>');
+  }
+</script>
+<script>
+(function(){
+"use strict";
+
+var STORAGE_KEY = 'switchback_local_tracks_v1';
+var SHARED_USER_KEY = 'mancardo_shared_user_v1';
+var SHARED_API = 'https://api.mancardo.com';
+
+var state = {
+  library: [],
+  sharedLibrary: [],
+  libraryView: 'my',
+  current: null,
+  currentId: null,
+  selection: null,
+  mode: 'view',
+  history: [], future: [],
+  pendingImport: null,
+  extend: null,
+  joinFrom: null,
+  trackMenuId: null,
+  paletteId: null,
+  clipboardTrack: null,
+  noteOpenId: null,
+  splitSiblingId: null,
+  sharedPreview: false,
+  sharedPreviewMeta: null
+};
+
+var els = {};
+["hamburgerBtn","mobileLibraryToggle","drawer","drawerBackdrop","drawerCloseBtn","trackList","sharedTrackList","myLibraryTab","sharedLibraryTab","myLibraryPanel","sharedLibraryPanel","refreshSharedBtn","sharedUserSelect","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
+ "fileInput","importBtn","saveBtn",
+ "mapWrap","desktopToolbarHost","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
+ "statName","statDist","statPoints","statSegs","statElev","statSel",
+ "splitAfterBtn","joinNextBtn","joinToPointBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
+ "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
+ "pointsToggle","pointsWrap","pointsBody",
+ "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
+ "importOverlay","importList","importCancelBtn","importConfirmBtn"
+].forEach(function(id){ els[id] = document.getElementById(id); });
+
+var toolbarEl=document.querySelector('.toolbar');
+var dockEl=document.querySelector('.dock');
+var pointsToggleEl=document.getElementById('pointsToggle');
+function placeEditingToolbar(){
+  if(!toolbarEl||!dockEl||!els.desktopToolbarHost)return;
+  if(window.matchMedia('(min-width:768px)').matches){
+    if(toolbarEl.parentNode!==els.desktopToolbarHost)els.desktopToolbarHost.appendChild(toolbarEl);
+  }else{
+    // Mobile layout owns a scrolling viewport after installation. The point
+    // toggle may already live in the stats row, so it is not always a dock child.
+    var viewport=document.getElementById('mancardoMobileToolbarViewport');
+    if(viewport){
+      if(toolbarEl.parentNode!==viewport)viewport.appendChild(toolbarEl);
+    }else if(toolbarEl.parentNode!==dockEl){
+      dockEl.insertBefore(toolbarEl,pointsToggleEl&&pointsToggleEl.parentNode===dockEl?pointsToggleEl:null);
+    }
+  }
+}
+placeEditingToolbar();
+window.addEventListener('resize',placeEditingToolbar);
+
+// ---------- helpers ----------
+function uid(){ return 'tr_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+function toRad(d){ return d*Math.PI/180; }
+function haversine(a,b){
+  var R=6371000, dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
+  var la1=toRad(a.lat), la2=toRad(b.lat);
+  var h = Math.pow(Math.sin(dLat/2),2) + Math.cos(la1)*Math.cos(la2)*Math.pow(Math.sin(dLon/2),2);
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+function fmtKm(m){ return (m/1000).toFixed(m<10000?2:1) + ' km'; }
+function bearing(a,b){
+  var y=Math.sin(toRad(b.lon-a.lon))*Math.cos(toRad(b.lat));
+  var x=Math.cos(toRad(a.lat))*Math.sin(toRad(b.lat))-Math.sin(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.cos(toRad(b.lon-a.lon));
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function turnAngle(a,b,c){
+  var d=Math.abs(bearing(a,b)-bearing(b,c));
+  if(d>180) d=360-d;
+  return d;
+}
+function cornerWaypoints(item){
+  var out=[];
+  (item.segments||[]).forEach(function(seg,si){
+    for(var i=1;i<seg.length-1;i++){
+      var angle=turnAngle(seg[i-1],seg[i],seg[i+1]);
+      if(angle>=0.1) out.push({p:seg[i],seg:si,pt:i,angle:angle});
+    }
+  });
+  return out;
+}
+function fmtDate(iso){ try{ var d=new Date(iso); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }catch(e){ return ''; } }
+
+// ---------- local storage ----------
+function loadLibrary(){
+  try{
+    var raw = localStorage.getItem(STORAGE_KEY);
+    state.library = raw ? JSON.parse(raw) : [];
+  }catch(e){ state.library = []; }
+}
+function persistLibrary(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.library)); }catch(e){ console.warn('could not save locally', e); }
+}
+
+// ---------- stats ----------
+function computeStats(item){
+  var dist=0, points=0, segs=item.segments.length, ascent=0, hasEle=false;
+  item.segments.forEach(function(seg){
+    points += seg.length;
+    for(var i=1;i<seg.length;i++){
+      dist += haversine(seg[i-1], seg[i]);
+      if(seg[i].ele!=null && seg[i-1].ele!=null){
+        hasEle = true;
+        var d = seg[i].ele - seg[i-1].ele;
+        if(d>0) ascent += d;
+      }
+    }
+  });
+  return {distanceMeters:dist, points:points, segments:segs, ascent: hasEle? Math.round(ascent): null};
+}
+
+// ---------- GPX parsing / building (same schema as ManCardo) ----------
+function parseGpxFile(text, filename){
+  var doc;
+  try{ doc = new DOMParser().parseFromString(text, 'application/xml'); } catch(e){ return []; }
+  if(doc.getElementsByTagName('parsererror').length) return [];
+  var out = [];
+  var trks = doc.getElementsByTagName('trk');
+  for(var i=0;i<trks.length;i++){
+    var trk = trks[i];
+    var nameEl = trk.getElementsByTagName('name')[0];
+    var name = nameEl ? nameEl.textContent.trim() : (filename.replace(/\.gpx$/i,'') + (trks.length>1?' '+(i+1):''));
+    var segsEls = trk.getElementsByTagName('trkseg');
+    var segments = [];
+    if(segsEls.length===0){
+      var ptsAll = trk.getElementsByTagName('trkpt');
+      if(ptsAll.length) segments.push(parsePts(ptsAll));
+    } else {
+      for(var s=0;s<segsEls.length;s++){
+        var arr = parsePts(segsEls[s].getElementsByTagName('trkpt'));
+        if(arr.length) segments.push(arr);
+      }
+    }
+    if(segments.length) out.push({id: uid(), type:'track', name:name, segments:segments, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+  }
+  var rtes = doc.getElementsByTagName('rte');
+  for(var r=0;r<rtes.length;r++){
+    var rte = rtes[r];
+    var rnameEl = rte.getElementsByTagName('name')[0];
+    var rname = rnameEl ? rnameEl.textContent.trim() : (filename.replace(/\.gpx$/i,'') + ' route');
+    var rarr = parsePts(rte.getElementsByTagName('rtept'));
+    if(rarr.length) out.push({id: uid(), type:'route', name:rname, segments:[rarr], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+  }
+  return out;
+}
+function parsePts(nodeList){
+  var arr=[];
+  for(var i=0;i<nodeList.length;i++){
+    var n = nodeList[i];
+    var lat = parseFloat(n.getAttribute('lat')), lon = parseFloat(n.getAttribute('lon'));
+    if(isNaN(lat)||isNaN(lon)) continue;
+    var eleEl = n.getElementsByTagName('ele')[0];
+    var timeEl = n.getElementsByTagName('time')[0];
+    var p = {lat:lat, lon:lon};
+    if(eleEl) p.ele = parseFloat(eleEl.textContent);
+    if(timeEl) p.time = timeEl.textContent.trim();
+    arr.push(p);
+  }
+  return arr;
+}
+function buildGpx(item){
+  var lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push('<gpx version="1.1" creator="ManCardo" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
+  // Preserve Mancardo's track colour inside the shared GPX document.
+  if(item.color&&/^#[0-9a-f]{3,8}$/i.test(item.color)){
+    lines.push('  <extensions><mancardo:color xmlns:mancardo="https://mancardo.com/gpx">'+item.color+'</mancardo:color></extensions>');
+  }
+  var corners=cornerWaypoints(item);
+  corners.forEach(function(w,i){
+    lines.push('  <wpt lat="'+w.p.lat+'" lon="'+w.p.lon+'">');
+    if(w.p.ele!=null) lines.push('    <ele>'+w.p.ele+'</ele>');
+    lines.push('    <name>Corner '+(i+1)+'</name>');
+    lines.push('    <desc>Track corner waypoint</desc>');
+    lines.push('  </wpt>');
+  });
+  if(item.type==='route'){
+    lines.push('  <rte>');
+    lines.push('    <name>'+esc(item.name)+'</name>');
+    var routePts=[];
+    (item.segments||[]).forEach(function(seg){
+      seg.forEach(function(p){
+        var last=routePts[routePts.length-1];
+        if(!last || last.lat!==p.lat || last.lon!==p.lon) routePts.push(p);
+      });
+    });
+    routePts.forEach(function(p){
+      lines.push('    <rtept lat="'+p.lat+'" lon="'+p.lon+'">');
+      if(p.ele!=null) lines.push('      <ele>'+p.ele+'</ele>');
+      lines.push('    </rtept>');
+    });
+    lines.push('  </rte>');
+  } else {
+    lines.push('  <trk>');
+    lines.push('    <name>'+esc(item.name)+'</name>');
+    item.segments.forEach(function(seg){
+      lines.push('    <trkseg>');
+      seg.forEach(function(p){
+        lines.push('      <trkpt lat="'+p.lat+'" lon="'+p.lon+'">');
+        if(p.ele!=null) lines.push('        <ele>'+p.ele+'</ele>');
+        if(p.time) lines.push('        <time>'+esc(p.time)+'</time>');
+        lines.push('      </trkpt>');
+      });
+      lines.push('    </trkseg>');
+    });
+    lines.push('  </trk>');
+  }
+  lines.push('</gpx>');
+  return lines.join('\n');
+}
+
+// ---------- Leaflet map ----------
+var map = L.map('mapDiv', {zoomControl:true}).setView([-32.5,147.0], 6);
+
+// Keyboard zoom shortcuts: Shift + Up Arrow = zoom in, Shift + Down Arrow = zoom out.
+// Capture at document level so the shortcut remains reliable after clicking the map,
+// Leaflet's +/- controls, or other buttons that take focus.
+function handleMapZoomShortcut(ev){
+  if(!ev.shiftKey) return;
+
+  var target=ev.target;
+  var tag=target && target.tagName ? target.tagName.toLowerCase() : '';
+  if(tag==='input' || tag==='textarea' || tag==='select' || (target && target.isContentEditable)) return;
+
+  var key = ev.key || '';
+  var code = ev.code || '';
+  var keyCode = ev.keyCode || ev.which;
+  var isUp = key==='ArrowUp' || code==='ArrowUp' || keyCode===38;
+  var isDown = key==='ArrowDown' || code==='ArrowDown' || keyCode===40;
+  if(!isUp && !isDown) return;
+
+  ev.preventDefault();
+  ev.stopPropagation();
+  if(typeof ev.stopImmediatePropagation==='function') ev.stopImmediatePropagation();
+
+  if(isUp) map.setZoom(Math.min(map.getMaxZoom(), map.getZoom()+1));
+  else map.setZoom(Math.max(map.getMinZoom(), map.getZoom()-1));
+}
+
+document.addEventListener('keydown', handleMapZoomShortcut, true);
+
+// Leaflet zoom controls keep keyboard focus after a mouse click. Remove that focus
+// after activation so subsequent keyboard shortcuts aren't routed through the control.
+map.whenReady(function(){
+  var container=map.getContainer();
+  container.addEventListener('click', function(ev){
+    var el=ev.target && ev.target.closest ? ev.target.closest('.leaflet-control-zoom-in,.leaflet-control-zoom-out') : null;
+    if(el && typeof el.blur==='function') setTimeout(function(){el.blur();},0);
+  }, true);
+});
+// Note: raw tile.openstreetmap.org blocks requests from local (file://) pages because
+// they arrive with no/"null" referrer, which OSM's usage policy treats as unidentified
+// bulk traffic. Esri's public World basemaps are built for exactly this kind of open
+// embedding and don't enforce that check, so we use those instead (no API key needed).
+var streetsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, attribution: 'Tiles &copy; Esri &mdash; Source: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), (c) OpenStreetMap contributors'
+});
+var terrainLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, HERE, Garmin, USGS, NGA, EPA, NPS'
+});
+streetsLayer.addTo(map);
+L.control.scale({metric:true, imperial:false}).addTo(map);
+
+var locationWatchId=null,userLocationMarker=null,userHeadingMarker=null,lastUserLatLng=null,lastHeading=null,headingUp=false;
+var LocationControls=L.Control.extend({
+  options:{position:'bottomleft'},
+  onAdd:function(){
+    var box=L.DomUtil.create('div','location-controls');
+    var loc=L.DomUtil.create('button','location-control-btn',box);loc.type='button';loc.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg>';loc.title='Show current location';loc.setAttribute('aria-label','Show current location');
+    var head=L.DomUtil.create('button','location-control-btn',box);head.type='button';head.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path class="nav-fill" d="M12 3l6 17-6-4-6 4z"></path></svg>';head.title='North up — tap for heading up';head.setAttribute('aria-label','North up. Tap for heading up');
+    L.DomEvent.disableClickPropagation(box);L.DomEvent.disableScrollPropagation(box);
+    L.DomEvent.on(loc,'click',function(){startLocationFollow(true);});
+    L.DomEvent.on(head,'click',function(){setHeadingUp(!headingUp);});
+    this._loc=loc;this._head=head;return box;
+  }
+});
+var locationControls=new LocationControls();map.addControl(locationControls);
+
+function setMapBearing(deg){
+  var pane=map.getPane('mapPane');if(!pane)return;
+  if(!headingUp||deg==null||!isFinite(deg)){pane.style.transform='';document.getElementById('mapDiv').classList.remove('heading-up');return;}
+  document.getElementById('mapDiv').classList.add('heading-up');
+  var base=pane._leaflet_pos||L.point(0,0);
+  pane.style.transform='translate3d('+base.x+'px,'+base.y+'px,0) rotate('+(-deg)+'deg)';
+  pane.style.transformOrigin=(map.getSize().x/2)+'px '+(map.getSize().y/2)+'px';
+}
+function setHeadingUp(on){
+  headingUp=on;
+  if(locationControls._head){locationControls._head.classList.toggle('on',on);locationControls._head.title=on?'Heading up — tap for north up':'North up — tap for heading up';locationControls._head.setAttribute('aria-label',on?'Heading up. Tap for north up':'North up. Tap for heading up');}
+  if(on){startLocationFollow(false);requestDeviceHeading();if(lastHeading!=null)setMapBearing(lastHeading);}
+  else setMapBearing(null);
+}
+function updateUserLocation(pos){
+  var c=pos.coords,ll=L.latLng(c.latitude,c.longitude);lastUserLatLng=ll;
+  if(c.heading!=null&&isFinite(c.heading)&&c.speed!=null&&c.speed>0.5){lastHeading=c.heading;}
+  if(!userLocationMarker)userLocationMarker=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="user-location-dot"></div>',iconSize:[16,16],iconAnchor:[8,8]}),zIndexOffset:1000}).addTo(map);
+  else userLocationMarker.setLatLng(ll);
+  if(!userHeadingMarker)userHeadingMarker=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="user-heading-arrow"></div>',iconSize:[14,20],iconAnchor:[7,10]}),zIndexOffset:999}).addTo(map);
+  else userHeadingMarker.setLatLng(ll);
+  var arrow=userHeadingMarker.getElement()&&userHeadingMarker.getElement().querySelector('.user-heading-arrow');
+  if(arrow&&lastHeading!=null)arrow.style.transform='rotate('+lastHeading+'deg)';
+  if(locationControls._loc){locationControls._loc.classList.add('on');locationControls._loc.classList.remove('error');locationControls._loc.title='Following current location';locationControls._loc.setAttribute('aria-label','Following current location');}
+  map.panTo(ll,{animate:true});
+  if(headingUp&&lastHeading!=null)setMapBearing(lastHeading);
+}
+function startLocationFollow(recenter){
+  if(!navigator.geolocation){if(locationControls._loc){locationControls._loc.title='Location unavailable';locationControls._loc.setAttribute('aria-label','Location unavailable');locationControls._loc.classList.add('error');}return;}
+  if(locationWatchId==null)locationWatchId=navigator.geolocation.watchPosition(updateUserLocation,function(){
+    if(locationControls._loc){locationControls._loc.title='Location permission blocked';locationControls._loc.setAttribute('aria-label','Location permission blocked');locationControls._loc.classList.add('error');}
+  },{enableHighAccuracy:true,maximumAge:2000,timeout:12000});
+  if(recenter&&lastUserLatLng)map.setView(lastUserLatLng,Math.max(map.getZoom(),15));
+}
+function deviceHeadingHandler(ev){
+  var h=null;
+  if(typeof ev.webkitCompassHeading==='number')h=ev.webkitCompassHeading;
+  else if(ev.absolute&&typeof ev.alpha==='number')h=(360-ev.alpha)%360;
+  if(h!=null&&isFinite(h)){lastHeading=h;if(headingUp)setMapBearing(h);}
+}
+function requestDeviceHeading(){
+  if(typeof DeviceOrientationEvent==='undefined')return;
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission().then(function(r){if(r==='granted')window.addEventListener('deviceorientation',deviceHeadingHandler,true);}).catch(function(){});
+  }else window.addEventListener('deviceorientationabsolute',deviceHeadingHandler,true);
+}
+map.on('move zoom resize',function(){if(headingUp&&lastHeading!=null)setTimeout(function(){setMapBearing(lastHeading);},0);});
+
+var OverlayToggleControl=L.Control.extend({
+  options:{position:'topleft'},
+  onAdd:function(){
+    var btn=L.DomUtil.create('button','overlay-control-btn');
+    btn.type='button'; btn.title='Show / hide map overlays'; btn.setAttribute('aria-label','Show or hide map overlays'); btn.innerHTML='&#9776;';
+    L.DomEvent.disableClickPropagation(btn);
+    L.DomEvent.on(btn,'click',function(){
+      var hidden=els.overlayPanel.classList.toggle('hidden');
+      btn.classList.toggle('on',!hidden);
+    });
+    return btn;
+  }
+});
+var overlayToggleControl=new OverlayToggleControl();
+map.addControl(overlayToggleControl);
+setTimeout(function(){
+  var el=overlayToggleControl.getContainer();
+  if(el){el.style.marginTop='0';el.style.clear='both';}
+},0);
+
+var fuelLayer=L.layerGroup().addTo(map),fuelOn=false,fuelRequest=0,fuelRefreshTimer=null,fuelLastKey='',fuelLastAt=0;
+var FUEL_OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.nchc.org.tw/api/interpreter'];
+var fuelIcon=L.divIcon({className:'',html:'<div class="fuel-marker"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+var FuelControl=L.Control.extend({
+  options:{position:'topleft'},
+  onAdd:function(){
+    var btn=L.DomUtil.create('button','fuel-control-btn');btn.type='button';btn.textContent='Fuel';btn.title='Show active mapped fuel stations';btn.setAttribute('aria-label','Show or hide fuel stations');
+    L.DomEvent.disableClickPropagation(btn);L.DomEvent.disableScrollPropagation(btn);
+    L.DomEvent.on(btn,'click',function(){
+      fuelOn=!fuelOn;btn.classList.toggle('on',fuelOn);
+      if(fuelOn){fuelLastKey='';refreshFuelStations();}else{fuelRequest++;fuelLayer.clearLayers();fuelLastKey='';btn.classList.remove('loading','error');}
+    });
+    this._button=btn;return btn;
+  }
+});
+var fuelControl=new FuelControl();map.addControl(fuelControl);
+setTimeout(function(){
+  var fuelEl=fuelControl.getContainer(),overlayEl=overlayToggleControl.getContainer();
+  if(fuelEl&&overlayEl&&overlayEl.parentNode){
+    overlayEl.parentNode.insertBefore(fuelEl,overlayEl.nextSibling);
+    fuelEl.style.marginTop='4px';fuelEl.style.clear='both';
+    fuelEl.style.display='block';fuelEl.style.float='none';
+  }
+},0);
+
+function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
+function fuelIsActive(t){
+  t=t||{};var bad=function(v){return /^(yes|true|1)$/i.test(String(v||''));};
+  return t.amenity==='fuel'&&!bad(t.disused)&&!bad(t.abandoned)&&!bad(t.demolished)&&!bad(t.closed)&&!bad(t.construction)&&
+    !t['disused:amenity']&&!t['abandoned:amenity']&&!t['demolished:amenity']&&!t['construction:amenity']&&
+    !/^(no|private)$/i.test(String(t.access||''));
+}
+function fuelPopup(t,lat,lon){
+  var name=t.name||t.brand||t.operator||'Fuel station',brand=t.brand&&t.brand!==name?t.brand:'';
+  var address=[t['addr:housenumber'],t['addr:street'],t['addr:suburb']||t['addr:city'],t['addr:postcode']].filter(Boolean).join(' ');
+  var hours=t.opening_hours||'',phone=t.phone||t['contact:phone']||'';
+  var apple='https://maps.apple.com/directions?destination='+encodeURIComponent((+lat).toFixed(6)+','+(+lon).toFixed(6))+'&mode=driving';
+  return '<div class="fuel-popup"><strong>'+escHtml(name)+'</strong>'+
+    (brand?'<br>'+escHtml(brand):'')+(address?'<br>'+escHtml(address):'')+
+    (hours?'<br><b>Hours:</b> '+escHtml(hours):'')+(phone?'<br><b>Phone:</b> '+escHtml(phone):'')+
+    '<br><a class="fuel-direct" href="'+apple+'" target="_blank" rel="noopener" aria-label="Direct to '+escHtml(name)+' using Apple Maps" title="Navigate with Apple Maps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l7 19-7-5-7 5z"/></svg><span>Direct To</span></a>'+
+    '<br><span class="muted">Active mapped fuel POI · OpenStreetMap</span></div>';
+}
+function fetchFuelOverpass(q,index){
+  index=index||0;if(index>=FUEL_OVERPASS.length)return Promise.reject(new Error('All fuel data servers unavailable'));
+  var url=FUEL_OVERPASS[index]+'?data='+encodeURIComponent(q);
+  return fetch(url,{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .catch(function(){return fetchFuelOverpass(q,index+1);});
+}
+function refreshFuelStations(){
+  if(!fuelOn)return;
+  clearTimeout(fuelRefreshTimer);
+  fuelRefreshTimer=setTimeout(function(){
+    if(!fuelOn)return;
+    var b=map.getBounds(),south=Math.max(-44,b.getSouth()),north=Math.min(-9,b.getNorth()),west=Math.max(112,b.getWest()),east=Math.min(154,b.getEast());
+    if(south>=north||west>=east){fuelLayer.clearLayers();return;}
+    var id=++fuelRequest,btn=fuelControl._button;if(btn)btn.classList.add('loading');
+    var bbox=[south,west,north,east].map(function(n){return n.toFixed(5)}).join(',');
+    var q='[out:json][timeout:25];nwr["amenity"="fuel"]('+bbox+');out center tags;';
+    var cacheKey=bbox;if(cacheKey===fuelLastKey&&Date.now()-fuelLastAt<45000){if(btn){btn.classList.remove('loading','error');}return;}
+    fetchFuelOverpass(q,0).then(function(data){
+      if(id!==fuelRequest||!fuelOn)return;fuelLayer.clearLayers();fuelLastKey=cacheKey;fuelLastAt=Date.now();if(btn)btn.classList.remove('error');
+      var seen={};(data.elements||[]).forEach(function(e){
+        var t=e.tags||{};if(!fuelIsActive(t))return;
+        var lat=e.lat!=null?e.lat:(e.center&&e.center.lat),lon=e.lon!=null?e.lon:(e.center&&e.center.lon);if(lat==null||lon==null)return;
+        var key=(+lat).toFixed(5)+','+(+lon).toFixed(5);if(seen[key])return;seen[key]=1;
+        L.marker([lat,lon],{icon:fuelIcon,pane:'markerPane',title:t.name||t.brand||'Fuel station'}).bindPopup(fuelPopup(t,lat,lon)).addTo(fuelLayer);
+      });
+      if(btn)btn.title='Fuel stations: '+Object.keys(seen).length+' active mapped in view';
+    }).catch(function(err){console.warn('Fuel station query failed',err);if(btn){btn.title='Fuel lookup temporarily unavailable — existing markers retained; move map or toggle Fuel to retry';btn.classList.add('error');}}).finally(function(){if(id===fuelRequest&&btn)btn.classList.remove('loading');});
+  },300);
+}
+map.on('moveend',function(){if(fuelOn)refreshFuelStations();});
+
+
+els.layerStreetsBtn.onclick = function(){
+  map.removeLayer(terrainLayer); streetsLayer.addTo(map);
+  els.layerStreetsBtn.classList.add('on'); els.layerTerrainBtn.classList.remove('on');
+};
+els.layerTerrainBtn.onclick = function(){
+  map.removeLayer(streetsLayer); terrainLayer.addTo(map);
+  els.layerTerrainBtn.classList.add('on'); els.layerStreetsBtn.classList.remove('on');
+};
+
+
+var radarPane = map.createPane('radarPane');
+radarPane.style.zIndex = 340;
+radarPane.style.pointerEvents = 'none';
+
+var BOM_WMTS_BASE='https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts';
+var BOM_CAPABILITIES=BOM_WMTS_BASE+'?SERVICE=WMTS&REQUEST=GetCapabilities&VERSION=1.0.0';
+var BOM_WEATHER={
+  observed:{id:'atm_surf_air_precip_rate_1hr_total_mm_h',matrix:'GoogleMapsCompatible_BoM',name:'Observed rain rate',mode:'past',step:5,lag:5},
+  forecast:{id:'atm_surf_air_precip_exceeding_50percentchance_total_mm_3hourly',matrix:'GoogleMapsCompatible_BoM_ADFD',name:'Forecast rain 50% · 3hr',mode:'forecast',step:180,lag:0},
+  chance:{id:'atm_surf_air_precip_any_probability_percent_3hourly',matrix:'GoogleMapsCompatible_BoM_ADFD',name:'Chance of rain · 3hr',mode:'forecast',step:180,lag:0}
+};
+var BOM_MATRIX={
+  GoogleMapsCompatible_BoM:[
+    {z:0,tlx:11584952,tly:34168990.685578,w:1,h:1},{z:1,tlx:11584952,tly:14131482.342789,w:1,h:1},
+    {z:2,tlx:11584952,tly:4112728.171395,w:1,h:1},{z:3,tlx:11584952,tly:4112728.171395,w:2,h:2},
+    {z:4,tlx:11584952,tly:1608039.628546,w:3,h:3},{z:5,tlx:11584952,tly:355695.357122,w:6,h:5},
+    {z:6,tlx:11584952,tly:-270476.778591,w:11,h:9},{z:7,tlx:11584952,tly:-583562.846447,w:22,h:17},
+    {z:8,tlx:11584952,tly:-740105.880375,w:43,h:33}
+  ],
+  GoogleMapsCompatible_BoM_ADFD:[
+    {z:0,tlx:12462758.1832,tly:34449560.527478,w:1,h:1},{z:1,tlx:12462758.1832,tly:14412052.184689,w:1,h:1},
+    {z:2,tlx:12462758.1832,tly:4393298.013295,w:1,h:1},{z:3,tlx:12462758.1832,tly:-616079.072403,w:1,h:1},
+    {z:4,tlx:12462758.1832,tly:-616079.072403,w:2,h:2},{z:5,tlx:12462758.1832,tly:-616079.072403,w:4,h:4},
+    {z:6,tlx:12462758.1832,tly:-616079.072403,w:8,h:8},{z:7,tlx:12462758.1832,tly:-616079.072403,w:16,h:16},
+    {z:8,tlx:12462758.1832,tly:-772622.106331,w:31,h:31}
+  ]
+};
+var radarLayer=null,radarOn=false,radarFrames=[],radarFrame=0,radarTimer=null,bomCapabilities=null;
+var BOM_HALF=20037508.342789244,BOM_WORLD=BOM_HALF*2;
+var transparentPixel='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+function setRadarOpacity(){if(radarLayer)radarLayer.setOpacity(Math.max(0,Math.min(1,(+els.radarOpacity.value)/100)));}
+function clearRadar(){if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}}
+function bomOffset(matrix,z){
+  var info=(BOM_MATRIX[matrix]||[])[z]; if(!info)return null;
+  var span=BOM_WORLD/Math.pow(2,z);
+  var rx=(info.tlx+BOM_HALF)/span,ry=(BOM_HALF-info.tly)/span,x=Math.round(rx),y=Math.round(ry);return {x:x,y:y,w:info.w,h:info.h,xShiftPx:(rx-x)*256,yShiftPx:(ry-y)*256};
+}
+function bomTileUrl(cfg,coords,time){
+  var z=Math.min(coords.z,8),scale=Math.pow(2,coords.z-z);
+  var gx=Math.floor(coords.x/scale),gy=Math.floor(coords.y/scale),o=bomOffset(cfg.matrix,z);
+  if(!o)return '';
+  var col=gx-o.x,row=gy-o.y;
+  if(col<0||row<0||col>=o.w||row>=o.h)return '';
+  return BOM_WMTS_BASE+'?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER='+encodeURIComponent(cfg.id)+
+    '&STYLE=default&FORMAT=image/png&TILEMATRIXSET='+encodeURIComponent(cfg.matrix)+'&TILEMATRIX='+z+
+    '&TILEROW='+row+'&TILECOL='+col+'&time='+encodeURIComponent(time);
+}
+function createBomLayer(cfg,time){
+  var Bom=L.TileLayer.extend({
+    getTileUrl:function(coords){return bomTileUrl(cfg,coords,time);},
+    createTile:function(coords,done){
+      var img=document.createElement('img');img.alt='';var nativeZ=Math.min(coords.z,8),o=bomOffset(cfg.matrix,nativeZ);if(o){img.style.marginLeft=o.xShiftPx+'px';img.style.marginTop=o.yShiftPx+'px';}var u=this.getTileUrl(coords);
+      if(!u){img.src=transparentPixel;setTimeout(function(){done(null,img)},0);return img;}
+      img.onload=function(){done(null,img)};img.onerror=function(){img.src=transparentPixel;done(null,img)};img.src=u;return img;
+    }
+  });
+  return new Bom('',{pane:'radarPane',opacity:(+els.radarOpacity.value)/100,maxNativeZoom:8,maxZoom:19,tileSize:256,attribution:'Weather data © Bureau of Meteorology'});
+}
+function bomFallback(cfg,count){
+  var now=new Date(),step=cfg.step,ms=step*60000,t;
+  if(cfg.mode==='past'){
+    t=new Date(Math.floor(now.getTime()/ms)*ms-cfg.lag*60000);
+    var a=[];for(var i=count-1;i>=0;i--)a.push(new Date(t.getTime()-i*ms).toISOString().replace(/\.\d{3}Z$/,'Z'));return a;
+  }
+  t=new Date(Math.ceil(now.getTime()/ms)*ms);
+  var b=[];for(var j=0;j<count;j++)b.push(new Date(t.getTime()+j*ms).toISOString().replace(/\.\d{3}Z$/,'Z'));return b;
+}
+function extractBomTimes(xml,id){
+  var layers=Array.from(xml.getElementsByTagNameNS('*','Layer'));
+  var layer=layers.find(function(n){var x=Array.from(n.children).find(function(q){return q.localName==='Identifier'});return x&&x.textContent.trim()===id});
+  if(!layer)return [];
+  var dims=Array.from(layer.children).filter(function(q){return q.localName==='Dimension'});
+  var d=dims.find(function(n){var x=Array.from(n.children).find(function(q){return q.localName==='Identifier'});return x&&x.textContent.trim()==='time'});
+  if(!d)return [];
+  return Array.from(d.children).filter(function(q){return q.localName==='Value'}).map(function(q){return q.textContent.trim()}).filter(Boolean).sort();
+}
+function probeBomTime(cfg,time){
+  return new Promise(function(resolve){
+    var img=new Image(),done=false,timer=setTimeout(function(){if(!done){done=true;resolve(false)}},1800);
+    img.onload=function(){if(!done){done=true;clearTimeout(timer);resolve(img.naturalWidth>1)}};
+    img.onerror=function(){if(!done){done=true;clearTimeout(timer);resolve(false)}};
+    img.src=BOM_WMTS_BASE+'?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER='+encodeURIComponent(cfg.id)+
+      '&STYLE=default&FORMAT=image/png&TILEMATRIXSET='+encodeURIComponent(cfg.matrix)+'&TILEMATRIX=0&TILEROW=0&TILECOL=0&time='+encodeURIComponent(time);
+  });
+}
+async function resolveBomFrames(cfg){
+  var candidates=bomFallback(cfg,cfg.mode==='past'?18:12),valid=[];
+  if(cfg.mode==='past'){
+    for(var i=candidates.length-1;i>=0&&valid.length<9;i--){if(await probeBomTime(cfg,candidates[i]))valid.unshift(candidates[i]);}
+  }else{
+    for(var j=0;j<candidates.length&&valid.length<9;j++){if(await probeBomTime(cfg,candidates[j]))valid.push(candidates[j]);}
+  }
+  return valid;
+}
+function getBomFrames(cfg){
+  return resolveBomFrames(cfg).then(function(valid){
+    if(valid.length)return valid;
+    var p=bomCapabilities?Promise.resolve(bomCapabilities):fetch(BOM_CAPABILITIES).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(function(t){bomCapabilities=new DOMParser().parseFromString(t,'application/xml');return bomCapabilities});
+    return p.then(function(xml){
+      var times=extractBomTimes(xml,cfg.id),now=Date.now();
+      if(cfg.mode==='forecast')times=times.filter(function(x){return Date.parse(x)>=now-3600000}).slice(0,9);else times=times.slice(-9);
+      return times;
+    }).catch(function(){return []});
+  });
+}
+function formatBomTime(iso){
+  var d=new Date(iso);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
+function showBomFrame(index){
+  if(!radarOn||!radarFrames.length)return;
+  radarFrame=(index+radarFrames.length)%radarFrames.length;
+  clearRadar();
+  var cfg=BOM_WEATHER[els.radarMode.value],time=radarFrames[radarFrame];
+  radarLayer=createBomLayer(cfg,time).addTo(map);setRadarOpacity();
+  els.radarTime.textContent=formatBomTime(time);
+  els.radarCredit.textContent=cfg.name+' · BOM · '+formatBomTime(time);
+}
+function loadBomWeather(){
+  if(!radarOn)return;
+  stopBomPlayback();clearRadar();els.radarTime.textContent='Loading…';
+  var cfg=BOM_WEATHER[els.radarMode.value];
+  getBomFrames(cfg).then(function(frames){
+    if(!radarOn)return;if(!frames.length){els.radarTime.textContent='No data';els.radarCredit.textContent='BOM layer reachable, but no current frame was found';return;}radarFrames=frames;radarFrame=cfg.mode==='past'?frames.length-1:0;showBomFrame(radarFrame);
+  });
+}
+function stopBomPlayback(){if(radarTimer){clearInterval(radarTimer);radarTimer=null}els.radarPlayBtn.textContent='Play';}
+function toggleBomPlayback(){
+  if(radarTimer){stopBomPlayback();return}
+  if(!radarFrames.length)return;
+  els.radarPlayBtn.textContent='Pause';
+  radarTimer=setInterval(function(){showBomFrame(radarFrame+1)},650);
+}
+els.radarOverlayToggle.onchange=function(){
+  radarOn=this.checked;
+  els.radarCredit.classList.toggle('hidden',!radarOn);
+  els.radarControls.classList.toggle('hidden',!radarOn);
+  if(radarOn)loadBomWeather();else{stopBomPlayback();clearRadar();radarFrames=[];}
+};
+els.radarOpacity.oninput=setRadarOpacity;
+els.radarMode.onchange=loadBomWeather;
+els.radarPrevBtn.onclick=function(){stopBomPlayback();showBomFrame(radarFrame-1)};
+els.radarNextBtn.onclick=function(){stopBomPlayback();showBomFrame(radarFrame+1)};
+els.radarPlayBtn.onclick=toggleBomPlayback;
+
+var slopePane = map.createPane('slopePane');
+slopePane.style.zIndex = 350;
+slopePane.style.pointerEvents = 'none';
+var contourLabelPane = map.createPane('contourLabelPane');
+contourLabelPane.style.zIndex = 351;
+contourLabelPane.style.pointerEvents = 'none';
+var slopeLayer=L.layerGroup().addTo(map), slopeOn=false, slopeRefreshTimer=null, contourRequest=0;
+var contourQuery='https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Elevation_and_Depth_Theme/MapServer/2/query';
+
+function setContourOpacity(){
+  var opacity=Math.max(0,Math.min(1,(+els.slopeReveal.value)/100));
+  slopePane.style.opacity=opacity;
+  contourLabelPane.style.opacity=opacity;
+}
+function clearContours(){ slopeLayer.clearLayers(); }
+function addContourLabel(latlng,elevation){
+  return L.marker(latlng,{pane:'contourLabelPane',interactive:false,icon:L.divIcon({
+    className:'contour-elev-label',html:'<span>'+Math.round(elevation)+' m</span>',iconSize:null
+  })}).addTo(slopeLayer);
+}
+function refreshSlopeImage(){
+  if(!slopeOn) return;
+  clearContours();
+  if(map.getZoom()<12){
+    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Zoom in to level 12+ for contour lines and metre labels</span>';
+    return;
+  }
+  els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Loading contour lines and metre labels…</span>';
+  var id=++contourRequest,b=map.getBounds();
+  var env=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(',');
+  var url=contourQuery+'?where=1%3D1&geometry='+encodeURIComponent(env)+
+    '&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects'+
+    '&outFields=elevation%2Cclasssubtype&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000';
+  fetch(url).then(function(r){if(!r.ok) throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
+    if(id!==contourRequest||!slopeOn) return;
+    var features=data.features||[], labelCount=0;
+    features.forEach(function(ft){
+      var elev=Number(ft.properties&&ft.properties.elevation);
+      if(!isFinite(elev)||!ft.geometry) return;
+      var parts=ft.geometry.type==='LineString'?[ft.geometry.coordinates]:(ft.geometry.type==='MultiLineString'?ft.geometry.coordinates:[]);
+      parts.forEach(function(line){
+        if(!line||line.length<2) return;
+        var latlngs=line.map(function(p){return [p[1],p[0]];});
+        var major=Math.abs(Math.round(elev))%100===0;
+        L.polyline(latlngs,{pane:'slopePane',color:major?'#5b3518':'#8a5a2b',weight:major?2.2:1.2,opacity:.95,interactive:false}).addTo(slopeLayer);
+        if(labelCount<120 && (major || line.length>12)){
+          addContourLabel(latlngs[Math.floor(latlngs.length/2)],elev); labelCount++;
+        }
+      });
+    });
+    els.slopeLegend.innerHTML=features.length?
+      '<strong>NSW topographic contours</strong><br><span>Numbers = elevation metres<br>Closer lines = steeper terrain</span>':
+      '<strong>NSW topographic contours</strong><br><span>No contours returned here — pan within NSW or zoom in</span>';
+    setContourOpacity();
+  }).catch(function(err){
+    if(id!==contourRequest) return;
+    els.slopeLegend.innerHTML='<strong>NSW topographic contours</strong><br><span>Contour data failed to load</span>';
+    console.warn('Contour query failed',err);
+  });
+}
+function queueSlopeRefresh(){
+  if(!slopeOn) return;
+  clearTimeout(slopeRefreshTimer);
+  slopeRefreshTimer=setTimeout(refreshSlopeImage,180);
+}
+els.slopeOverlayToggle.onchange=function(){
+  slopeOn=this.checked;
+  els.slopeLegend.classList.toggle('hidden',!slopeOn);
+  if(slopeOn){ setContourOpacity(); refreshSlopeImage(); }
+  else { contourRequest++; clearContours(); }
+};
+els.slopeReveal.oninput=setContourOpacity;
+map.on('moveend zoomend resize',queueSlopeRefresh);
+
+var trackLayerGroup = L.layerGroup().addTo(map);
+
+map.on('click', function(ev){
+  if(state.mode==='draw' && state.current){
+    var segs = state.current.segments;
+    pushHistory();
+    segs[segs.length-1].push({lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)});
+    render();
+  } else if(state.mode==='move' && state.current && state.selection){
+    var mp = segAt(state.selection.seg)[state.selection.pt];
+    if(mp){
+      pushHistory();
+      mp.lat=+ev.latlng.lat.toFixed(6); mp.lon=+ev.latlng.lng.toFixed(6);
+    }
+    state.mode='view'; updateModeBanner(); render();
+  } else if(state.mode==='extend' && state.current && state.extend){
+    var eseg=segAt(state.extend.seg);
+    var np={lat:+ev.latlng.lat.toFixed(6), lon:+ev.latlng.lng.toFixed(6)};
+    pushHistory();
+    if(state.extend.atStart){ eseg.unshift(np); state.selection={seg:state.extend.seg,pt:0}; }
+    else { eseg.push(np); state.selection={seg:state.extend.seg,pt:eseg.length-1}; }
+    render();
+  } else {
+    state.selection = null;
+    render();
+  }
+});
+
+// ---------- history ----------
+function pushHistory(){
+  if(!state.current) return;
+  state.history.push(JSON.stringify(state.current.segments));
+  if(state.history.length>60) state.history.shift();
+  state.future = [];
+  refreshToolbar();
+}
+function undo(){
+  if(!state.current || !state.history.length) return;
+  state.future.push(JSON.stringify(state.current.segments));
+  state.current.segments = JSON.parse(state.history.pop());
+  state.selection = null; render();
+}
+function redo(){
+  if(!state.current || !state.future.length) return;
+  state.history.push(JSON.stringify(state.current.segments));
+  state.current.segments = JSON.parse(state.future.pop());
+  state.selection = null; render();
+}
+
+// ---------- library UI ----------
+var TRACK_COLOURS=[{name:'Blue',value:'#2563a8'},{name:'Red',value:'#d43f3a'},{name:'Purple',value:'#7c3aed'},{name:'Yellow',value:'#e0a800'},{name:'Lime Green',value:'#32CD32'}];
+function defaultTrackColour(item){return item.color||(item.type==='route'?getCss('--warn'):getCss('--line-track'));}
+function setTrackColour(id,colour){
+  var item=state.library.find(function(t){return t.id===id;}); if(!item)return;
+  item.color=colour; item.updatedAt=new Date().toISOString(); persistLibrary();
+  if(state.currentId===id&&state.current)state.current.color=colour;
+  state.paletteId=null; renderLibrary(); render();
+}
+function setTrackVisible(id,visible){
+  var item=state.library.find(function(t){return t.id===id;}); if(!item)return;
+  item.visible=visible; if(state.currentId===id&&state.current)state.current.visible=visible; persistLibrary(); renderLibrary(); render();
+}
+function duplicateTrack(id){
+  var src=state.library.find(function(t){return t.id===id;}); if(!src)return;
+  var base=String(src.name||'Track').replace(/\.\d+$/,'');
+  var n=1;while(state.library.some(function(t){return String(t.name||'')===base+'.'+n;}))n++;
+  var copy=deepClone(src); copy.id=uid(); copy.name=base+'.'+n; copy.createdAt=copy.updatedAt=new Date().toISOString(); copy.visible=true; copy.stats=computeStats(copy);
+  state.library.unshift(copy); persistLibrary(); state.trackMenuId=null; renderLibrary(); render();
+}
+function toggleDraft(id){
+  var item=state.library.find(function(t){return t.id===id;});if(!item)return;
+  item.draft=!item.draft;item.updatedAt=new Date().toISOString();
+  if(state.currentId===id&&state.current)state.current.draft=item.draft;
+  persistLibrary();state.trackMenuId=null;renderLibrary();render();
+}
+function toggleNote(id){state.noteOpenId=state.noteOpenId===id?null:id;state.trackMenuId=null;renderLibrary();}
+function saveTrackNote(id,value){
+  var item=state.library.find(function(t){return t.id===id;});if(!item)return;
+  item.note=String(value||'').slice(0,40);item.updatedAt=new Date().toISOString();
+  if(state.currentId===id&&state.current)state.current.note=item.note;
+  persistLibrary();
+}
+function copyTrack(id){var src=state.library.find(function(t){return t.id===id;});if(src)state.clipboardTrack=deepClone(src);state.trackMenuId=null;renderLibrary();}
+function pasteTrack(){
+  if(!state.clipboardTrack)return;
+  var copy=deepClone(state.clipboardTrack); copy.id=uid(); copy.name=copy.name+' copy'; copy.createdAt=copy.updatedAt=new Date().toISOString(); copy.visible=true; copy.stats=computeStats(copy);
+  state.library.unshift(copy); persistLibrary(); state.trackMenuId=null; renderLibrary(); render();
+}
+function exportTrackItem(item){
+  if(!item)return;
+  var xml=buildGpx(item),blob=new Blob([xml],{type:'application/gpx+xml'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=(item.name||'track').replace(/[^a-z0-9\-_]+/gi,'_')+'.gpx';document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},2000);
+}
+function exportSelectedTracks(){
+  var selected=state.library.filter(function(item){return item.visible!==false;});
+  if(!selected.length){window.alert('Tick Show on one or more tracks to export.');return;}
+  selected.forEach(function(item,i){setTimeout(function(){exportTrackItem(item);},i*180);});
+}
+function deleteSelectedTracks(){
+  var selected=state.library.filter(function(item){return item.visible!==false;});
+  if(!selected.length)return;
+  var label=selected.length===1?'this selected track':selected.length+' selected tracks';
+  if(!window.confirm('Delete '+label+' from the library? This cannot be undone.'))return;
+  var ids={};selected.forEach(function(item){ids[item.id]=true;});
+  state.library=state.library.filter(function(item){return !ids[item.id];});
+  if(state.currentId&&ids[state.currentId]){state.current=null;state.currentId=null;state.selection=null;state.history=[];state.future=[];state.extend=null;}
+  state.trackMenuId=null;state.paletteId=null;persistLibrary();renderLibrary();render();
+}
+function renameTrack(id){
+  var item=state.library.find(function(t){return t.id===id;});if(!item)return;
+  var name=window.prompt('Rename track',item.name); if(!name||!name.trim())return;
+  var nextName=name.trim();
+  if(nextName===item.name)return;
+  item.name=nextName;
+  item.updatedAt=new Date().toISOString();
+  // Keep the active editor and persisted library in agreement before sync scans.
+  if(state.currentId===id&&state.current){
+    state.current.name=nextName;
+    state.current.updatedAt=item.updatedAt;
+  }
+  persistLibrary();
+  // Notify the cloud-sync layer directly; do not depend on save-button handlers.
+  window.dispatchEvent(new CustomEvent('mancardo:track-renamed',{detail:{id:id}}));
+  state.trackMenuId=null;renderLibrary();refreshDock();
+  // Reconcile after the durable local save, using the revision-aware sync queue.
+  if(typeof window.__mancardoForcePrivateReconcile==='function'){
+    // The legacy reconciliation hook is intentionally not used: it only handles missing IDs.
+  }
+}
+function updateSelectAll(){
+  if(!els.selectAllTracks)return;
+  var total=state.library.length,shown=state.library.filter(function(item){return item.visible!==false;}).length;
+  els.selectAllTracks.checked=total>0&&shown===total;
+  els.selectAllTracks.indeterminate=shown>0&&shown<total;
+  els.selectAllTracks.disabled=total===0;
+}
+els.selectAllTracks.onchange=function(){
+  var visible=els.selectAllTracks.checked;
+  state.library.forEach(function(item){item.visible=visible;});
+  if(state.current)state.current.visible=visible;
+  persistLibrary();renderLibrary();render();
+};
+function setLibraryView(view){
+  state.libraryView=view==='shared'?'shared':'my';
+  els.myLibraryPanel.classList.toggle('hidden',state.libraryView!=='my');
+  els.sharedLibraryPanel.classList.toggle('hidden',state.libraryView!=='shared');
+  els.myLibraryTab.classList.toggle('on',state.libraryView==='my');
+  els.sharedLibraryTab.classList.toggle('on',state.libraryView==='shared');
+  if(state.libraryView==='shared')loadSharedLibrary();
+}
+function fmtSharedDate(iso){try{return new Date(iso).toLocaleString();}catch(e){return iso||'';}}
+function loadSharedLibrary(){
+  els.sharedTrackList.innerHTML='<div class="empty-note">Loading shared tracks…</div>';
+  fetch(SHARED_API+'/api/tracks',{cache:'no-store',credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
+    state.sharedLibrary=Array.isArray(data.tracks)?data.tracks:[];
+    renderSharedLibrary();
+  }).catch(function(e){
+    state.sharedLibrary=[];
+    els.sharedTrackList.innerHTML='<div class="empty-note">Shared Library is unavailable. '+esc(e.message||'Connection error')+'</div>';
+  });
+}
+var sharedPreviewPulseLayer=null,sharedPreviewPulseTimer=null;
+function pulseSharedPreviewTrack(){
+  if(sharedPreviewPulseTimer){clearInterval(sharedPreviewPulseTimer);sharedPreviewPulseTimer=null;}
+  if(sharedPreviewPulseLayer){try{map.removeLayer(sharedPreviewPulseLayer);}catch(e){}sharedPreviewPulseLayer=null;}
+  if(!state.sharedPreview||!state.current||!window.L||!window.map)return;
+  var lines=(state.current.segments||[]).filter(function(seg){return seg.length>1;}).map(function(seg){return seg.map(function(p){return [p.lat,p.lon];});});
+  if(!lines.length)return;
+  sharedPreviewPulseLayer=L.polyline(lines,{color:defaultTrackColour(state.current),weight:9,opacity:.95,interactive:false}).addTo(map);
+  var visible=true,steps=0;
+  sharedPreviewPulseTimer=setInterval(function(){
+    if(!state.sharedPreview||!sharedPreviewPulseLayer||steps++>=12){clearInterval(sharedPreviewPulseTimer);sharedPreviewPulseTimer=null;if(sharedPreviewPulseLayer){map.removeLayer(sharedPreviewPulseLayer);sharedPreviewPulseLayer=null;}return;}
+    visible=!visible;sharedPreviewPulseLayer.setStyle({opacity:visible?.95:.08});
+  },350);
+}
+window.__mancardoSharedPreviewPulse=pulseSharedPreviewTrack;
+var sharedGpxCache=new Map();
+var sharedPreviewRequest=0;
+function sharedGpxColour(gpx){
+  var m=String(gpx).match(/<(?:[a-zA-Z0-9_-]+:)?color\b[^>]*>\s*(#[0-9a-f]{3,8})\s*<\/(?:[a-zA-Z0-9_-]+:)?color>/i);
+  return m?m[1]:null;
+}
+function fetchSharedGpx(meta){
+  var key=String(meta.id)+':'+String(meta.version||1);
+  if(sharedGpxCache.has(key))return sharedGpxCache.get(key);
+  var task=fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id)+'/gpx',{cache:'no-store',credentials:'include'})
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})
+    .then(function(gpx){meta.color=sharedGpxColour(gpx)||meta.color;return gpx;});
+  sharedGpxCache.set(key,task);
+  task.catch(function(){sharedGpxCache.delete(key);});
+  if(sharedGpxCache.size>40)sharedGpxCache.delete(sharedGpxCache.keys().next().value);
+  return task;
+}
+function previewSharedTrack(meta){
+  var requestId=++sharedPreviewRequest;
+  fetchSharedGpx(meta).then(function(gpx){
+    if(requestId!==sharedPreviewRequest)return;
+    var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
+    if(!parsed.length)throw new Error('No track data');
+    var item=parsed[0];
+    item.name=meta.name||item.name;item.visible=true;item.sharedId=meta.id;item.sharedBaseVersion=meta.version||1;
+    item.color=sharedGpxColour(gpx)||meta.color||(state.library.find(function(t){return t.sharedId===meta.id;})||{}).color||item.color;
+    state.current=item;state.currentId=null;state.sharedPreview=true;state.sharedPreviewMeta=meta;
+    state.selection=null;state.history=[];state.future=[];state.extend=null;state.mode='view';
+    updateModeBanner();render();fitToTrack();renderSharedLibrary();
+    if(window.__mancardoSharedPreviewPulse)window.__mancardoSharedPreviewPulse();
+  }).catch(function(e){alert('Could not preview this shared GPX. '+(e.message||''));});
+}
+function renderSharedLibrary(){
+  var wrap=els.sharedTrackList;wrap.innerHTML='';
+  if(!state.sharedLibrary.length){wrap.innerHTML='<div class="empty-note">No shared tracks have been published yet.</div>';return;}
+  state.sharedLibrary.slice().sort(function(a,b){return String(b.modifiedAt||'').localeCompare(String(a.modifiedAt||''));}).forEach(function(item){
+    var d=document.createElement('div');d.className='shared-item'+(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===item.id?' active':'');d.style.cursor='pointer';d.title='Preview this shared track on the map';d.onclick=function(){previewSharedTrack(item);};
+    var n=document.createElement('div');n.className='shared-item-name';
+    n.style.display='flex';n.style.alignItems='center';n.style.gap='7px';
+    var localMatch=state.library.find(function(t){return t.id===item.id||t.sharedId===item.id;})||state.library.find(function(t){return t.name===item.name;});
+    var colour=item.color||(localMatch&&(localMatch.color||localMatch.colour));
+    if(colour&&/^#[0-9a-f]{3,8}$/i.test(colour)){
+      var swatch=document.createElement('span');swatch.title='Track colour';swatch.style.cssText='display:inline-block;flex:0 0 12px;width:12px;height:12px;border:1px solid rgba(0,0,0,.25);border-radius:2px;background:'+colour;n.appendChild(swatch);
+    }
+    var nameText=document.createElement('span');nameText.textContent=item.name||'Unnamed track';n.appendChild(nameText);d.appendChild(n);
+    var m=document.createElement('div');m.className='shared-item-meta';m.textContent='v'+(item.version||1)+' · '+(item.modifiedBy||'Unknown')+' · '+fmtSharedDate(item.modifiedAt);d.appendChild(m);
+    var a=document.createElement('div');a.className='shared-item-actions';
+    var preview=document.createElement('button');preview.type='button';preview.className='icon-btn';preview.textContent=(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===item.id)?'Previewing':'Preview';preview.onclick=function(ev){ev.preventDefault();ev.stopPropagation();previewSharedTrack(item);};a.appendChild(preview);
+    var copy=document.createElement('button');copy.type='button';copy.className='icon-btn primary';copy.textContent='Copy to My Library';copy.onclick=function(ev){ev.preventDefault();ev.stopPropagation();copySharedToLocal(item);};a.appendChild(copy);
+    var del=document.createElement('button');del.type='button';del.className='icon-btn danger';del.textContent='Delete';del.title='Delete this track and all Shared versions';del.onclick=function(ev){ev.preventDefault();ev.stopPropagation();deleteSharedTrack(item);};a.appendChild(del);
+    d.appendChild(a);wrap.appendChild(d);
+  });
+}
+function deleteSharedTrack(meta){
+  if(!meta||!meta.id)return;
+  if(!confirm('Delete "'+(meta.name||'this track')+'" from Shared Library?\n\nThis will permanently delete all Shared versions of this track.'))return;
+  fetch(SHARED_API+'/api/tracks/'+encodeURIComponent(meta.id),{method:'DELETE',credentials:'include'}).then(function(r){
+    return r.json().catch(function(){return {};}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data;});
+  }).then(function(){
+    if(state.sharedPreviewMeta&&state.sharedPreviewMeta.id===meta.id){
+      state.sharedPreview=false;state.sharedPreviewMeta=null;state.current=null;state.currentId=null;state.selection=null;render();
+    }
+    loadSharedLibrary();
+  }).catch(function(e){alert('Could not delete this Shared track. '+(e.message||''));});
+}
+function copySharedToLocal(meta){
+  fetchSharedGpx(meta).then(function(gpx){
+    var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
+    if(!parsed.length)throw new Error('No track data');
+    parsed.forEach(function(item){
+      item.color=sharedGpxColour(gpx)||meta.color||item.color;
+      item.sharedId=meta.id;
+      item.sharedBaseVersion=meta.version||1;
+      item.sharedBaseModifiedAt=meta.modifiedAt||null;
+      item.sharedBaseModifiedBy=meta.modifiedBy||null;
+      item.name=meta.name||item.name;
+      item.updatedAt=new Date().toISOString();
+      item.visible=true;
+      state.library.push(item);
+    });
+    persistLibrary();renderLibrary();setLibraryView('my');loadItem(parsed[0].id);
+  }).catch(function(e){alert('Could not copy this shared GPX to My Library. '+(e.message||''));});
+}
+function publishTrackToShared(id){
+  var item=state.library.find(function(t){return t.id===id;});if(!item)return;
+  var who=els.sharedUserSelect.value||'Justin';
+  var endpoint=item.sharedId?SHARED_API+'/api/tracks/'+encodeURIComponent(item.sharedId)+'/publish':SHARED_API+'/api/tracks';
+  var payload=item.sharedId?{modifiedBy:who,gpx:buildGpx(item),basedOnVersion:item.sharedBaseVersion}:{name:item.name,modifiedBy:who,gpx:buildGpx(item)};
+  fetch(endpoint,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
+    return r.json().catch(function(){return {};}).then(function(data){if(!r.ok){var err=new Error(data.error||('HTTP '+r.status));err.status=r.status;err.data=data;throw err;}return data;});
+  }).then(function(data){
+    item.sharedId=data.id;item.sharedBaseVersion=data.version;item.sharedBaseModifiedAt=data.modifiedAt;item.sharedBaseModifiedBy=data.modifiedBy;item.updatedAt=new Date().toISOString();
+    if(state.currentId===item.id)state.current=deepClone(item);
+    persistLibrary();renderLibrary();loadSharedLibrary();
+    alert('Published to Shared Library as v'+data.version+' · '+data.modifiedBy+'.');
+  }).catch(function(e){
+    if(e.status===409){alert('A newer Shared version exists. Your copy is based on v'+(item.sharedBaseVersion||'?')+', while Shared Library is v'+((e.data&&e.data.currentVersion)||'?')+'. Copy the latest Shared version before publishing.');}
+    else alert('Publish failed. '+(e.message||'Please try again.'));
+  });
+}
+function renderLibrary(){
+  var wrap=els.trackList;wrap.innerHTML='';
+  updateSelectAll();
+  if(!state.library.length){wrap.innerHTML='<div class="empty-note">No tracks yet. Import a GPX file or start a new route.</div>';return;}
+  state.library.slice().sort(function(a,b){return(b.updatedAt||'').localeCompare(a.updatedAt||'');}).forEach(function(item){
+    if(item.visible==null)item.visible=true;
+    var st=item.stats||computeStats(item),d=document.createElement('div');
+    d.className='track-item'+(item.id===state.currentId?' active':'');d.setAttribute('data-track-id',item.id);
+    var row=document.createElement('div');row.className='track-row';
+    var show=document.createElement('input');show.type='checkbox';show.className='track-show';show.checked=item.visible!==false;show.title='Show on map';
+    show.addEventListener('click',function(ev){ev.stopPropagation();setTrackVisible(item.id,show.checked);});
+    var sw=document.createElement('button');sw.type='button';sw.className='track-swatch';sw.style.background=defaultTrackColour(item);sw.title='Change track colour';
+    sw.addEventListener('click',function(ev){ev.stopPropagation();state.paletteId=state.paletteId===item.id?null:item.id;state.trackMenuId=null;renderLibrary();});
+    var name=document.createElement('span');name.className='ti-name';name.textContent=item.name;
+    var draftBadge=null;if(item.draft){draftBadge=document.createElement('span');draftBadge.className='draft-badge';draftBadge.textContent='(D)';draftBadge.title='Draft track';}
+    var more=document.createElement('button');more.type='button';more.className='track-more';more.innerHTML='&#8942;';more.title='Track options';
+    more.addEventListener('click',function(ev){ev.stopPropagation();state.trackMenuId=state.trackMenuId===item.id?null:item.id;state.paletteId=null;renderLibrary();});
+    row.appendChild(show);row.appendChild(sw);row.appendChild(name);if(draftBadge)row.appendChild(draftBadge);row.appendChild(more);d.appendChild(row);
+    var meta=document.createElement('div');meta.className='ti-meta';meta.textContent=fmtKm(st.distanceMeters||0)+' · '+(st.points||0)+' pts · '+fmtDate(item.updatedAt);d.appendChild(meta);
+    if(state.paletteId===item.id){
+      var pal=document.createElement('div');pal.className='track-palette';
+      TRACK_COLOURS.forEach(function(opt){var b=document.createElement('button');b.type='button';b.style.background=opt.value;b.title=opt.name;b.className=item.color===opt.value?'on':'';b.onclick=function(ev){ev.stopPropagation();setTrackColour(item.id,opt.value);};pal.appendChild(b);});d.appendChild(pal);
+    }
+    if(state.trackMenuId===item.id){
+      var menu=document.createElement('div');menu.className='track-menu';
+      [['Rename',function(){renameTrack(item.id)}],['Duplicate',function(){duplicateTrack(item.id)}],[item.draft?'Remove Draft':'Draft',function(){toggleDraft(item.id)}],['Note',function(){toggleNote(item.id)}],['Copy',function(){copyTrack(item.id)}],['Publish to Shared',function(){publishTrackToShared(item.id)}],['Paste',pasteTrack]].forEach(function(x){
+        var b=document.createElement('button');b.type='button';b.textContent=x[0];if(x[0]==='Paste'&&!state.clipboardTrack)b.disabled=true;
+        b.onclick=function(ev){ev.stopPropagation();x[1]();};menu.appendChild(b);
+      });d.appendChild(menu);
+    }
+    if(state.noteOpenId===item.id){
+      var noteWrap=document.createElement('div');noteWrap.className='track-note';
+      var ta=document.createElement('textarea');ta.maxLength=40;ta.placeholder='Track note (40 characters max)';ta.value=item.note||'';
+      var nm=document.createElement('div');nm.className='track-note-meta';nm.textContent=ta.value.length+'/40';
+      ta.addEventListener('click',function(ev){ev.stopPropagation();});
+      ta.addEventListener('input',function(ev){ev.stopPropagation();saveTrackNote(item.id,ta.value);nm.textContent=ta.value.length+'/40';});
+      noteWrap.addEventListener('click',function(ev){ev.stopPropagation();});noteWrap.appendChild(ta);noteWrap.appendChild(nm);d.appendChild(noteWrap);
+    }
+    d.addEventListener('click',function(){loadItem(item.id);});
+    wrap.appendChild(d);
+  });
+}
+function loadItem(id){
+  state.sharedPreview=false;state.sharedPreviewMeta=null;
+  var item = state.library.find(function(t){ return t.id===id; });
+  if(!item) return;
+  state.current = deepClone(item);
+  state.currentId = id;
+  state.selection = null; state.history=[]; state.future=[]; state.extend=null;
+  state.mode='view'; updateModeBanner();
+  render();
+  fitToTrack();
+  renderLibrary();
+}
+function startNewRoute(){
+  state.sharedPreview=false;state.sharedPreviewMeta=null;
+  var center = map.getCenter();
+  state.current = {id:uid(), type:'route', name:'New route', color:'#2563a8', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
+  state.currentId = null; state.selection = null; state.history=[]; state.future=[]; state.extend=null;
+  state.mode='draw'; updateModeBanner();
+  render();
+  renderLibrary();
+}
+function updateModeBanner(){
+  var active = state.mode==='draw' || state.mode==='move' || state.mode==='extend' || state.mode==='joinpoint';
+  els.modeBanner.classList.toggle('hidden', !active);
+  var msg = els.modeBanner.querySelector('span');
+  if(state.mode==='joinpoint') msg.textContent='Join To Point: select the destination point';
+  else if(state.mode==='move') msg.textContent='Move point: tap the new location on the map';
+  else if(state.mode==='extend') msg.textContent='Extend Track: tap map to add connected points';
+  else msg.textContent='Drawing mode — click the map to add points';
+  els.finishDrawBtn.textContent = (state.mode==='move' || state.mode==='joinpoint') ? 'Cancel' : 'Complete Change';
+  els.completeChangeBtn.classList.toggle('hidden', !(state.mode==='draw' || state.mode==='extend'));
+}
+
+function fitToTrack(){
+  var latlngs = [];
+  if(!state.current) return;
+  state.current.segments.forEach(function(seg){ seg.forEach(function(p){ latlngs.push([p.lat,p.lon]); }); });
+  if(latlngs.length===1) map.setView(latlngs[0], 13);
+  else if(latlngs.length>1) map.fitBounds(latlngs, {padding:[30,30]});
+}
+
+// ---------- rendering track on map ----------
+function highlightTrackInLibrary(scrollIt){
+  renderLibrary();
+  if(!state.currentId)return;
+  var row=els.trackList.querySelector('[data-track-id="'+state.currentId+'"]');
+  if(row&&scrollIt)row.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function visibleTracksAtLatLng(latlng,pixels){
+  var p=map.latLngToLayerPoint(latlng),hits=[];
+  state.library.forEach(function(item){
+    if(item.visible===false)return;
+    var best=Infinity;
+    (item.segments||[]).forEach(function(seg){
+      for(var i=1;i<seg.length;i++){
+        var a=map.latLngToLayerPoint([seg[i-1].lat,seg[i-1].lon]),b=map.latLngToLayerPoint([seg[i].lat,seg[i].lon]);
+        var dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy,t=len2?((p.x-a.x)*dx+(p.y-a.y)*dy)/len2:0;
+        t=Math.max(0,Math.min(1,t));var x=a.x+t*dx,y=a.y+t*dy,d=Math.sqrt((p.x-x)*(p.x-x)+(p.y-y)*(p.y-y));
+        if(d<best)best=d;
+      }
+    });
+    if(best<=pixels)hits.push({item:item,d:best});
+  });
+  hits.sort(function(a,b){return a.d-b.d;});return hits;
+}
+function showTrackHitPopup(latlng){
+  var hits=visibleTracksAtLatLng(latlng,9);if(!hits.length)return false;
+  if(hits.length===1){activateTrackFromMap(hits[0].item.id);return true;}
+  var box=document.createElement('div');box.className='track-hit-popup';
+  var title=document.createElement('div');title.className='hit-title';title.textContent=hits.length+' tracks overlap here';box.appendChild(title);
+  hits.forEach(function(hit){
+    var b=document.createElement('button');b.type='button';b.className='track-hit-option';
+    var sw=document.createElement('span');sw.className='track-hit-swatch';sw.style.background=defaultTrackColour(hit.item);
+    var tx=document.createElement('span');tx.textContent=hit.item.name;b.appendChild(sw);b.appendChild(tx);
+    b.addEventListener('click',function(){map.closePopup();activateTrackFromMap(hit.item.id);});box.appendChild(b);
+  });
+  L.popup({closeButton:true,offset:[0,-4]}).setLatLng(latlng).setContent(box).openOn(map);return true;
+}
+function activateTrackFromMap(id){
+  if(id!==state.currentId)loadItem(id);
+  highlightTrackInLibrary(true);
+}
+// Development autosave: persist changed geometry before a browser refresh.
+var AUTO_DRAFT_KEY='mancardo_unnamed_draft_recovery_v1';
+var autoCloudTimer=null;
+function scheduleCloudAutosave(){
+  clearTimeout(autoCloudTimer);
+  autoCloudTimer=setTimeout(function(){
+    window.dispatchEvent(new CustomEvent('mancardo:track-autosaved'));
+  },5000);
+}
+function autosaveEditor(){
+  if(!state.current||state.sharedPreview)return;
+  var item=state.current;
+  if(!Array.isArray(item.segments))return;
+  if(!state.currentId){
+    // Unnamed routes stay private to this browser until the user names them.
+    try {
+      if(item.segments.some(function(seg){return seg.length;}))
+        localStorage.setItem(AUTO_DRAFT_KEY,JSON.stringify(item));
+    }catch(e){console.warn('Draft recovery storage unavailable',e);}
+    return;
+  }
+  var existing=state.library.find(function(t){return t.id===state.currentId;});
+  if(!existing)return;
+  if(JSON.stringify(existing.segments)===JSON.stringify(item.segments))return;
+  item.updatedAt=new Date().toISOString();
+  item.stats=computeStats(item);
+  upsertLocal(deepClone(item));
+  scheduleCloudAutosave();
+}
+function recoverUnnamedDraft(){
+  try{
+    var raw=localStorage.getItem(AUTO_DRAFT_KEY);
+    if(!raw)return;
+    var draft=JSON.parse(raw);
+    if(!draft||!Array.isArray(draft.segments)||!draft.segments.some(function(seg){return seg.length;}))return;
+    if(state.library.some(function(t){return t.id===draft.id;})){localStorage.removeItem(AUTO_DRAFT_KEY);return;}
+    if(window.confirm('An unsaved route draft was found on this device. Restore it now?')){
+      state.current=draft;state.currentId=null;state.mode='view';
+      render();fitToTrack();
+    }
+  }catch(e){console.warn('Draft recovery failed',e);}
+}
+function render(){
+  autosaveEditor();
+  trackLayerGroup.clearLayers();
+  state.library.forEach(function(item){
+    if(item.visible===false||item.id===state.currentId||(state.current&&item.id===state.current.id))return;
+    var colour=defaultTrackColour(item);
+    (item.segments||[]).forEach(function(seg,si){
+      if(seg.length>1){
+        var ll=seg.map(function(p){return[p.lat,p.lon];});
+        var hit=L.polyline(ll,{color:'#000',weight:18,opacity:0,interactive:true}).addTo(trackLayerGroup);
+        hit.on('click',function(ev){L.DomEvent.stopPropagation(ev);if(state.mode==='joinpoint')return;showTrackHitPopup(ev.latlng);});
+        L.polyline(ll,{color:colour,weight:4,opacity:.72,interactive:false,dashArray:item.draft?'9 7':null}).addTo(trackLayerGroup);
+      }
+      var stride=seg.length>1200?Math.ceil(seg.length/1200):1;
+      for(var i=0;i<seg.length;i+=stride){
+        var p=seg[i],isEnd=(i===0||i===seg.length-1),r=isEnd?5:3;
+        (function(itemId,si,i,p,r,colour){
+          var m=L.circleMarker([p.lat,p.lon],{radius:r,color:'#fff',weight:1,fillColor:colour,fillOpacity:.9}).addTo(trackLayerGroup);
+          m.on('click',function(ev){L.DomEvent.stopPropagation(ev);if(state.mode==='joinpoint'){completeJoinToLibraryPoint(itemId,si,i);return;}loadItem(itemId);state.selection={seg:si,pt:i};render();highlightTrackInLibrary(true);});
+        })(item.id,si,i,p,r,colour);
+      }
+    });
+  });
+  if(state.current && state.current.visible!==false){
+    var lineColor=defaultTrackColour(state.current);
+    state.current.segments.forEach(function(seg,si){
+      if(seg.length>1){
+        var ll=seg.map(function(p){return[p.lat,p.lon];});
+        var hit=L.polyline(ll,{color:'#000',weight:18,opacity:0,interactive:true}).addTo(trackLayerGroup);
+        hit.on('click',function(ev){L.DomEvent.stopPropagation(ev);showTrackHitPopup(ev.latlng);});
+        L.polyline(ll,{color:lineColor,weight:5,opacity:.92,interactive:false,dashArray:state.current.draft?'9 7':null}).addTo(trackLayerGroup);
+      }
+      var stride=seg.length>1200?Math.ceil(seg.length/1200):1;
+      for(var i=0;i<seg.length;i+=stride){
+        var p=seg[i],isSel=state.selection&&state.selection.seg===si&&state.selection.pt===i,isEnd=(i===0||i===seg.length-1),r=isSel?8:(isEnd?6:4),fill=isSel?getCss('--line-selected'):lineColor;
+        (function(si,i,p,r,fill){var m=L.circleMarker([p.lat,p.lon],{radius:r,color:'#fff',weight:1,fillColor:fill,fillOpacity:1}).addTo(trackLayerGroup);m.on('click',function(ev){L.DomEvent.stopPropagation(ev);selectPoint(si,i);});})(si,i,p,r,fill);
+      }
+    });
+  }
+  refreshDock();
+}
+function getCss(varName){
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#2563a8';
+}
+function selectPoint(seg,pt){
+  if(state.sharedPreview)return;
+  if(state.mode==='joinpoint'){completeJoinToPoint(seg,pt);return;}
+  if(state.mode==='move' || state.mode==='extend') return;
+  state.selection = {seg:seg, pt:pt}; render(); highlightTrackInLibrary(true);
+}
+
+// ---------- editing operations ----------
+function segAt(i){ return state.current.segments[i]; }
+function interpolateTrackPoint(a,b,f){
+  var p={lat:a.lat+(b.lat-a.lat)*f,lon:a.lon+(b.lon-a.lon)*f};
+  if(a.ele!=null&&b.ele!=null)p.ele=a.ele+(b.ele-a.ele)*f;
+  return p;
+}
+function trimSegmentEndByDistance(seg,metres){
+  var out=deepClone(seg),remaining=metres;
+  while(out.length>1&&remaining>0){
+    var a=out[out.length-2],b=out[out.length-1],d=haversine(a,b);
+    if(d<=remaining){remaining-=d;out.pop();}
+    else{out[out.length-1]=interpolateTrackPoint(b,a,remaining/d);remaining=0;}
+  }
+  return out;
+}
+function trimSegmentStartByDistance(seg,metres){
+  var out=deepClone(seg),remaining=metres;
+  while(out.length>1&&remaining>0){
+    var a=out[0],b=out[1],d=haversine(a,b);
+    if(d<=remaining){remaining-=d;out.shift();}
+    else{out[0]=interpolateTrackPoint(a,b,remaining/d);remaining=0;}
+  }
+  return out;
+}
+function nextTrackSuffixName(name){
+  var base=String(name||'Track').replace(/\.\d+$/,'');
+  var n=1;while(state.library.some(function(t){return String(t.name||'')===base+'.'+n;}))n++;
+  return base+'.'+n;
+}
+function splitAfter(){
+  if(!state.current||!state.selection) return;
+  var si=state.selection.seg,pi=state.selection.pt,seg=segAt(si);
+  if(!seg||pi<=0||pi>=seg.length-1) return;
+
+  pushHistory();
+  var firstSplitSeg=deepClone(seg.slice(0,pi+1));
+  var secondSplitSeg=trimSegmentStartByDistance(seg.slice(pi),50);
+  var replacement=[];
+  if(firstSplitSeg.length)replacement.push(firstSplitSeg);
+  if(secondSplitSeg.length)replacement.push(secondSplitSeg);
+  state.current.segments.splice.apply(state.current.segments,[si,1].concat(replacement));
+  state.current.updatedAt=new Date().toISOString();
+  state.current.stats=computeStats(state.current);
+
+  if(state.currentId){
+    var li=state.library.findIndex(function(t){return t.id===state.currentId;});
+    if(li>=0)state.library[li]=deepClone(state.current);
+    else state.library.unshift(deepClone(state.current));
+  }
+  state.selection=null;state.future=[];state.extend=null;
+  persistLibrary();renderLibrary();render();
+}
+function trackEndpointInfo(item){
+  var segs=(item&&item.segments)||[],first=null,last=null;
+  for(var i=0;i<segs.length&&!first;i++)if(segs[i]&&segs[i].length)first={seg:i,pt:0,p:segs[i][0]};
+  for(var j=segs.length-1;j>=0&&!last;j--)if(segs[j]&&segs[j].length)last={seg:j,pt:segs[j].length-1,p:segs[j][segs[j].length-1]};
+  return {first:first,last:last};
+}
+function selectedSegmentEndpoint(){
+  if(!state.current||!state.selection)return null;
+  var si=state.selection.seg,seg=segAt(si);if(!seg||!seg.length)return null;
+  if(state.selection.pt===0)return {seg:si,side:'start',p:seg[0]};
+  if(state.selection.pt===seg.length-1)return {seg:si,side:'end',p:seg[seg.length-1]};
+  return null;
+}
+function startJoinToPoint(){
+  var selected=selectedSegmentEndpoint();if(!selected||state.mode!=='view')return;
+  state.joinFrom={trackId:state.currentId||state.current.id,seg:selected.seg,pt:state.selection.pt,side:selected.side};
+  state.mode='joinpoint';updateModeBanner();refreshToolbar();
+}
+function completeJoinToLibraryPoint(targetId,targetSeg,targetPt){
+  var from=state.joinFrom;if(!from||!state.current)return;
+  if(targetId===from.trackId){completeJoinToPoint(targetSeg,targetPt);return;}
+  var targetItem=state.library.find(function(t){return t.id===targetId;});if(!targetItem)return;
+  var sourceItem=deepClone(state.current);
+  var sourceSeg=sourceItem.segments[from.seg],destSeg=targetItem.segments[targetSeg];
+  if(!sourceSeg||!sourceSeg[from.pt]||!destSeg||!destSeg[targetPt])return;
+
+  // Cross-track Join To Point is non-destructive:
+  // retain every original segment from both tracks exactly as stored and add
+  // only a new connector segment between the two selected points.
+  var sourcePoint=deepClone(sourceSeg[from.pt]);
+  var targetPoint=deepClone(destSeg[targetPt]);
+  var combinedSegments=[];
+  sourceItem.segments.forEach(function(s){if(s&&s.length)combinedSegments.push(deepClone(s));});
+  if(sourcePoint.lat!==targetPoint.lat||sourcePoint.lon!==targetPoint.lon)combinedSegments.push([sourcePoint,targetPoint]);
+  targetItem.segments.forEach(function(s){if(s&&s.length)combinedSegments.push(deepClone(s));});
+
+  var now=new Date().toISOString(),combined={id:uid(),type:'track',name:(sourceItem.name||'Track A')+' + '+(targetItem.name||'Track B'),color:sourceItem.color||'#2563a8',segments:combinedSegments,createdAt:now,updatedAt:now,visible:true};
+  combined.stats=computeStats(combined);
+  state.current=combined;state.currentId=null;state.selection=null;state.history=[];state.future=[];state.extend=null;state.joinFrom=null;state.mode='view';
+  updateModeBanner();render();
+  openNameDialog({title:'Name joined track',value:combined.name,help:'Both original tracks are preserved exactly. Only the selected point-to-point connector is added.',mode:'save'});
+}
+function completeJoinToPoint(targetSeg,targetPt){
+  var from=state.joinFrom;if(!from||!state.current){state.mode='view';state.joinFrom=null;updateModeBanner();render();return;}
+  if(from.seg===targetSeg&&from.pt===targetPt)return;
+  var sourceSeg=state.current.segments[from.seg],destSeg=state.current.segments[targetSeg];
+  if(!sourceSeg||!destSeg)return;
+  var target=destSeg[targetPt];if(!target)return;
+  pushHistory();
+  if(from.seg===targetSeg){
+    var source=sourceSeg[from.pt];
+    if(source.lat!==target.lat||source.lon!==target.lon)sourceSeg.push(deepClone(target));
+  }else{
+    var a=deepClone(sourceSeg),b=deepClone(destSeg);
+    if(from.side==='start')a.reverse();
+    var left=b.slice(0,targetPt+1),right=b.slice(targetPt);
+    var useLeft=left.length<=right.length?left:right.slice().reverse();
+    if(a.length&&useLeft.length&&a[a.length-1].lat===useLeft[0].lat&&a[a.length-1].lon===useLeft[0].lon)useLeft.shift();
+    var joined=a.concat(useLeft);
+    if(from.side==='start')joined.reverse();
+    var keep=Math.min(from.seg,targetSeg),drop=Math.max(from.seg,targetSeg);
+    state.current.segments[keep]=joined;state.current.segments.splice(drop,1);
+  }
+  state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
+  if(state.currentId){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
+  state.selection=null;state.future=[];state.extend=null;state.joinFrom=null;state.mode='view';
+  persistLibrary();renderLibrary();updateModeBanner();render();
+}
+function joinNext(){
+  var selected=selectedSegmentEndpoint();if(!selected||!state.current)return;
+  if(state.current.segments.length===1){
+    var seg=state.current.segments[selected.seg];if(!seg||seg.length<2)return;
+    pushHistory();
+    var first=seg[0],last=seg[seg.length-1];
+    if(first.lat!==last.lat||first.lon!==last.lon)seg.push(deepClone(first));
+    state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
+    if(state.currentId){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
+    state.selection=null;state.future=[];state.extend=null;persistLibrary();renderLibrary();render();return;
+  }
+  var best=null;
+  state.current.segments.forEach(function(seg,si){
+    if(si===selected.seg||!seg||!seg.length)return;
+    [{side:'start',p:seg[0]},{side:'end',p:seg[seg.length-1]}].forEach(function(x){
+      var d=haversine(selected.p,x.p);
+      if(!best||d<best.distance)best={seg:si,side:x.side,distance:d};
+    });
+  });
+  if(!best)return;
+  pushHistory();
+  var a=deepClone(state.current.segments[selected.seg]),b=deepClone(state.current.segments[best.seg]);
+  if(selected.side==='start')a.reverse();
+  if(best.side==='end')b.reverse();
+  if(a.length&&b.length&&a[a.length-1].lat===b[0].lat&&a[a.length-1].lon===b[0].lon)b.shift();
+  var joined=a.concat(b);
+  if(selected.side==='start')joined.reverse();
+  var keep=Math.min(selected.seg,best.seg),drop=Math.max(selected.seg,best.seg);
+  state.current.segments[keep]=joined;state.current.segments.splice(drop,1);
+  state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
+  if(state.currentId){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
+  state.selection=null;state.future=[];state.extend=null;persistLibrary();renderLibrary();render();
+}
+function deletePoint(){
+  if(!state.current||!state.selection) return;
+  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  pushHistory();
+  seg.splice(pi,1);
+  if(seg.length===0) state.current.segments.splice(si,1);
+  state.selection=null;
+  render();
+}
+function deleteSegment(){
+  if(!state.current||!state.selection) return;
+  pushHistory();
+  state.current.segments.splice(state.selection.seg,1);
+  if(state.current.segments.length===0) state.current.segments.push([]);
+  state.selection=null;
+  render();
+}
+function movePoint(){
+  if(!state.current || !state.selection) return;
+  state.mode='move'; updateModeBanner(); refreshToolbar();
+}
+function extendTrack(){
+  if(!state.current || !state.selection) return;
+  var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  if(!seg || (pi!==0 && pi!==seg.length-1)) return;
+  state.extend={seg:si, atStart:pi===0};
+  state.mode='extend'; updateModeBanner(); refreshToolbar();
+}
+function reverseTrack(){
+  if(!state.current) return;
+  pushHistory();
+  state.current.segments = state.current.segments.slice().reverse().map(function(s){ return s.slice().reverse(); });
+  state.selection=null;
+  render();
+}
+
+// ---------- toolbar/dock ----------
+var confirmTimers={};
+function armConfirm(btn, action){
+  if(btn.classList.contains('confirming')){
+    clearTimeout(confirmTimers[btn.id]);
+    btn.classList.remove('confirming'); btn.textContent = btn.dataset.label; action(); return;
+  }
+  btn.dataset.label = btn.dataset.label || btn.textContent;
+  btn.classList.add('confirming'); btn.textContent='Confirm?';
+  confirmTimers[btn.id] = setTimeout(function(){ btn.classList.remove('confirming'); btn.textContent=btn.dataset.label; },2600);
+}
+function refreshToolbar(){
+  var hasTrack=!!state.current, sel=state.selection;
+  if(state.sharedPreview){
+    ['splitAfterBtn','joinNextBtn','joinToPointBtn','movePointBtn','extendTrackBtn','deletePointBtn','deleteSegBtn','reverseBtn','undoBtn','redoBtn','deleteTrackBtn','saveBtn'].forEach(function(k){if(els[k])els[k].disabled=true;});
+    els.exportBtn.disabled=!hasTrack;
+    return;
+  }
+  var seg = (sel && state.current) ? segAt(sel.seg) : null;
+  els.splitAfterBtn.disabled = !sel || !seg || sel.pt<=0 || sel.pt>=seg.length-1;
+  var selSegEnd=selectedSegmentEndpoint();
+  els.joinNextBtn.disabled = !selSegEnd || !state.current || !seg || seg.length<2;
+  els.joinToPointBtn.disabled = !selSegEnd || state.mode!=='view';
+  els.movePointBtn.disabled = !sel || state.mode!=='view';
+  els.extendTrackBtn.disabled = !sel || !seg || (sel.pt!==0 && sel.pt!==seg.length-1) || state.mode!=='view';
+  els.deletePointBtn.disabled = !sel;
+  els.deleteSegBtn.disabled = !sel;
+  els.reverseBtn.disabled = !hasTrack;
+  els.undoBtn.disabled = !state.history.length;
+  els.redoBtn.disabled = !state.future.length;
+  els.exportBtn.disabled = !hasTrack;
+  els.deleteTrackBtn.disabled = !state.currentId;
+  els.saveBtn.disabled = !hasTrack;
+}
+function refreshDock(){
+  refreshToolbar();
+  if(!state.current){
+    els.statName.textContent='—'; els.statDist.textContent='0.0 km';
+    els.statPoints.textContent='0'; els.statSegs.textContent='0';
+    els.statElev.textContent='—'; els.statSel.textContent='—';
+    renderPointsTable(); return;
+  }
+  var st = computeStats(state.current);
+  els.statName.textContent = state.current.name;
+  els.statDist.textContent = fmtKm(st.distanceMeters);
+  els.statPoints.textContent = st.points;
+  els.statSegs.textContent = st.segments;
+  els.statElev.textContent = st.ascent!=null ? Math.round(st.ascent)+' m' : '—';
+  if(state.selection){
+    var segArr = segAt(state.selection.seg);
+    var p = segArr && segArr[state.selection.pt];
+    els.statSel.textContent = p ? (p.lat.toFixed(4)+', '+p.lon.toFixed(4)) : '—';
+  } else els.statSel.textContent = '—';
+  renderPointsTable();
+}
+function renderPointsTable(){
+  if(els.pointsWrap.classList.contains('hidden')) return;
+  var body = els.pointsBody; body.innerHTML='';
+  if(!state.current) return;
+  var running=0, idx=0;
+  state.current.segments.forEach(function(seg,si){
+    seg.forEach(function(p,pi){
+      if(pi>0) running += haversine(seg[pi-1],p);
+      var tr = document.createElement('tr');
+      if(state.selection && state.selection.seg===si && state.selection.pt===pi) tr.className='sel';
+      tr.innerHTML = '<td>'+(idx+1)+'</td><td>'+si+'</td><td>'+p.lat.toFixed(5)+'</td><td>'+p.lon.toFixed(5)+'</td><td>'+(p.ele!=null?Math.round(p.ele):'')+'</td><td>'+(running/1000).toFixed(2)+'</td>';
+      tr.addEventListener('click', function(){ selectPoint(si,pi); });
+      body.appendChild(tr);
+      idx++;
+    });
+  });
+}
+
+// ---------- name dialog ----------
+function openNameDialog(opts){
+  els.nameDialogTitle.textContent = opts.title;
+  els.nameInput.value = opts.value||'';
+  els.nameHelp.textContent = opts.help||'';
+  els.nameOverlay.classList.remove('hidden');
+  els.nameInput.focus();
+  els.nameOverlay.dataset.mode = opts.mode;
+}
+function closeNameDialog(){ els.nameOverlay.classList.add('hidden'); }
+els.nameCancelBtn.onclick = closeNameDialog;
+els.nameSaveBtn.onclick = function(){
+  var val = els.nameInput.value.trim();
+  if(!val) return;
+  closeNameDialog();
+  state.current.name = val;
+  state.currentId = state.current.id;
+  state.current.updatedAt = new Date().toISOString();
+  state.current.stats = computeStats(state.current);
+  upsertLocal(deepClone(state.current));
+  try{localStorage.removeItem(AUTO_DRAFT_KEY);}catch(e){}
+  scheduleCloudAutosave();
+  refreshDock();
+};
+function upsertLocal(item){
+  var idx = state.library.findIndex(function(t){ return t.id===item.id; });
+  if(idx>=0) state.library[idx]=item; else state.library.unshift(item);
+  persistLibrary();
+  renderLibrary();
+}
+
+// ---------- import ----------
+els.importBtn.onclick = function(){ els.fileInput.click(); };
+els.fileInput.onchange = function(ev){
+  var files = Array.prototype.slice.call(ev.target.files||[]);
+  if(!files.length) return;
+  var found=[], remaining=files.length;
+  files.forEach(function(f){
+    var reader = new FileReader();
+    reader.onload = function(){
+      found = found.concat(parseGpxFile(String(reader.result), f.name));
+      remaining--; if(remaining===0) showImportDialog(found);
+    };
+    reader.onerror = function(){ remaining--; if(remaining===0) showImportDialog(found); };
+    reader.readAsText(f);
+  });
+  ev.target.value='';
+};
+function showImportDialog(items){
+  if(!items.length){
+    els.importList.innerHTML = '<div class="empty-note">No tracks or routes found in that file.</div>';
+    els.importConfirmBtn.classList.add('hidden');
+    els.importOverlay.classList.remove('hidden');
+    return;
+  }
+  els.importConfirmBtn.classList.remove('hidden');
+  state.pendingImport = items;
+  var list = els.importList; list.innerHTML='';
+  items.forEach(function(item,i){
+    var st = computeStats(item);
+    var row = document.createElement('label');
+    row.className='import-row';
+    row.innerHTML = '<input type="checkbox" checked data-i="'+i+'"> <span class="im-name">'+esc(item.name)+'</span><span class="tiny mono">'+fmtKm(st.distanceMeters)+'</span>';
+    list.appendChild(row);
+  });
+  els.importOverlay.classList.remove('hidden');
+}
+els.importCancelBtn.onclick = function(){ els.importOverlay.classList.add('hidden'); };
+els.importConfirmBtn.onclick = function(){
+  var checks = els.importList.querySelectorAll('input[type=checkbox]:checked');
+  var toAdd=[];
+  checks.forEach(function(c){ toAdd.push(state.pendingImport[parseInt(c.dataset.i,10)]); });
+  els.importOverlay.classList.add('hidden');
+  toAdd.forEach(function(item){ item.stats = computeStats(item); upsertLocal(item); });
+  if(toAdd.length) loadItem(toAdd[0].id);
+};
+
+// ---------- export ----------
+els.exportBtn.onclick = function(){ if(state.current) exportTrackItem(state.current); };
+els.exportSelectedBtn.onclick = exportSelectedTracks;
+els.deleteSelectedBtn.onclick = deleteSelectedTracks;
+
+// ---------- top buttons ----------
+els.saveBtn.onclick = function(){
+  if(!state.current) return;
+  if(state.currentId){
+    state.current.updatedAt = new Date().toISOString();
+    state.current.stats = computeStats(state.current);
+    upsertLocal(deepClone(state.current));
+    scheduleCloudAutosave();
+  } else {
+    openNameDialog({title:'Save to library', value:state.current.name, help:'Saved in this browser on this device.', mode:'save'});
+  }
+};
+els.newRouteBtn.onclick = startNewRoute;
+els.finishDrawBtn.onclick = function(){
+  var wasDraw = state.mode==='draw';
+  state.mode='view'; state.extend=null; state.joinFrom=null; updateModeBanner(); render();
+  if(wasDraw && !state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
+};
+els.deleteTrackBtn.onclick = function(){
+  armConfirm(els.deleteTrackBtn, function(){
+    var id = state.currentId;
+    state.library = state.library.filter(function(t){ return t.id!==id; });
+    persistLibrary();
+    state.current=null; state.currentId=null; state.selection=null;
+    render(); renderLibrary();
+  });
+};
+els.deleteSegBtn.onclick = function(){ armConfirm(els.deleteSegBtn, deleteSegment); };
+els.deletePointBtn.onclick = function(){ armConfirm(els.deletePointBtn, deletePoint); };
+els.splitAfterBtn.onclick = splitAfter;
+els.joinNextBtn.onclick = joinNext;
+els.joinToPointBtn.onclick = startJoinToPoint;
+els.movePointBtn.onclick = movePoint;
+els.extendTrackBtn.onclick = extendTrack;
+els.completeChangeBtn.onclick = function(){ els.finishDrawBtn.click(); };
+els.reverseBtn.onclick = reverseTrack;
+els.undoBtn.onclick = undo;
+els.redoBtn.onclick = redo;
+els.pointsToggle.onclick = function(){
+  var hidden = els.pointsWrap.classList.toggle('hidden');
+  els.pointsToggle.textContent = hidden ? 'Show point list' : 'Hide point list';
+  if(!hidden) renderPointsTable();
+};
+
+els.myLibraryTab.onclick=function(){setLibraryView('my');};
+els.sharedLibraryTab.onclick=function(){setLibraryView('shared');};
+els.refreshSharedBtn.onclick=loadSharedLibrary;
+try{els.sharedUserSelect.value=localStorage.getItem(SHARED_USER_KEY)||'Justin';}catch(e){}
+els.sharedUserSelect.onchange=function(){try{localStorage.setItem(SHARED_USER_KEY,els.sharedUserSelect.value);}catch(e){}};
+
+// ---------- drawer ----------
+function syncMobileLibraryToggle(){
+  if(!els.mobileLibraryToggle)return;
+  var open=els.drawer.classList.contains('open');
+  els.mobileLibraryToggle.innerHTML=open?'&times;':'&#9776;';
+  els.mobileLibraryToggle.setAttribute('aria-label',open?'Close track library':'Open track library');
+  els.mobileLibraryToggle.title=open?'Close track library':'Track library';
+}
+function openDrawer(){ els.drawer.classList.add('open'); els.drawerBackdrop.classList.remove('hidden'); syncMobileLibraryToggle(); }
+function closeDrawer(){ els.drawer.classList.remove('open'); els.drawerBackdrop.classList.add('hidden'); syncMobileLibraryToggle(); }
+function closeDrawerMobile(){ if(window.innerWidth<900) closeDrawer(); }
+els.hamburgerBtn.onclick = openDrawer;
+els.mobileLibraryToggle.onclick=function(){if(els.drawer.classList.contains('open'))closeDrawer();else openDrawer();};
+els.drawerCloseBtn.onclick = closeDrawer;
+els.drawerBackdrop.onclick = closeDrawer;
+syncMobileLibraryToggle();
+
+setTimeout(function(){
+  map.invalidateSize();
+  if(!state.current) map.setView([-32.5,147.0], 6);
+}, 100);
+window.addEventListener('resize', function(){ map.invalidateSize(); });
+
+// ---------- boot ----------
+loadLibrary();
+recoverUnnamedDraft();
+renderLibrary();
+loadSharedLibrary();
+refreshDock();
+map.setView([-32.5,147.0], 6);
+})();
+</script>
+</body>
+</html>
