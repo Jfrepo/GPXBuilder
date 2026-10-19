@@ -185,9 +185,9 @@ test('ordinary Development change is limited to two case-normalized Production U
   assert.equal(sha256(restored), '5458931ca490d25b50e260c8a6e3e21e1b8592bd4ad5d48dad69de3c4243989a');
 });
 
-test('immutable manual Development route matches the separately reviewed ecc77699 preparation', () => {
+test('immutable manual Development route matches the separately reviewed 583badd5 preparation', () => {
   assert.equal(sha256(developmentWorkflow.split('  deploy-reviewed-candidate:')[1]),
-    '6c350ea07af65c38ef6e379d18a5cd85d743d16e65e1f3d83416320962e84305');
+    'b7d7b8bc5bcef55669345e23903801f828554c78f8241cc1a027b744cf61e989');
 });
 
 test('combined no-deploy qualification adds only the three reviewed suites without changing triggers or jobs', () => {
