@@ -1,0 +1,36 @@
+name: Mancardo Delete Qualification (No Deploy)
+
+on:
+  pull_request:
+    branches: [mancardo-dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  executable-source-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run source, delivered-HTML, actual-server SQLite and deterministic client checks
+        run: node --test tests/release-safety.test.cjs tests/generated-html.test.cjs tests/delete-client.test.cjs tests/deployment-guard.test.cjs tests/delete-cross-client-node.test.cjs tests/remote-tombstone-review.test.cjs tests/server-owner-isolation.test.cjs tests/note-account-boundary.test.cjs tests/request-volume-client.test.cjs tests/owner-qualification-server.test.cjs tests/owner-qualification-client.test.cjs tests/d1-mutation-ack.test.cjs tests/live-pull-review.test.cjs tests/shared-mutation-ack.test.cjs tests/workflow-boundaries.test.cjs
+
+  isolated-chromium-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser testing tools
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Run isolated deletion and request-budget fixtures (no live account, database, or deployment)
+        run: node --test tests/delete-behavior.test.cjs tests/delete-cross-client.test.cjs tests/request-volume-browser.test.cjs tests/owner-qualification-browser.test.cjs

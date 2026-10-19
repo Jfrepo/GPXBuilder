@@ -411,7 +411,14 @@ function placeEditingToolbar(){
   if(window.matchMedia('(min-width:768px)').matches){
     if(toolbarEl.parentNode!==els.desktopToolbarHost)els.desktopToolbarHost.appendChild(toolbarEl);
   }else{
-    if(toolbarEl.parentNode!==dockEl)dockEl.insertBefore(toolbarEl,pointsToggleEl);
+    // Mobile layout owns a scrolling viewport after installation. The point
+    // toggle may already live in the stats row, so it is not always a dock child.
+    var viewport=document.getElementById('mancardoMobileToolbarViewport');
+    if(viewport){
+      if(toolbarEl.parentNode!==viewport)viewport.appendChild(toolbarEl);
+    }else if(toolbarEl.parentNode!==dockEl){
+      dockEl.insertBefore(toolbarEl,pointsToggleEl&&pointsToggleEl.parentNode===dockEl?pointsToggleEl:null);
+    }
   }
 }
 placeEditingToolbar();

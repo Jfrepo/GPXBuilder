@@ -177,6 +177,19 @@ async function getTrack(ctx,id){
   return jsonResponse({track_id:row.track_id,revision:row.revision,name:row.name,type:row.track_type,track:row.deleted?null:JSON.parse(row.payload_json),sha256:row.content_sha256,deleted:!!row.deleted,created_at:row.created_at,updated_at:row.updated_at,device_id:row.device_id||null});
 }
 
+// D1 meta.changes includes history-trigger writes. A successful one-row track
+// mutation can therefore report more than one change. Only this statement's
+// RETURNING row proves the owner/revision compare-and-swap actually matched.
+function mutationRow(result,expected){
+  if(!result||result.success!==true||!Array.isArray(result.results)||result.results.length>1)
+    throw new Error('Private library mutation acknowledgement is uncertain. Read current state before retrying.');
+  if(result.results.length===0)return null;
+  const row=result.results[0];
+  if(!row||typeof row!=='object'||Object.entries(expected).some(([key,value])=>row[key]!==value))
+    throw new Error('Private library mutation acknowledgement is uncertain. Read current state before retrying.');
+  return row;
+}
+
 async function putTrack(request,ctx,id){
   const body=await readJsonBody(request);
   const baseRevision=Number(body.base_revision);
@@ -193,8 +206,9 @@ async function putTrack(request,ctx,id){
       INSERT OR IGNORE INTO private_library_tracks
       (owner_id,track_id,revision,name,track_type,payload_json,content_sha256,deleted,created_at,updated_at,device_id)
       VALUES (?1,?2,1,?3,?4,?5,?6,0,?7,?7,?8)
-    `).bind(ctx.identity.ownerId,id,track.name.trim(),track.type,payload,hash,now,deviceId).run();
-    if(Number(result.meta&&result.meta.changes)!==1){
+      RETURNING owner_id,track_id,revision,content_sha256,deleted,updated_at
+    `).bind(ctx.identity.ownerId,id,track.name.trim(),track.type,payload,hash,now,deviceId).all();
+    if(!mutationRow(result,{owner_id:ctx.identity.ownerId,track_id:id,revision:1,content_sha256:hash,deleted:0,updated_at:now})){
       const current=await ctx.db.prepare('SELECT revision,updated_at,content_sha256 FROM private_library_tracks WHERE owner_id=?1 AND track_id=?2').bind(ctx.identity.ownerId,id).first();
       return jsonResponse({error:'Cloud track already exists at a newer revision.',code:'revision_conflict',current},409);
     }
@@ -206,8 +220,9 @@ async function putTrack(request,ctx,id){
     UPDATE private_library_tracks
     SET revision=?3,name=?4,track_type=?5,payload_json=?6,content_sha256=?7,deleted=0,updated_at=?8,device_id=?9
     WHERE owner_id=?1 AND track_id=?2 AND revision=?10
-  `).bind(ctx.identity.ownerId,id,next,track.name.trim(),track.type,payload,hash,now,deviceId,baseRevision).run();
-  if(Number(result.meta&&result.meta.changes)!==1){
+    RETURNING owner_id,track_id,revision,content_sha256,deleted,updated_at
+  `).bind(ctx.identity.ownerId,id,next,track.name.trim(),track.type,payload,hash,now,deviceId,baseRevision).all();
+  if(!mutationRow(result,{owner_id:ctx.identity.ownerId,track_id:id,revision:next,content_sha256:hash,deleted:0,updated_at:now})){
     const current=await ctx.db.prepare('SELECT revision,updated_at,content_sha256,deleted FROM private_library_tracks WHERE owner_id=?1 AND track_id=?2').bind(ctx.identity.ownerId,id).first();
     return jsonResponse({error:'This track changed on another device. Your local copy was not overwritten.',code:'revision_conflict',current:current||null},409);
   }
@@ -221,8 +236,9 @@ async function deleteTrack(request,ctx,id){
   const result=await ctx.db.prepare(`
     UPDATE private_library_tracks SET revision=?3,deleted=1,updated_at=?4,device_id=?5
     WHERE owner_id=?1 AND track_id=?2 AND revision=?6 AND deleted=0
-  `).bind(ctx.identity.ownerId,id,next,now,deviceId,baseRevision).run();
-  if(Number(result.meta&&result.meta.changes)!==1){
+    RETURNING owner_id,track_id,revision,deleted,updated_at
+  `).bind(ctx.identity.ownerId,id,next,now,deviceId,baseRevision).all();
+  if(!mutationRow(result,{owner_id:ctx.identity.ownerId,track_id:id,revision:next,deleted:1,updated_at:now})){
     const current=await ctx.db.prepare('SELECT revision,updated_at,deleted FROM private_library_tracks WHERE owner_id=?1 AND track_id=?2').bind(ctx.identity.ownerId,id).first();
     return jsonResponse({error:'Delete was not applied because the cloud track has changed.',code:'revision_conflict',current:current||null},409);
   }

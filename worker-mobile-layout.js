@@ -67,7 +67,7 @@ const MOBILE_LAYOUT_FEATURE = String.raw`
   var mq=window.matchMedia('(max-width:767px)');
   var mapWrap=document.getElementById('mapWrap');
   var dock=document.querySelector('.dock');
-  var toolbar=dock&&dock.querySelector('.toolbar');
+  var toolbar=document.querySelector('.toolbar');
   if(!mapWrap||!dock||!toolbar)return;
 
   var zoomTray=document.createElement('div');
@@ -104,8 +104,11 @@ const MOBILE_LAYOUT_FEATURE = String.raw`
   var prev=document.createElement('button');prev.type='button';prev.className='mancardo-ribbon-arrow';prev.textContent='‹';prev.title='Previous tools';prev.setAttribute('aria-label','Scroll editing tools left');
   var next=document.createElement('button');next.type='button';next.className='mancardo-ribbon-arrow';next.textContent='›';next.title='More tools';next.setAttribute('aria-label','Scroll editing tools right');
   var viewport=document.createElement('div');viewport.id='mancardoMobileToolbarViewport';
-  rememberNode(toolbar);
-  toolbar.parentNode.insertBefore(nav,toolbar);nav.appendChild(prev);nav.appendChild(viewport);nav.appendChild(next);viewport.appendChild(toolbar);
+  // Desktop startup may already have placed the toolbar in its desktop host.
+  // Keep the ribbon in the dock and let the shared placement function move it.
+  var pointsToggle=document.getElementById('pointsToggle');
+  var anchor=toolbar.parentNode===dock?toolbar:(pointsToggle&&pointsToggle.parentNode===dock?pointsToggle:null);
+  dock.insertBefore(nav,anchor);nav.appendChild(prev);nav.appendChild(viewport);nav.appendChild(next);
 
   function updateRibbonArrows(){
     if(!mq.matches){prev.disabled=false;next.disabled=false;return;}
@@ -122,8 +125,8 @@ const MOBILE_LAYOUT_FEATURE = String.raw`
   function applyLayout(){
     var duplicate=document.getElementById('mobileLibraryToggle');
     if(duplicate)duplicate.setAttribute('aria-hidden',mq.matches?'true':'false');
+    placeEditingToolbar();
     if(mq.matches){
-      if(toolbar.parentNode!==viewport)viewport.appendChild(toolbar);
       nav.style.display='grid';zoomTray.style.display='flex';toolsTray.style.display='flex';
       moveMapControls();
       setTimeout(updateRibbonArrows,0);
@@ -131,8 +134,6 @@ const MOBILE_LAYOUT_FEATURE = String.raw`
     }else{
       nav.style.display='none';zoomTray.style.display='none';toolsTray.style.display='none';
       restoreMapControls();
-      var h=toolbar.__mancardoMobileHome;
-      if(h&&h.parent&&toolbar.parentNode===viewport)h.parent.insertBefore(toolbar,h.next&&h.next.parentNode===h.parent?h.next:null);
       try{if(typeof map!=='undefined'&&map)map.invalidateSize(false);}catch(e){}
     }
   }

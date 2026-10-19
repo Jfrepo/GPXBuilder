@@ -142,6 +142,18 @@ async function createTrack(request,db,auth){
   await db.prepare('INSERT INTO shared_library_tracks (track_id,name,current_version,gpx,created_at,modified_at,created_by,modified_by,deleted) VALUES (?1,?2,1,?3,?4,?4,?5,?5,0)').bind(id,name,gpx,now,who).run();
   return json({id,version:1,modifiedAt:new Date(now).toISOString(),modifiedBy:who},201);
 }
+// History triggers and cascading deletes contribute to D1 meta.changes. Only
+// this statement's atomic RETURNING rows identify whether its predicate matched.
+// A malformed acknowledgement is uncertain, not proof of rollback or a retry.
+function sharedMutationRow(result,expected){
+  if(!result||result.success!==true||!Array.isArray(result.results)||result.results.length>1)
+    throw new Error('Shared Library mutation acknowledgement is uncertain. Read current state before retrying.');
+  if(result.results.length===0)return null;
+  const row=result.results[0];
+  if(!row||typeof row!=='object'||Object.entries(expected).some(([key,value])=>row[key]!==value))
+    throw new Error('Shared Library mutation acknowledgement is uncertain. Read current state before retrying.');
+  return row;
+}
 async function publishTrack(request,db,auth,id){
   const b=await bodyJson(request),gpx=String(b.gpx||''),base=Number(b.basedOnVersion),who=identityLabel(auth);
   if(!Number.isInteger(base)||base<1)return json({error:'basedOnVersion must identify the Shared version being edited.',code:'invalid_version'},400);
@@ -159,13 +171,13 @@ async function publishTrack(request,db,auth,id){
 
   if(Number(current.current_version)!==base)return json({error:'A newer Shared version exists.',code:'revision_conflict',currentVersion:Number(current.current_version)},409);
   const next=base+1,now=Date.now();
-  const result=await db.prepare('UPDATE shared_library_tracks SET current_version=?2,gpx=?3,modified_at=?4,modified_by=?5 WHERE track_id=?1 AND current_version=?6 AND deleted=0').bind(id,next,gpx,now,who,base).run();
-  if(Number(result.meta&&result.meta.changes)!==1){const latest=await db.prepare('SELECT current_version FROM shared_library_tracks WHERE track_id=?1').bind(id).first();return json({error:'A newer Shared version exists.',code:'revision_conflict',currentVersion:Number(latest&&latest.current_version)||base},409);}
+  const result=await db.prepare('UPDATE shared_library_tracks SET current_version=?2,gpx=?3,modified_at=?4,modified_by=?5 WHERE track_id=?1 AND current_version=?6 AND deleted=0 RETURNING track_id,current_version,gpx,modified_at,modified_by,deleted').bind(id,next,gpx,now,who,base).all();
+  if(!sharedMutationRow(result,{track_id:id,current_version:next,gpx,modified_at:now,modified_by:who,deleted:0})){const latest=await db.prepare('SELECT current_version FROM shared_library_tracks WHERE track_id=?1').bind(id).first();return json({error:'A newer Shared version exists.',code:'revision_conflict',currentVersion:Number(latest&&latest.current_version)||base},409);}
   return json({id,version:next,modifiedAt:new Date(now).toISOString(),modifiedBy:who});
 }
 async function deleteTrack(db,id){
-  const result=await db.prepare('DELETE FROM shared_library_tracks WHERE track_id=?1').bind(id).run();
-  const deleted=Number(result.meta&&result.meta.changes)===1;
+  const result=await db.prepare('DELETE FROM shared_library_tracks WHERE track_id=?1 RETURNING track_id').bind(id).all();
+  const deleted=!!sharedMutationRow(result,{track_id:id});
   return json({ok:true,id,deleted,alreadyDeleted:!deleted});
 }
 async function handleShared(request,env,ctx){
@@ -176,8 +188,8 @@ async function handleShared(request,env,ctx){
     if(path===SHARED_PREFIX&&request.method==='GET')return listTracks(db);
     if(path===SHARED_PREFIX&&request.method==='POST')return createTrack(request,db,auth);
     let m=path.match(/^\/api\/tracks\/([^/]+)\/gpx$/);if(m&&request.method==='GET')return getGpx(db,decodeURIComponent(m[1]));
-    m=path.match(/^\/api\/tracks\/([^/]+)\/publish$/);if(m&&request.method==='POST')return publishTrack(request,db,auth,decodeURIComponent(m[1]));
-    m=path.match(/^\/api\/tracks\/([^/]+)$/);if(m&&request.method==='DELETE')return deleteTrack(db,decodeURIComponent(m[1]));
+    m=path.match(/^\/api\/tracks\/([^/]+)\/publish$/);if(m&&request.method==='POST')return await publishTrack(request,db,auth,decodeURIComponent(m[1]));
+    m=path.match(/^\/api\/tracks\/([^/]+)$/);if(m&&request.method==='DELETE')return await deleteTrack(db,decodeURIComponent(m[1]));
     return json({error:'Shared Library API route not found.',code:'not_found'},404);
   }catch(e){return json({error:e&&e.message?e.message:'Shared Library request failed.',code:'shared_error'},Number(e&&e.status)||500);}
 }

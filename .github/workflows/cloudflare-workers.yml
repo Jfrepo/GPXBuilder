@@ -15,9 +15,14 @@ concurrency:
 jobs:
   deploy:
     name: Deploy ${{ github.ref_name }}
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Verify exact Production branch
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "::error::Refusing Production deployment outside exact main branch"; exit 1; }
+
       - name: Check out source
         uses: actions/checkout@v4
 
