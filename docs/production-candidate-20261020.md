@@ -1,5 +1,10 @@
 # Production candidate — corrected local preparation, Production HOLD
 
+Historical pre-integration preparation record. The subsequent authorized local
+main integration and current ancestry are documented in
+`docs/production-main-integration-20261020.md`; its findings supersede the
+unresolved-integration statements below. Runtime/artifact identities remain unchanged.
+
 ## Scope, provenance and integration
 
 All preparation and review took place in this cloud workspace. No push, PR

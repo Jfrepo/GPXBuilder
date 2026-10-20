@@ -32,6 +32,10 @@ test('allowlisted artifact is deterministic, complete, and serves the reviewed r
   const html = await (await artifact.fetch(new Request('https://synthetic.invalid/'), env, {})).text();
   assert.equal(html, await (await reviewed.fetch(new Request('https://synthetic.invalid/'), env, {})).text());
   assert.match(html, /mancardoAuthorizedDelete/);
+  // Preserve main's reload-loop hotfix through the exact packaged composition.
+  assert.doesNotMatch(html, /function render\(\)\{\s*autosaveEditor\(\)/);
+  assert.doesNotMatch(html, /<script\b[^>]*id=["']mancardo-private-(?:delete-tombstone-fix|waypoint-sync)["']/i);
+  assert.ok(graph('worker-delete-durable-fix.js').includes('worker-track-size-guard.js'));
   assert.doesNotMatch(html, /owner-isolation-20261018|x-mancardo-qualification/);
   assert.match(fs.readFileSync(path.join(out, 'wrangler.toml'), 'utf8'), /^directory = "assets"$/m);
 });

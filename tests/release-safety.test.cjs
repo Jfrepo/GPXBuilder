@@ -26,6 +26,8 @@ test('legacy polling clients that can reload the page are stripped from delivere
   assert.match(legacyTrack, /location\.reload\(\)/);
   assert.match(legacyWaypoint, /setInterval\(function\(\)\{if\(document\.visibilityState==='visible'&&navigator\.onLine\)run\(\);\},5000\)/);
   assert.match(legacyWaypoint, /location\.reload\(\)/);
+  assert.match(stability, /mancardo-private-delete-tombstone-fix/);
+  assert.match(stability, /mancardo-private-waypoint-sync/);
   assert.match(stability, /html = html\.replace\(LEGACY_TRACK_SYNC, ''\)/);
   assert.match(stability, /html = html\.replace\(LEGACY_WAYPOINT_SYNC, ''\)/);
 });
