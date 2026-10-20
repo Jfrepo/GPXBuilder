@@ -1,50 +1,93 @@
 name: Deploy Mancardo to Cloudflare Workers
 
+# LOCAL PROPOSAL: environment approval rules and approval variables must be
+# configured independently before any authorized dispatch. No main-push deploy.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed main commit SHA (40 lowercase hex characters)
+        required: true
+        type: string
+      manifest_sha256:
+        description: Independently approved artifact manifest SHA256
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: cloudflare-${{ github.ref }}
+  group: mancardo-production-release
   cancel-in-progress: false
 
+env:
+  RELEASE_SHA: ${{ inputs.source_sha }}
+  RELEASE_MANIFEST: ${{ inputs.manifest_sha256 }}
+
 jobs:
-  deploy:
-    name: Deploy ${{ github.ref_name }}
-    if: github.ref == 'refs/heads/main'
+  qualify:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production
+    timeout-minutes: 20
     steps:
-      - name: Verify exact Production branch
-        run: |
-          test "$GITHUB_REF" = "refs/heads/main" || { echo "::error::Refusing Production deployment outside exact main branch"; exit 1; }
-
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
+      - run: npm ci
       - name: Build narrow Production artifact
         run: node scripts/build-production.cjs
-
-      - name: Validate deployment credentials
-        env:
-          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify dispatched source and expected artifact
+        run: node scripts/verify-production.cjs
+      - name: Required synthetic source and packaged server gates
         run: |
-          test -n "$CF_TOKEN" || { echo "::error::Missing CLOUDFLARE_API_TOKEN"; exit 1; }
-          test -n "$CF_ACCOUNT" || { echo "::error::Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          node scripts/check-production.cjs source
+          node scripts/check-production.cjs packaged-server
+      - name: Install pinned Chromium fixture
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Required isolated browser gate
+        run: node scripts/check-production.cjs browser
+      - name: Verify tested artifact has not changed
+        run: node scripts/verify-production.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-${{ github.sha }}-${{ inputs.manifest_sha256 }}
+          path: dist/production/
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Deploy production Worker
-        run: npx --yes wrangler@4 deploy --config dist/production/wrangler.toml
+  deploy:
+    needs: qualify
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Required reviewers/prevent-self-review and these approval variables are an
+    # EXTERNAL gate. Merely naming an environment does not configure protection.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-${{ github.sha }}-${{ inputs.manifest_sha256 }}
+          path: dist/production/
+      - name: Verify independently approved tested artifact and target
+        run: node scripts/verify-production.cjs --approved
+        env:
+          PRODUCTION_APPROVED_SOURCE_SHA: ${{ vars.PRODUCTION_APPROVED_SOURCE_SHA }}
+          PRODUCTION_APPROVED_MANIFEST_SHA256: ${{ vars.PRODUCTION_APPROVED_MANIFEST_SHA256 }}
+      - name: Deploy verified artifact with locked Wrangler
+        run: npx --no-install wrangler deploy --config dist/production/wrangler.toml
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-

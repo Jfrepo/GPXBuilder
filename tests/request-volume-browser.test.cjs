@@ -87,12 +87,12 @@ function leafletFixture() {
 }
 
 test.before(async () => {
-  const config = fs.readFileSync(path.join(ROOT, 'wrangler.dev.toml'), 'utf8');
+  const config = fs.readFileSync(process.env.MANCARDO_DELETE_TEST_ENTRY ? path.join(path.dirname(process.env.MANCARDO_DELETE_TEST_ENTRY), 'wrangler.toml') : path.join(ROOT, 'wrangler.dev.toml'), 'utf8');
   const entry = config.match(/^main\s*=\s*"([^"]+)"\s*$/m)?.[1];
   assert.equal(entry, 'worker-delete-durable-fix.js');
   const worker = (await import(pathToFileURL(process.env.MANCARDO_DELETE_TEST_ENTRY || path.join(ROOT, entry)).href)).default;
   const response = await worker.fetch(new Request(ORIGIN + '/'), {
-    ASSETS: { fetch: async () => new Response(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'), { headers: { 'content-type': 'text/html' } }) },
+    ASSETS: { fetch: async () => new Response(fs.readFileSync(process.env.MANCARDO_DELETE_TEST_ENTRY ? path.join(path.dirname(process.env.MANCARDO_DELETE_TEST_ENTRY), 'assets/index.html') : path.join(ROOT, 'index.html'), 'utf8'), { headers: { 'content-type': 'text/html' } }) },
     PRIVATE_LIBRARY_DB: { prepare() { throw new Error('This fixture must not access a database'); } },
   }, { waitUntil() { throw new Error('Rendering must not schedule background work'); } });
   assert.equal(response.status, 200);

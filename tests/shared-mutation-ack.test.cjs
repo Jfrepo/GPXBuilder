@@ -40,7 +40,7 @@ async function setup(t) {
   assert.equal(statements.length, 6);
   for (const sql of statements) await f.env.PRIVATE_LIBRARY_DB.prepare(sql).run();
   assert.equal((await f.env.PRIVATE_LIBRARY_DB.prepare('PRAGMA foreign_keys').first()).foreign_keys, 1);
-  const worker = (await import(pathToFileURL(path.join(root, 'worker-owner-qualification.js')).href)).default;
+  const worker = (await import(pathToFileURL(process.env.MANCARDO_DELETE_TEST_ENTRY || path.join(root, 'worker-delete-durable-fix.js')).href)).default;
   async function request(route, method = 'GET', body, env = f.env, owner = 'a', token = f.tokens[owner]) {
     const headers = { 'content-type': 'application/json' };
     if (token != null) headers['Cf-Access-Jwt-Assertion'] = token;

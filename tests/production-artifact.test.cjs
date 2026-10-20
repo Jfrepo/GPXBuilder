@@ -37,7 +37,7 @@ test('allowlisted artifact is deterministic, complete, and serves the reviewed r
 });
 test('Production workflow builds the guarded artifact before deploying only that artifact', () => {
   const workflow = fs.readFileSync(path.join(root, '.github/workflows/cloudflare-workers.yml'), 'utf8');
-  assert.ok(workflow.indexOf('node scripts/build-production.cjs') < workflow.indexOf('npx --yes wrangler@4 deploy'));
+  assert.ok(workflow.indexOf('node scripts/build-production.cjs') < workflow.indexOf('npx --no-install wrangler deploy'));
   assert.match(workflow, /deploy --config dist\/production\/wrangler.toml/);
 });
 test('packaged Production has no Development qualification API even for an authenticated synthetic owner', async t => {

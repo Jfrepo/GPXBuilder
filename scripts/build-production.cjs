@@ -21,16 +21,32 @@ function guard(config) {
   if (digest(config) !== '855b18b83974dc7f6509b9a83fdce616fc6684548e6dd3c9c6aaecf592ee30eb') throw Error('Unreviewed Production configuration bytes');
   if (!/^directory = "dist\/production\/assets"$/m.test(config)) throw Error('Unexpected asset directory');
 }
-function graph(entry) {
+function dependencies(source) {
+  const ast = require('acorn').parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
+  const imports = [];
+  function walk(node) {
+    if (!node || typeof node !== 'object') return;
+    if (['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression'].includes(node.type) && node.source) {
+      if (node.source.type !== 'Literal' || typeof node.source.value !== 'string') throw Error('Computed imports are forbidden');
+      imports.push(node.source.value);
+    }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(walk);
+      else if (value && typeof value === 'object') walk(value);
+    }
+  }
+  walk(ast);
+  return imports;
+}
+function graph(entry, read = file => fs.readFileSync(path.join(root, file), 'utf8')) {
   const files = new Set();
   function visit(file) {
     if (files.has(file)) return;
     if (!/^worker[-a-z0-9]*\.js$/.test(file) || /qualification/.test(file)) throw Error('Unexpected runtime module: ' + file);
     files.add(file);
-    const source = fs.readFileSync(path.join(root, file), 'utf8');
-    for (const m of source.matchAll(/\b(?:from\s*|import\s*\()(['"])([^'"]+)\1/g)) {
-      if (!m[2].startsWith('./')) throw Error('Nonlocal runtime dependency');
-      visit(m[2].slice(2));
+    for (const dependency of dependencies(read(file))) {
+      if (!dependency.startsWith('./')) throw Error('Nonlocal runtime dependency');
+      visit(dependency.slice(2));
     }
   }
   visit(entry);
@@ -51,5 +67,5 @@ function build() {
   console.log('Production artifact: ' + runtime.length + ' modules; assets: ' + assets.join(', ') + '; manifest SHA256 ' + digest(fs.readFileSync(path.join(out, 'manifest.json'))));
   return manifest;
 }
-module.exports = { build, guard, graph, assets, out, digest };
+module.exports = { build, guard, graph, dependencies, assets, out, digest };
 if (require.main === module) build();

@@ -51,7 +51,7 @@ function leafletFixture() {
 
 test.before(async()=>{
   const worker=(await import(pathToFileURL(process.env.MANCARDO_DELETE_TEST_ENTRY||path.join(root,'worker-delete-durable-fix.js')).href)).default;
-  const response=await worker.fetch(new Request(ORIGIN+'/'),{ASSETS:{fetch:async()=>new Response(fs.readFileSync(path.join(root,'index.html'),'utf8'),{headers:{'content-type':'text/html'}})},PRIVATE_LIBRARY_DB:{prepare(){throw new Error('No database access is allowed in this fixture');}}},{});
+  const response=await worker.fetch(new Request(ORIGIN+'/'),{ASSETS:{fetch:async()=>new Response(fs.readFileSync(process.env.MANCARDO_DELETE_TEST_ENTRY ? path.join(path.dirname(process.env.MANCARDO_DELETE_TEST_ENTRY),'assets/index.html') : path.join(root,'index.html'),'utf8'),{headers:{'content-type':'text/html'}})},PRIVATE_LIBRARY_DB:{prepare(){throw new Error('No database access is allowed in this fixture');}}},{});
   html=await response.text();
   assert.ok(html.includes('installMancardoPrivateCloudSync'));
   assert.ok(html.includes('mancardoAuthorizedDelete'));

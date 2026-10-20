@@ -65,69 +65,16 @@ function runNodeScript(script, databaseId, initialConfig = template) {
   return {exitCode, config, writes, logs};
 }
 
-// This intentionally supports only the reviewed one-expression job gate and
-// existing trigger shape, not arbitrary GitHub Actions expressions. GitHub ==
-// string comparisons ignore case; a case variant is intentionally admitted by
-// the job expression and must then be rejected by the exact-case shell step.
-function productionJobSelected(eventName, ref) {
-  assert.match(productionWorkflow, /on:\n  push:\n    branches: \[main\]\n  workflow_dispatch:\n/);
-  const gate = productionWorkflow.match(/^    if: github\.ref == '([^']+)'$/m);
-  const triggered = eventName === 'workflow_dispatch' || (eventName === 'push' && ref === 'refs/heads/main');
-  return triggered && (!gate || ref.toLowerCase() === gate[1].toLowerCase());
-}
-
-test('Production deploy job adds only the reviewed main-ref job gate and pre-checkout exact-case guard', () => {
-  const condition = "    if: github.ref == 'refs/heads/main'\n";
-  assert.equal(productionWorkflow.split(condition).length - 1, 1);
-  assert.match(productionWorkflow, /  deploy:\n    name: Deploy \$\{\{ github.ref_name \}\}\n    if: github.ref == 'refs\/heads\/main'\n    runs-on:/);
-  const preflight = '      - name: Verify exact Production branch\n' +
-    '        run: |\n' +
-    '          test "$GITHUB_REF" = "refs/heads/main" || { echo "::error::Refusing Production deployment outside exact main branch"; exit 1; }\n\n';
-  assert.equal(productionWorkflow.split(preflight).length - 1, 1);
-  assert.match(productionWorkflow, /    steps:\n      - name: Verify exact Production branch/);
-  assert.ok(productionWorkflow.indexOf(preflight) < productionWorkflow.indexOf('      - name: Check out source'));
-  assert.equal(sha256(productionWorkflow.replace(condition, '').replace(preflight, '').replace('      - name: Build narrow Production artifact\n        run: node scripts/build-production.cjs\n\n', '').replace('deploy --config dist/production/wrangler.toml', 'deploy --config wrangler.toml')),
-    '379b69b8fbb2b28f16f33a1848464593efa45b877f425baebe2aa07dd68f5aeb',
-    'Production triggers, commands, permissions, environment, and all other bytes stay unchanged');
-});
-
-test('Production event/ref job selection skips ordinary non-main routes while case variants reach the exact-case preflight', async t => {
-  const cases = [
-    ['push main', 'push', 'refs/heads/main', true],
-    ['dispatch main', 'workflow_dispatch', 'refs/heads/main', true],
-    ['dispatch case-variant Main reaches preflight', 'workflow_dispatch', 'refs/heads/Main', true],
-    ['dispatch candidate', 'workflow_dispatch', 'refs/heads/chatgpt/mancardo-delete-qualification', false],
-    ['dispatch Development', 'workflow_dispatch', 'refs/heads/mancardo-dev', false],
-    ['dispatch release', 'workflow_dispatch', 'refs/heads/release/accelerated-stability-20261016', false],
-    ['dispatch tag called main', 'workflow_dispatch', 'refs/tags/main', false],
-    ['push Development', 'push', 'refs/heads/mancardo-dev', false],
-    ['pull request', 'pull_request', 'refs/pull/80/merge', false]
-  ];
-  for (const [name, event, ref, expected] of cases) await t.test(name, () => assert.equal(productionJobSelected(event, ref), expected));
-});
-
-test('exact Production pre-checkout shell allows only case-sensitive main and rejects case variants, tags and absent refs', async t => {
-  const script = stepScript('Verify exact Production branch', productionWorkflow);
-  for (const [name, ref, expected] of [
-    ['canonical main', 'refs/heads/main', 0], ['Main variant', 'refs/heads/Main', 1],
-    ['MAIN variant', 'refs/heads/MAIN', 1], ['prefix case variant', 'refs/Heads/main', 1],
-    ['main tag', 'refs/tags/main', 1], ['feature branch', 'refs/heads/chatgpt/mancardo-delete-qualification', 1],
-    ['absent ref', '', 1], ['newline suffix', 'refs/heads/main\n', 1]
-  ]) {
-    await t.test(name, () => {
-      const result = spawnSync('/bin/bash', ['-e', '-c', script], {
-        encoding: 'utf8', timeout: 2000, env: {PATH: '/usr/bin:/bin', GITHUB_REF: ref}
-      });
-      assert.equal(result.error, undefined);
-      assert.equal(result.status, expected);
-      assert.equal(result.stderr, '');
-      if (expected === 0) assert.equal(result.stdout, '');
-      else {
-        assert.equal(result.stdout, '::error::Refusing Production deployment outside exact main branch\n');
-        if (ref) assert.ok(!result.stdout.includes(ref), 'Do not log the supplied ref');
-      }
-    });
-  }
+test('Production release is manual-only and requires qualification before protected deploy', () => {
+  assert.match(productionWorkflow, /on:\n  workflow_dispatch:/);
+  assert.doesNotMatch(productionWorkflow, /^  (?:push|pull_request):/m);
+  assert.match(productionWorkflow, /needs: qualify/);
+  assert.match(productionWorkflow, /environment: production/);
+  assert.equal((productionWorkflow.match(/if: github.event_name == 'workflow_dispatch' && github.ref == 'refs\/heads\/main'/g) || []).length, 2);
+  for (const suite of ['source', 'packaged-server', 'browser']) assert.ok(productionWorkflow.includes('node scripts/check-production.cjs ' + suite));
+  assert.match(productionWorkflow, /node scripts\/verify-production.cjs --approved/);
+  assert.match(productionWorkflow, /npx --no-install wrangler deploy --config dist\/production\/wrangler.toml/);
+  assert.doesNotMatch(productionWorkflow, /wrangler@4\b/);
 });
 
 test('exact ordinary credential shell rejects Production UUID in lower, upper, and mixed case', async t => {
