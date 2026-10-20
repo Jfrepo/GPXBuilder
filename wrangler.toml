@@ -1,5 +1,5 @@
 name = "mancardo"
-main = "worker-autosave-stability.js"
+main = "worker-delete-durable-fix.js"
 compatibility_date = "2026-10-02"
 preview_urls = false
 
@@ -10,7 +10,7 @@ CF_ACCESS_AUD = "b8dc5883e95174caac1d2c997fca5a9419dc852fffb0e43f4c59fa85ddf0ada
 # Production previews disabled: prevent preview URLs from reaching production D1.
 
 [assets]
-directory = "."
+directory = "dist/production/assets"
 binding = "ASSETS"
 run_worker_first = true
 not_found_handling = "single-page-application"

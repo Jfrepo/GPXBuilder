@@ -12,7 +12,7 @@ const { pathToFileURL } = require('node:url');
 const root = path.resolve(__dirname, '..');
 const sourceHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const durableEntry = 'worker-delete-durable-fix.js';
-const productionEntry = 'worker-autosave-stability.js';
+const legacyBaseEntry = 'worker-autosave-stability.js';
 
 function configuredEntry(config) {
   const text = fs.readFileSync(path.join(root, config), 'utf8');
@@ -77,9 +77,9 @@ for (const config of ['wrangler.dev.toml', 'wrangler.toml']) {
   });
 }
 
-test('Development selects the repaired wrapper without changing the Production entrypoint', () => {
+test('Development and Production select the reviewed durable runtime', () => {
   assert.equal(configuredEntry('wrangler.dev.toml'), durableEntry);
-  assert.equal(configuredEntry('wrangler.toml'), productionEntry);
+  assert.equal(configuredEntry('wrangler.toml'), durableEntry);
 });
 
 test('durable deletion client is plain JavaScript inside the editor script before boot', async () => {
@@ -104,7 +104,7 @@ test('durable deletion client is plain JavaScript inside the editor script befor
 
 test('missing editor boot marker leaves a readable, unchanged base response', async () => {
   const body = '<!doctype html><html><body><p>Maintenance fixture without an editor.</p></body></html>';
-  const expected = await render(productionEntry, { body });
+  const expected = await render(legacyBaseEntry, { body });
   const actual = await render(durableEntry, { body });
   assert.equal(actual.bodyUsed, false, 'fallback response body must not already be consumed');
   assert.equal(await actual.text(), await expected.text(), 'unsupported markup must retain base output');
@@ -217,7 +217,7 @@ async function actualRecoveryTransform() {
   // private HTML transformer execute unchanged with the real cadence helper.
   const context = vm.createContext({ repairRequestCadence });
   vm.runInContext(source.replace(/^import[^\n]*\n/gm, '').replace('export default {', 'const exportedWorker = {'), context);
-  const base = await (await render(productionEntry)).text();
+  const base = await (await render(legacyBaseEntry)).text();
   return { transform: context.injectDurableDeletion, base };
 }
 
@@ -387,7 +387,7 @@ test('emitted render predicate never adds or changes a durable visibility proper
   }
 });
 
-for (const entry of [durableEntry, productionEntry]) test(entry + ' keeps 2D, Google conversion and 3D identification on render-only visibility', async () => {
+for (const entry of [durableEntry, legacyBaseEntry]) test(entry + ' keeps 2D, Google conversion and 3D identification on render-only visibility', async () => {
   const html = await (await render(entry)).text(), layers = [], googleFeatures = [], lines3d = [];
   class Polyline {
     constructor(points, options){this.points=points;this.options={...options};}
@@ -554,7 +554,7 @@ function toolbarFixture(html, width, { wrappers = true, displacedToggle = false,
   };
   return f;
 }
-for (const entry of [durableEntry, productionEntry]) {
+for (const entry of [durableEntry, legacyBaseEntry]) {
   for (const width of [767, 768]) {
     for (const order of ['media-first', 'resize-first']) {
       test(entry + ': toolbar startup and repeated responsive transitions from ' + width + ' (' + order + ')', async () => {

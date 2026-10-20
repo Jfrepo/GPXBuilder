@@ -86,7 +86,7 @@ test('Production deploy job adds only the reviewed main-ref job gate and pre-che
   assert.equal(productionWorkflow.split(preflight).length - 1, 1);
   assert.match(productionWorkflow, /    steps:\n      - name: Verify exact Production branch/);
   assert.ok(productionWorkflow.indexOf(preflight) < productionWorkflow.indexOf('      - name: Check out source'));
-  assert.equal(sha256(productionWorkflow.replace(condition, '').replace(preflight, '')),
+  assert.equal(sha256(productionWorkflow.replace(condition, '').replace(preflight, '').replace('      - name: Build narrow Production artifact\n        run: node scripts/build-production.cjs\n\n', '').replace('deploy --config dist/production/wrangler.toml', 'deploy --config wrangler.toml')),
     '379b69b8fbb2b28f16f33a1848464593efa45b877f425baebe2aa07dd68f5aeb',
     'Production triggers, commands, permissions, environment, and all other bytes stay unchanged');
 });

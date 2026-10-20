@@ -89,6 +89,6 @@ test('autosave stability wrapper preserves the track-size safety guard', () => {
   assert.match(guard, /x-mancardo-track-size-warning/);
   assert.match(stability, /import baseWorker from '\.\/worker-track-size-guard\.js'/);
   assert.match(durableDelete, /import baseWorker from '\.\/worker-autosave-stability\.js'/);
-  assert.match(prod, /main = "worker-autosave-stability\.js"/);
+  assert.match(prod, /main = "worker-delete-durable-fix\.js"/);
   assert.match(dev, /main = "worker-delete-durable-fix\.js"/);
 });
