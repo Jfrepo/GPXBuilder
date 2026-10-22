@@ -28,7 +28,7 @@ env:
 jobs:
   qualify:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
   deploy:
     needs: qualify
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Required reviewers/prevent-self-review and these approval variables are an
     # EXTERNAL gate. Merely naming an environment does not configure protection.
