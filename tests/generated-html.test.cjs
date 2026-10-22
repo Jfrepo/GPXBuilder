@@ -215,7 +215,8 @@ async function actualRecoveryTransform() {
   const { repairRequestCadence } = await import(pathToFileURL(path.join(root, 'worker-request-cadence.js')).href);
   // Remove only module-loading/export syntax. All constants and the complete
   // private HTML transformer execute unchanged with the real cadence helper.
-  const context = vm.createContext({ repairRequestCadence });
+  const { EDITOR_RECOVERY } = await import(pathToFileURL(path.join(root, 'worker-editor-recovery.js')).href);
+  const context = vm.createContext({ repairRequestCadence, EDITOR_RECOVERY });
   vm.runInContext(source.replace(/^import[^\n]*\n/gm, '').replace('export default {', 'const exportedWorker = {'), context);
   const base = await (await render(legacyBaseEntry)).text();
   return { transform: context.injectDurableDeletion, base };

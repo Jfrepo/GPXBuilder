@@ -1,5 +1,6 @@
 import baseWorker from './worker-autosave-stability.js';
 import { repairRequestCadence } from './worker-request-cadence.js';
+import { EDITOR_RECOVERY } from './worker-editor-recovery.js';
 
 const OLD_DELETE_BRIDGE = /<script id="mancardo-explicit-delete-bridge">[\s\S]*?<\/script>/i;
 
@@ -89,7 +90,7 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     if(!record)return false;
     // A successful DELETE acknowledgement must also dominate an older pull that
     // was already in flight. Keep the revision watermark even after reconciliation.
-    if(record.confirmedRevision&&Number(item.revision)>record.confirmedRevision&&!item.deleted){removePending(record);return false;}
+    if(record.confirmedRevision&&Number(item.revision)>record.confirmedRevision&&!item.deleted){if(window.mancardoFenceRecovery)window.mancardoFenceRecovery(account,item.track_id);removePending(record);return false;}
     if(record.confirmedRevision&&item.deleted&&Number(item.revision)>=record.confirmedRevision)return false;
     return true;
   };
@@ -164,6 +165,8 @@ const DURABLE_DELETE_BRIDGE = String.raw`
       var pending=readPending();
       records.forEach(function(record){if(!pending.some(function(x){return matches(x,record);}))pending.push(record);});
       writePending(pending);
+      try{if(window.mancardoFenceRecovery)ids.forEach(function(id){window.mancardoFenceRecovery(ws.accountKey,id);});}
+      catch(e){markStatus('offline','Delete pending','Explicit deletion intent is saved and will retry. Local recovery is unavailable because its deletion fence could not be saved.');return false;}
       persistRemoval(ids);
       markStatus('offline','Delete pending','Deletion is saved on this device and awaiting cloud confirmation.');
       return retryPending().then(function(){return true;});
@@ -232,13 +235,14 @@ const REMOTE_TOMBSTONE_RECONCILIATION = String.raw`
     function sameOwner(){if(!ready||!owner||accountKey!==owner)throw new Error('Private account changed during deletion reconciliation.');}
     function inspect(){
       sameOwner();
-      if(++attempts>3)return Promise.resolve(false); // Busy editor: defer, never discard a late edit.
+      if(++attempts>3){liveReconciliationDeferred=true;return Promise.resolve(false);} // Busy editor: defer, never discard a late edit.
       return getSyncMeta(id).then(function(meta){
         sameOwner();
         if(meta&&meta.accountKey!==owner)throw new Error('Cloud deletion metadata belongs to another account.');
         var known=!!(meta&&Number.isInteger(Number(meta.revision))&&Number(meta.revision)>0),knownLive=!!(known&&(meta.deleted===false||meta.deleted===0));
         // An older/equal tombstone cannot supersede a newer/equal known live row.
         if(known&&(Number(meta.revision)>revision||(knownLive&&Number(meta.revision)===revision)))return false;
+        if(window.mancardoFenceRecovery)window.mancardoFenceRecovery(owner,id);
         var local=localById(id),snapshot=local?JSON.stringify(local):null,metaSnapshot=JSON.stringify(meta||null);
         var editor=String(state.currentId||'')===id?state.current:null,editorSnapshot=editor?JSON.stringify(editor):null;
         var hashes=Promise.all([local?window.mancardoReconciledRevisionHashes(snapshot):Promise.resolve([]),editor?window.mancardoReconciledRevisionHashes(editorSnapshot):Promise.resolve([])]);
@@ -252,7 +256,7 @@ const REMOTE_TOMBSTONE_RECONCILIATION = String.raw`
             var values=groups[0],editorValues=groups[1];
             // The editor is a separate clone. Preserve/defer an edit that has
             // not reached the library rather than clearing it with the row.
-            if(latestEditor&&!editorValues.some(function(hash){return values.indexOf(hash)>=0;}))return false;
+            if(latestEditor&&!editorValues.some(function(hash){return values.indexOf(hash)>=0;})){liveReconciliationDeferred=true;return false;}
             var unchanged=!!(knownLive&&Number(meta.revision)<revision&&values.indexOf(meta.sha256)>=0);
             if(latest&&!unchanged)preserveConflictCopy(latest,'Recovery snapshot before cloud delete');
             replaceLocal(id,null);
@@ -362,7 +366,7 @@ function injectDurableDeletion(html){
   // session changes. Pin every private track request to the durable workspace,
   // not only the mutable last-health accountKey, and validate at the server.
   html=html.replace(bindAccount,"  function bindAccount(h){var candidateKey=String(h.accountKey||''),candidateLabel=String(h.accountLabel||'');if(!candidateKey)return Promise.resolve(false);return getMetaValue(ACCOUNT_META).then(function(bound){if(bound&&bound!==candidateKey){ready=false;setStatus('paused','Paused','A different private account previously used this browser profile. Sync is paused. Use a separate browser profile; your local changes remain saved.');return false;}function activate(){privateWorkspaceAccount=candidateKey;accountKey=candidateKey;accountLabel=candidateLabel;return true;}return bound?activate():setMetaValue(ACCOUNT_META,candidateKey).then(activate);});}");
-  html=html.replace(privateApi,"var privateWorkspaceAccount='';\n  function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});if(/^\\/tracks(?:\\/|\\?|$)/.test(path)){var owner=opts.headers['x-mancardo-private-account']||privateWorkspaceAccount;if(!owner||owner!==privateWorkspaceAccount||accountKey!==owner)return Promise.reject(new Error('Private account changed; workspace sync is paused.'));opts.headers['x-mancardo-private-account']=owner;}return fetch('/api/private-library'+path,opts);}");
+  html=html.replace(privateApi,"var privateWorkspaceAccount='';\n  window.mancardoRecoveryOwner=function(){return ready&&accountKey===privateWorkspaceAccount?accountKey:'';};\n  window.mancardoRecoveryMeta=function(id){var owner=window.mancardoRecoveryOwner();if(!owner)return Promise.reject(new Error('Account verification required'));return getSyncMeta(id).then(function(meta){if(window.mancardoRecoveryOwner()!==owner||(meta&&meta.accountKey!==owner))throw new Error('Account changed during recovery');return meta;});};\n  function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});if(/^\\/tracks(?:\\/|\\?|$)/.test(path)){var owner=opts.headers['x-mancardo-private-account']||privateWorkspaceAccount;if(!owner||owner!==privateWorkspaceAccount||accountKey!==owner)return Promise.reject(new Error('Private account changed; workspace sync is paused.'));opts.headers['x-mancardo-private-account']=owner;}return fetch('/api/private-library'+path,opts);}");
   const queuedPut="return api('/tracks/'+encodeURIComponent(op.id),{method:'PUT',headers:{'content-type':'application/json'},";
   const conflictGet="return api('/tracks/'+encodeURIComponent(op.id)).then(jsonOrEmpty)";
   if(!html.includes(queuedPut)||!html.includes(conflictGet))throw new Error('Private operation-owner anchors missing; refusing an unbound upload.');
@@ -409,7 +413,8 @@ function injectDurableDeletion(html){
   html=html.replace(finalSynced,"if(liveReconciliationDeferred){setStatus('offline','Sync pending','A local editor change is preserved but has not yet been reconciled with the cloud version.');return false;}"+finalSynced);
   html=repairRequestCadence(html);
   const insertion=html.indexOf('// ---------- boot ----------');
-  return html.slice(0,insertion)+DURABLE_DELETE_BRIDGE+'\n'+html.slice(insertion);
+  html=html.replace('recoverUnnamedDraft();','/* Unpartitioned legacy recovery disabled. */');
+  return html.slice(0,insertion)+DURABLE_DELETE_BRIDGE+'\n'+EDITOR_RECOVERY+'\n'+html.slice(insertion);
 }
 
 export default {

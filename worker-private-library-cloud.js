@@ -85,7 +85,15 @@ const ACTIVE_SYNC_FEATURE=String.raw`
   var msgEl=document.getElementById('mancardoPrivateSyncMessage'),accountEl=document.getElementById('mancardoPrivateSyncAccount'),deviceEl=document.getElementById('mancardoPrivateSyncDevice'),pendingEl=document.getElementById('mancardoPrivateSyncPending'),conflictEl=document.getElementById('mancardoPrivateSyncConflicts');
   deviceEl.textContent=deviceId;
 
-  function setStatus(state,label,message){chip.dataset.state=state;chip.textContent='☁ '+label+(accountLabel&&state!=='signin'?' · '+accountLabel:'');chip.title=message||label;lastMessage=message||label;msgEl.textContent=lastMessage;accountEl.textContent=accountLabel||'Not signed in';conflictEl.textContent=String(conflictCount);updatePending();}
+  function setStatus(state,label,message){
+    if(state==='synced'&&typeof hasUnsavedEditorGeometry==='function'&&hasUnsavedEditorGeometry()){
+      state='offline';label='Sync pending';message='The editor has unsaved geometry. Use Save changes to save it to My Library; Pending counts only queued library changes. Export GPX can keep a separate backup.';
+    }
+    chip.dataset.state=state;chip.textContent='☁ '+label+(accountLabel&&state!=='signin'?' · '+accountLabel:'');chip.title=message||label;lastMessage=message||label;msgEl.textContent=lastMessage;accountEl.textContent=accountLabel||'Not signed in';conflictEl.textContent=String(conflictCount);updatePending();
+  }
+  window.mancardoMarkEditorUnsaved=function(){
+    if(chip.dataset.state==='synced'&&typeof hasUnsavedEditorGeometry==='function'&&hasUnsavedEditorGeometry())setStatus('synced','Synced',lastMessage);
+  };
 
   function openDb(){return new Promise(function(resolve,reject){if(!window.indexedDB){reject(new Error('IndexedDB unavailable'));return;}var r=indexedDB.open(DB,VERSION);r.onupgradeneeded=function(){var d=r.result;if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta',{keyPath:'key'});if(!d.objectStoreNames.contains('sync'))d.createObjectStore('sync',{keyPath:'key'});if(!d.objectStoreNames.contains('outbox')){var s=d.createObjectStore('outbox',{keyPath:'key'});s.createIndex('queuedAt','queuedAt');}};r.onsuccess=function(){resolve(r.result);};r.onerror=function(){reject(r.error||new Error('IndexedDB open failed'));};});}
   function tx(store,mode,fn){return openDb().then(function(db){return new Promise(function(resolve,reject){var t=db.transaction(store,mode),s=t.objectStore(store),req;try{req=fn(s);}catch(e){db.close();reject(e);return;}if(req){req.onsuccess=function(){resolve(req.result);};req.onerror=function(){reject(req.error||new Error('IndexedDB request failed'));};}else{t.oncomplete=function(){resolve();};t.onerror=function(){reject(t.error||new Error('IndexedDB transaction failed'));};}t.oncomplete=function(){db.close();};});});}

@@ -220,10 +220,10 @@ const POINT_LIST_FEATURE = String.raw`
   render=function(){baseRender();drawPointListHighlights();};
 
   var baseLoadItem=loadItem;
-  loadItem=function(id){clearPointHighlights();baseLoadItem(id);};
+  loadItem=function(id){var result=baseLoadItem(id);if(result!==false){clearPointHighlights();syncPointRowClasses();}return result;};
 
   var baseStartNewRoute=startNewRoute;
-  startNewRoute=function(){clearPointHighlights();baseStartNewRoute();};
+  startNewRoute=function(){var result=baseStartNewRoute();if(result!==false){clearPointHighlights();syncPointRowClasses();}return result;};
 
   document.addEventListener('keydown',function(ev){
     if(ev.key==='Shift') shiftHeld=true;

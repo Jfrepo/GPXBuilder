@@ -3,9 +3,9 @@ const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const suites = {
-  source: ['release-safety','generated-html','delete-client','deployment-guard','delete-cross-client-node','remote-tombstone-review','server-owner-isolation','note-account-boundary','request-volume-client','owner-qualification-server','owner-qualification-client','d1-mutation-ack','live-pull-review','shared-mutation-ack','workflow-boundaries','production-artifact','production-release-guard'],
+  source: ['release-safety','generated-html','delete-client','deployment-guard','delete-cross-client-node','remote-tombstone-review','server-owner-isolation','note-account-boundary','request-volume-client','owner-qualification-server','owner-qualification-client','d1-mutation-ack','live-pull-review','shared-mutation-ack','workflow-boundaries','production-artifact','production-release-guard','development-release'],
   'packaged-server': ['server-owner-isolation','d1-mutation-ack','shared-mutation-ack'],
-  browser: ['delete-behavior','delete-cross-client','request-volume-browser','owner-qualification-browser'],
+  browser: ['delete-behavior','delete-cross-client','request-volume-browser','owner-qualification-browser','overnight-integrity','editor-recovery'],
 };
 const suite = process.argv[2];
 if (!suites[suite]) throw Error('Specify source or browser');

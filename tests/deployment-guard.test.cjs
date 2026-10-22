@@ -56,7 +56,7 @@ async function execute(options={}){
 }
 
 test('manual candidate route is exact-branch/event gated with fixed checkout and Development-only deploy',()=>{
-  const manual=workflow.slice(workflow.indexOf('  deploy-reviewed-candidate:'));
+  const manual=workflow.slice(workflow.indexOf('  deploy-reviewed-candidate:')).split('\n  qualify-recovery:')[0];
   assert.match(manual,/if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/chatgpt\/mancardo-delete-qualification'/);
   assert.match(manual,/ref: '492f222a7ffa8c1337786b8b699ef5c7f56d54d1'/);
   assert.match(manual,/test "\$\(git rev-parse HEAD\)" = '492f222a7ffa8c1337786b8b699ef5c7f56d54d1'/);

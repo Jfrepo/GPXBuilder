@@ -48,6 +48,7 @@ const SAVE_STATE_FEATURE = String.raw`
     btn.classList.add(dirty?'save-state-dirty':'save-state-clean');
     btn.textContent=dirty?'Save changes':'Saved';
     btn.title=dirty?'Unsaved changes — click to save':'All changes saved';
+    if(dirty&&typeof window.mancardoMarkEditorUnsaved==='function')window.mancardoMarkEditorUnsaved();
   }
 
   if(state.current&&state.currentId)rememberBaseline();
@@ -64,6 +65,7 @@ const SAVE_STATE_FEATURE = String.raw`
   var baseLoadItem=loadItem;
   loadItem=function(){
     var result=baseLoadItem.apply(this,arguments);
+    if(result===false){updateSaveState();return false;}
     if(state.current&&!state.sharedPreview)rememberBaseline();
     updateSaveState();
     return result;

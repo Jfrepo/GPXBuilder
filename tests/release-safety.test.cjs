@@ -46,7 +46,12 @@ test('authorised My Library deletes pin workspace account and reconciled revisio
   assert.match(durableDelete, /base_revision:record\.baseRevision/);
   assert.match(durableDelete, /x-mancardo-delete-account/);
   assert.match(durableDelete, /boundAccountKey/);
-  assert.match(durableDelete, /writePending\(pending\);\s*persistRemoval\(ids\)/);
+  const authorization = durableDelete.slice(durableDelete.indexOf('function authorisedDelete(ids){'), durableDelete.indexOf('window.mancardoReconciledRevisionHashes=revisionHashes;'));
+  const pending = authorization.indexOf('writePending(pending);');
+  const fence = authorization.indexOf('window.mancardoFenceRecovery(ws.accountKey,id)');
+  const removal = authorization.indexOf('persistRemoval(ids);');
+  assert.ok(pending >= 0 && fence > pending && removal > fence, 'Persist explicit intent, then fence recovery, before removing the track');
+  assert.match(authorization, /catch\(e\)\{markStatus\('offline','Delete pending'/);
   assert.match(durableDelete, /hashes\[x\.id\]\.indexOf\(x\.meta\.sha256\)<0/);
   assert.match(durableDelete, /method:'DELETE'/);
   assert.doesNotMatch(durableDelete, /status===409&&(?:attempt|n)</);

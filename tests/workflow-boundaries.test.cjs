@@ -11,7 +11,7 @@ const {spawnSync} = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const productionWorkflow = read('.github/workflows/cloudflare-workers.yml');
-const developmentWorkflow = read('.github/workflows/cloudflare-dev.yml');
+const developmentWorkflow = read('.github/workflows/cloudflare-dev.yml').split('\n  qualify-recovery:')[0].replace(/(  workflow_dispatch:\n)    inputs:[\s\S]*?(?=\npermissions:)/, '$1');
 const noDeployWorkflow = read('.github/workflows/delete-qualification.yml');
 const ordinary = developmentWorkflow.split('  deploy-reviewed-candidate:')[0];
 const template = read('wrangler.dev.toml');

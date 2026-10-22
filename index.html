@@ -1220,9 +1220,11 @@ function fetchSharedGpx(meta){
   return task;
 }
 function previewSharedTrack(meta){
+  if(!canLeaveEditor())return;
   var requestId=++sharedPreviewRequest;
   fetchSharedGpx(meta).then(function(gpx){
     if(requestId!==sharedPreviewRequest)return;
+    if(!canLeaveEditor())return;
     var parsed=parseGpxFile(gpx,(meta.name||'shared')+'.gpx');
     if(!parsed.length)throw new Error('No track data');
     var item=parsed[0];
@@ -1287,14 +1289,29 @@ function copySharedToLocal(meta){
 }
 function publishTrackToShared(id){
   var item=state.library.find(function(t){return t.id===id;});if(!item)return;
+  if(state.currentId===id&&hasUnsavedEditorGeometry()){
+    alert('This track has unsaved geometry. Use Save changes before publishing to Shared Library. Export GPX can keep a separate backup.');return;
+  }
   var who=els.sharedUserSelect.value||'Justin';
   var endpoint=item.sharedId?SHARED_API+'/api/tracks/'+encodeURIComponent(item.sharedId)+'/publish':SHARED_API+'/api/tracks';
   var payload=item.sharedId?{modifiedBy:who,gpx:buildGpx(item),basedOnVersion:item.sharedBaseVersion}:{name:item.name,modifiedBy:who,gpx:buildGpx(item)};
   fetch(endpoint,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
     return r.json().catch(function(){return {};}).then(function(data){if(!r.ok){var err=new Error(data.error||('HTTP '+r.status));err.status=r.status;err.data=data;throw err;}return data;});
   }).then(function(data){
+    // An explicit Save, deletion or reconciliation may replace/remove this
+    // library object while publication waits. Never reinsert its old snapshot.
+    if(state.library.indexOf(item)<0){
+      loadSharedLibrary();alert('Published to Shared Library as v'+data.version+'. The local track changed while publishing; its newer state was left untouched. The Shared link was not updated locally. Check Shared Library before publishing again.');return;
+    }
+    if(item.sharedId===data.id&&Number(item.sharedBaseVersion)>Number(data.version)){
+      loadSharedLibrary();alert('Published to Shared Library as v'+data.version+'. A newer Shared version is already recorded locally; it was left untouched.');return;
+    }
     item.sharedId=data.id;item.sharedBaseVersion=data.version;item.sharedBaseModifiedAt=data.modifiedAt;item.sharedBaseModifiedBy=data.modifiedBy;item.updatedAt=new Date().toISOString();
-    if(state.currentId===item.id)state.current=deepClone(item);
+    // Preserve all editor content, including edits made after the POST began.
+    // Carry forward only the acknowledgement needed by a later explicit Save.
+    if(state.currentId===item.id&&state.current&&!state.sharedPreview){
+      ['sharedId','sharedBaseVersion','sharedBaseModifiedAt','sharedBaseModifiedBy'].forEach(function(key){state.current[key]=item[key];});
+    }
     persistLibrary();renderLibrary();loadSharedLibrary();
     alert('Published to Shared Library as v'+data.version+' · '+data.modifiedBy+'.');
   }).catch(function(e){
@@ -1344,10 +1361,25 @@ function renderLibrary(){
     wrap.appendChild(d);
   });
 }
+function hasUnsavedEditorGeometry(){
+  if(!state.current||state.sharedPreview)return false;
+  if(!state.currentId)return (state.current.segments||[]).some(function(seg){return seg.length;});
+  var saved=state.library.find(function(t){return t.id===state.currentId;});
+  return !saved||JSON.stringify(saved.segments)!==JSON.stringify(state.current.segments);
+}
+function canLeaveEditor(){
+  if(!hasUnsavedEditorGeometry())return true;
+  window.alert('This editor has unsaved geometry. Save changes before selecting another track or starting a route. You can also use Export GPX to keep a separate backup.');
+  return false;
+}
 function loadItem(id){
-  state.sharedPreview=false;state.sharedPreviewMeta=null;
   var item = state.library.find(function(t){ return t.id===id; });
-  if(!item) return;
+  if(!item) return false;
+  if(hasUnsavedEditorGeometry()){
+    if(id!==state.currentId)canLeaveEditor();
+    return false;
+  }
+  state.sharedPreview=false;state.sharedPreviewMeta=null;
   state.current = deepClone(item);
   state.currentId = id;
   state.selection = null; state.history=[]; state.future=[]; state.extend=null;
@@ -1357,6 +1389,7 @@ function loadItem(id){
   renderLibrary();
 }
 function startNewRoute(){
+  if(!canLeaveEditor())return false;
   state.sharedPreview=false;state.sharedPreviewMeta=null;
   var center = map.getCenter();
   state.current = {id:uid(), type:'route', name:'New route', color:'#2563a8', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};

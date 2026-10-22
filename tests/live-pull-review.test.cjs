@@ -54,7 +54,8 @@ test('actual live reconciliation transform rejects missing or duplicate function
  const html=await (await base.fetch(new Request('https://fixture.test/'),{ASSETS:{fetch:async()=>new Response(fs.readFileSync(path.join(root,'index.html'),'utf8'),{headers:{'content-type':'text/html'}})}},{})).text();
  const {repairRequestCadence}=await import(pathToFileURL(path.join(root,'worker-request-cadence.js')).href);
  const source=fs.readFileSync(path.join(root,'worker-delete-durable-fix.js'),'utf8').replace(/^import[^\n]+\n/gm,'').split('export default {')[0];
- const context=vm.createContext({repairRequestCadence});vm.runInContext(source,context);
+ const {EDITOR_RECOVERY}=await import(pathToFileURL(path.join(root,'worker-editor-recovery.js')).href);
+ const context=vm.createContext({repairRequestCadence,EDITOR_RECOVERY});vm.runInContext(source,context);
  const transformed=context.injectDurableDeletion(html);assert.match(transformed,/Private account changed during live reconciliation/);
  for(const anchor of ['function applyCloudItem(item){','\n\n  function mergeCloud(items)','function resolvePutConflict(op,conflict){','\n  function resolveDeleteConflict(op,conflict){',"if(ready&&!syncing)setStatus('synced','Synced','My Library is saved locally and synced to your private cloud account.');return true;"]){
   assert.equal(html.split(anchor).length,2);
