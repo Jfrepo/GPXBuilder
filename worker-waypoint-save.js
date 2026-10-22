@@ -33,11 +33,30 @@ const WAYPOINT_FEATURE = String.raw`
     {id:'fuel',label:'Fuel',glyph:'⛽'},
     {id:'food',label:'Food',glyph:'🍴'},
     {id:'trail',label:'Trail',glyph:'🥾'},
-    {id:'parking',label:'Parking',glyph:'🅿️'},
+    // Keep the legacy storage key; this is a display/category replacement only.
+    {id:'parking',label:'Lookout',glyph:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4v7h6V4h4l3 12v4h-8v-6h-4v6H2v-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M2 16h8m4 0h8" stroke="currentColor" stroke-width="2"/></svg>'},
     {id:'hazard',label:'Hazard',glyph:'⚠️'}
   ];
   var waypoints=[];
   var googleMarkers={};
+  var waypointInfo=null, activeWaypointId=null, waypointInfoPinned=false, infoMap=null;
+  function closeWaypointName(){
+    if(waypointInfo)waypointInfo.close();
+    activeWaypointId=null;waypointInfoPinned=false;
+  }
+  function showWaypointName(w,marker,pinned){
+    if(!waypointInfo)return;
+    if(!pinned&&waypointInfoPinned)return;
+    var content=document.createElement('div');
+    content.className='mancardo-waypoint-name';
+    content.style.cssText='max-width:260px;overflow-wrap:anywhere;white-space:pre-wrap;color:#222;font:600 15px/1.4 sans-serif';
+    content.textContent=w.name||'Waypoint';
+    waypointInfo.setContent(content);
+    waypointInfo.setOptions({ariaLabel:String(w.name||'Waypoint')});
+    activeWaypointId=w.id;waypointInfoPinned=!!pinned;
+    waypointInfo.open({map:infoMap,anchor:marker,shouldFocus:!!pinned});
+  }
+  document.addEventListener('keydown',function(ev){if(ev.key==='Escape')closeWaypointName();});
   var waypointMenuId=null;
   var waypointIconMenuId=null;
   var pendingWaypoint=null;
@@ -138,7 +157,7 @@ const WAYPOINT_FEATURE = String.raw`
   }
   function blockedTarget(target){
     if(!target||!target.closest)return false;
-    return !!target.closest('button,a,input,textarea,select,.leaflet-control,.layer-toggle,.overlay-panel,#desktopToolbarHost,#mancardoMobileToolbarNav,#mancardoMapSearchPanel,#mancardoMapSearchBtn,#mancardoSearchLocationCard');
+    return !!target.closest('button,[role=button],.gm-style-iw,.gm-style-iw-t,a,input,textarea,select,.leaflet-control,.layer-toggle,.overlay-panel,#desktopToolbarHost,#mancardoMobileToolbarNav,#mancardoMapSearchPanel,#mancardoMapSearchBtn,#mancardoSearchLocationCard');
   }
   function pointToLatLng(clientX,clientY){
     var node=map.getContainer();
@@ -178,8 +197,9 @@ const WAYPOINT_FEATURE = String.raw`
   },true);
 
   function clearGoogleMarkers(){
+    closeWaypointName();
     Object.keys(googleMarkers).forEach(function(id){
-      try{googleMarkers[id].setMap(null);}catch(e){}
+      try{google.maps.event.clearInstanceListeners(googleMarkers[id]);googleMarkers[id].setMap(null);}catch(e){}
       delete googleMarkers[id];
     });
   }
@@ -197,7 +217,7 @@ const WAYPOINT_FEATURE = String.raw`
     else if(kind==='fuel')symbol='<path d="M10 13h8v14h-8zM11 15h6v5h-6z" fill="#fff"/><path d="M18 17h3l2 3v7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>';
     else if(kind==='food')symbol='<path d="M11 13v6m-2-6v4c0 2 4 2 4 0v-4m-2 6v8M21 13v14m0-14c-3 2-3 6 0 7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>';
     else if(kind==='trail')symbol='<path d="M8 25l6-8 4 5 3-4 5 7z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M18 12v6" stroke="#fff" stroke-width="2"/>';
-    else if(kind==='parking')symbol='<path d="M12 27V13h6c4 0 6 2 6 5s-2 5-6 5h-4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
+    else if(kind==='parking')symbol='<path d="M11 12h4v7h4v-7h4l3 11v4h-9v-6h-1v6H7v-4z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M7 23h9m1 0h9" stroke="#fff" stroke-width="2"/>';
     else if(kind==='hazard')symbol='<path d="M17 12l8 14H9z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M17 17v4m0 3v1" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>';
     else symbol='<circle cx="17" cy="20" r="5" fill="#fff"/>';
     return '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 34 42"><path d="M17 1C8.2 1 2 7.2 2 15.4 2 26.6 17 41 17 41s15-14.4 15-25.6C32 7.2 25.8 1 17 1z" fill="#c1442d" stroke="#fff" stroke-width="2"/>'+symbol+'</svg>';
@@ -210,10 +230,20 @@ const WAYPOINT_FEATURE = String.raw`
     var gmap=window.__mancardoGoogleMap;
     if(!gmap||!window.google||!google.maps||typeof google.maps.Marker!=='function')return false;
     clearGoogleMarkers();
+    if(!waypointInfo&&typeof google.maps.InfoWindow==='function'){
+      infoMap=gmap;
+      waypointInfo=new google.maps.InfoWindow({disableAutoPan:true});
+      waypointInfo.addListener('closeclick',closeWaypointName);
+      gmap.addListener('click',closeWaypointName);
+      gmap.addListener('dragstart',closeWaypointName);
+    }
     waypoints.forEach(function(w){
       if(w.visible===false)return;
-      var marker=new google.maps.Marker({map:gmap,position:{lat:+w.lat,lng:+w.lon},title:w.name||'Waypoint',icon:markerIcon(w.icon),zIndex:12000});
-      marker.addListener('click',function(){markerClick(w.id);});
+      var marker=new google.maps.Marker({map:gmap,position:{lat:+w.lat,lng:+w.lon},title:(w.name||'Waypoint')+' · '+iconOption(w.icon).label,icon:markerIcon(w.icon),draggable:false,optimized:false,zIndex:12000});
+      marker.addListener('mousedown',clearHold);
+      marker.addListener('mouseover',function(){showWaypointName(w,marker,false);});
+      marker.addListener('mouseout',function(){if(activeWaypointId===w.id&&!waypointInfoPinned)closeWaypointName();});
+      marker.addListener('click',function(){clearHold();markerClick(w.id);showWaypointName(w,marker,true);});
       googleMarkers[w.id]=marker;
     });
     return true;
@@ -248,7 +278,7 @@ const WAYPOINT_FEATURE = String.raw`
     var show=document.createElement('input');show.type='checkbox';show.className='track-show';show.checked=w.visible!==false;show.title='Show waypoint on map';
     show.addEventListener('click',function(ev){ev.stopPropagation();setWaypointVisible(w.id,show.checked);});
     var opt=iconOption(w.icon);
-    var dot=document.createElement('span');dot.className='mancardo-waypoint-dot';dot.setAttribute('aria-hidden','true');dot.textContent=opt.glyph;dot.title=opt.label;
+    var dot=document.createElement('span');dot.className='mancardo-waypoint-dot';dot.setAttribute('aria-hidden','true');dot.innerHTML=opt.glyph;dot.title=opt.label;
     var name=document.createElement('span');name.className='ti-name';name.textContent=w.name||'Waypoint';
     var more=document.createElement('button');more.type='button';more.className='track-more';more.innerHTML='&#8942;';more.title='Waypoint options';
     more.addEventListener('click',function(ev){ev.stopPropagation();waypointMenuId=waypointMenuId===w.id?null:w.id;waypointIconMenuId=null;renderLibrary();});
@@ -264,7 +294,7 @@ const WAYPOINT_FEATURE = String.raw`
     }
     if(waypointIconMenuId===w.id){
       var im=document.createElement('div');im.className='mancardo-waypoint-icon-menu';
-      ICON_OPTIONS.forEach(function(o){var b=document.createElement('button');b.type='button';b.textContent=o.glyph;b.title=o.label;b.className=normaliseIcon(w.icon)===o.id?'on':'';b.onclick=function(ev){ev.stopPropagation();setWaypointIcon(w.id,o.id);};im.appendChild(b);});
+      ICON_OPTIONS.forEach(function(o){var b=document.createElement('button');b.type='button';b.innerHTML=o.glyph;b.title=o.label;b.setAttribute('aria-label',o.label);b.className=normaliseIcon(w.icon)===o.id?'on':'';b.onclick=function(ev){ev.stopPropagation();setWaypointIcon(w.id,o.id);};im.appendChild(b);});
       d.appendChild(im);
     }
     d.addEventListener('click',function(){markerClick(w.id);});
