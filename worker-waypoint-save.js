@@ -32,7 +32,7 @@ const WAYPOINT_FEATURE = String.raw`
     {id:'hotel',label:'Hotel',glyph:'🏨'},
     {id:'fuel',label:'Fuel',glyph:'⛽'},
     {id:'food',label:'Food',glyph:'🍴'},
-    {id:'trail',label:'Trail',glyph:'🥾'},
+    {id:'trail',label:'Trail',glyph:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><g transform="rotate(30 12 12)"><path d="M6 3l4-1v3l-4 1z M14 3l4 1v3l-4-1z M11 3l2 1v3l-2-1z M6 8l4-1v3l-4 1z M14 8l4 1v3l-4-1z M11 8l2 1v3l-2-1z M6 13l4-1v3l-4 1z M14 13l4 1v3l-4-1z M11 13l2 1v3l-2-1z M6 18l4-1v3l-4 1z M14 18l4 1v3l-4-1z M11 18l2 1v3l-2-1z"/></g></svg>'},
     // Keep the legacy storage key; this is a display/category replacement only.
     {id:'parking',label:'Lookout',glyph:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4v7h6V4h4l3 12v4h-8v-6h-4v6H2v-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M2 16h8m4 0h8" stroke="currentColor" stroke-width="2"/></svg>'},
     {id:'hazard',label:'Hazard',glyph:'⚠️'}
@@ -216,7 +216,7 @@ const WAYPOINT_FEATURE = String.raw`
     else if(kind==='hotel')symbol='<path d="M9 22h16v5H9z" fill="#fff"/><path d="M10 16h5v5h-5zm7 1h7v4h-7z" fill="#fff"/><path d="M9 14v13M25 16v11" stroke="#fff" stroke-width="2"/>';
     else if(kind==='fuel')symbol='<path d="M10 13h8v14h-8zM11 15h6v5h-6z" fill="#fff"/><path d="M18 17h3l2 3v7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>';
     else if(kind==='food')symbol='<path d="M11 13v6m-2-6v4c0 2 4 2 4 0v-4m-2 6v8M21 13v14m0-14c-3 2-3 6 0 7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>';
-    else if(kind==='trail')symbol='<path d="M8 25l6-8 4 5 3-4 5 7z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M18 12v6" stroke="#fff" stroke-width="2"/>';
+    else if(kind==='trail')symbol='<g transform="translate(7 8) scale(.83)" fill="#fff"><g transform="rotate(30 12 12)"><path d="M6 3l4-1v3l-4 1z M14 3l4 1v3l-4-1z M11 3l2 1v3l-2-1z M6 8l4-1v3l-4 1z M14 8l4 1v3l-4-1z M11 8l2 1v3l-2-1z M6 13l4-1v3l-4 1z M14 13l4 1v3l-4-1z M11 13l2 1v3l-2-1z M6 18l4-1v3l-4 1z M14 18l4 1v3l-4-1z M11 18l2 1v3l-2-1z"/></g></g>';
     else if(kind==='parking')symbol='<path d="M11 12h4v7h4v-7h4l3 11v4h-9v-6h-1v6H7v-4z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M7 23h9m1 0h9" stroke="#fff" stroke-width="2"/>';
     else if(kind==='hazard')symbol='<path d="M17 12l8 14H9z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M17 17v4m0 3v1" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>';
     else symbol='<circle cx="17" cy="20" r="5" fill="#fff"/>';

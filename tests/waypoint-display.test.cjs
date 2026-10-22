@@ -14,7 +14,7 @@ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const exportCode=html.slice(html.indexOf('function esc(s)'),html.indexOf('function fmtDate(iso)'))+html.slice(html.indexOf('function buildGpx(item)'),html.indexOf('// ---------- Leaflet map ----------'));
 const key='mancardo_saved_waypoints_v1';
 const names=['Parking <img src=x onerror="window.injected=1"> & "ridge"','Second summit'];
-const rows=names.map((name,i)=>({id:'synthetic-'+i,name,icon:i?'camp':'parking',lat:1+i/100,lon:2+i/100,visible:true,updatedAt:'2026-01-01T00:00:00Z'}));
+const rows=names.map((name,i)=>({id:'synthetic-'+i,name,icon:i?'trail':'parking',lat:1+i/100,lon:2+i/100,visible:true,updatedAt:'2026-01-01T00:00:00Z'}));
 let browser;
 test.before(async()=>{browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});});
 test.after(async()=>{await browser?.close();});
@@ -68,6 +68,8 @@ for(const mobile of [false,true])test(`${mobile?'mobile tap':'desktop hover/clic
  await p.locator('.track-more').first().click();await p.getByRole('button',{name:'Icon',exact:true}).click();
  assert.equal(await p.getByRole('button',{name:'Lookout',exact:true}).count(),1);
  assert.equal(await p.locator('.mancardo-waypoint-icon-menu button[aria-label="Lookout"] svg').count(),1);
+ assert.equal(await p.locator('.mancardo-waypoint-icon-menu button[aria-label="Trail"] svg').count(),1);
+ if(process.env.WAYPOINT_ARTIFACT_DIR)await p.screenshot({path:path.join(process.env.WAYPOINT_ARTIFACT_DIR,mobile?'mobile-icon-menu.png':'desktop-icon-menu.png'),fullPage:true});
  await p.getByRole('button',{name:'Lookout',exact:true}).click();
  let stored=await p.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);assert.equal(stored[0].icon,'parking');assert.equal(stored[0].name,names[0]);assert.equal(stored[0].lat,rows[0].lat);
  // Rename still works and updates displayed text, without changing coordinates.
@@ -77,6 +79,17 @@ for(const mobile of [false,true])test(`${mobile?'mobile tap':'desktop hover/clic
  assert.match(await p.locator('.shared-item-meta').first().textContent(),/^Lookout waypoint/);
  assert.equal(await p.locator('.shared-item-name').first().textContent(),' '+names[0]);
  assert.equal(await p.locator('.shared-item-name').first().locator('svg').count(),1);
+ assert.match(await p.locator('.shared-item-meta').nth(1).textContent(),/^Trail waypoint/);
+ assert.equal(await p.locator('.shared-item-name').nth(1).locator('svg').count(),1);
+ assert.equal(await p.locator('.mancardo-waypoint-dot').nth(1).locator('svg').count(),1);
+ assert.equal(await marker(1).getAttribute('aria-label'),names[1]+' · Trail');
+ // All Trail surfaces share the same tread geometry, including the white marker.
+ const tread=await p.locator('.mancardo-waypoint-dot').nth(1).locator('path').getAttribute('d');
+ assert.equal(await p.locator('.shared-item-name').nth(1).locator('path').getAttribute('d'),tread);
+ assert.equal(await p.locator('[data-waypoint-icon="trail"] path').getAttribute('d'),tread);
+ const markerSvg=decodeURIComponent((await marker(1).locator('img').getAttribute('src')).split(',')[1]);
+ assert.ok(markerSvg.includes(tread));
+
  const artifacts=process.env.WAYPOINT_ARTIFACT_DIR;if(artifacts){fs.mkdirSync(artifacts,{recursive:true});await p.screenshot({path:path.join(artifacts,mobile?'mobile-tap.png':'desktop-click.png'),fullPage:true});}
  await p.locator('.track-show').first().uncheck();assert.equal(await popup.count(),0);assert.equal(await p.locator('#map > button').count(),1);
  await p.locator('.track-show').first().check();assert.equal(await p.locator('#map > button').count(),2);
@@ -86,10 +99,14 @@ for(const mobile of [false,true])test(`${mobile?'mobile tap':'desktop hover/clic
  assert.equal(await p.locator('#mancardoWaypointOverlay').isVisible(),true);
  if(process.env.WAYPOINT_ARTIFACT_DIR)await p.screenshot({path:path.join(process.env.WAYPOINT_ARTIFACT_DIR,mobile?'mobile-picker.png':'desktop-picker.png'),fullPage:true});
  await p.locator('#mancardoWaypointName').fill('New Lookout');await p.locator('[data-waypoint-icon="parking"]').click();await p.locator('#mancardoWaypointSave').click();
- stored=await p.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);assert.equal(stored[0].icon,'parking');assert.equal(stored[0].name,'New Lookout');assert.equal(stored[1].id,rows[1].id);
+ stored=await p.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);assert.equal(stored[0].icon,'parking');assert.equal(stored[0].name,'New Lookout');assert.equal(stored[1].id,rows[1].id);assert.equal(stored[1].icon,'trail');
+ // Choosing Trail persists its existing key and displays the same SVG as imported Trail entries.
+ await p.locator('.track-more').first().click();await p.getByRole('button',{name:'Icon',exact:true}).click();await p.getByRole('button',{name:'Trail',exact:true}).click();
+ stored=await p.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);assert.equal(stored[0].icon,'trail');assert.equal(stored[0].name,'New Lookout');
  assert.equal(await p.evaluate(()=>JSON.stringify(state.library)===geometryBefore),true);
  assert.equal(await p.evaluate(()=>buildGpx(syntheticTrack)===gpxBefore),true);
  assert.match(await p.evaluate(()=>buildGpx(syntheticTrack)),/<trkpt lat="1.01" lon="2.01">/);
  assert.equal(await p.evaluate(()=>state.mode),'view');
+ await f.reload();assert.equal(await p.locator('.mancardo-waypoint-dot svg').count(),2);
  assert.deepEqual(f.errors,[]);
 });
