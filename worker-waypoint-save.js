@@ -270,6 +270,14 @@ const WAYPOINT_FEATURE = String.raw`
       if(waypointInfo&&map.hasLayer(waypointInfo))waypointInfo._updatePosition();
     };
     googleWaypointMarker=L.Marker.extend({
+      // This pane has no Leaflet transform. Google draw is its view clock;
+      // inherited zoom/viewreset hooks would project every marker again.
+      getEvents:function(){return {};},
+      _animateZoom:function(){},
+      update:function(){
+        if(this._icon&&this._map)this._setPos();
+        return this;
+      },
       _initIcon:function(){
         L.Marker.prototype._initIcon.call(this);
         this._icon.classList.remove('leaflet-zoom-animated');
