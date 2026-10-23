@@ -78,3 +78,14 @@ test('repeatability completes three contexts and retains an earlier failure',asy
  const loader=name=>name==='node:module'?FakeModule:name==='node:child_process'?{execFileSync:()=>guards.PIN}:name==='node:fs'?{...fs,readFileSync:(file,...args)=>String(file).startsWith('/synthetic/')?checker:fs.readFileSync(file,...args)}:name==='./release-map-performance-development.cjs'?guards:require(name);
  try{const result=vm.runInNewContext(source+'\nrun();',{require:loader,module:{exports:{}},process:{env},console,URL});await assert.rejects(result);const report=JSON.parse(fs.readFileSync(output));assert.equal(calls,3);assert.equal(report.completedContexts,3);assert.equal(report.acceptancePassed,false);assert.deepEqual(report.runs.map(r=>r.acceptancePassed),[false,true,true]);}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('causal sampling starts before navigation and adds no profiler calls or waits inside input loops',()=>{
+ const {instrument}=require('../scripts/trace-map-performance-development.cjs');
+ const source="  await page.goto(URL,{waitUntil:'domcontentloaded'});\n  const modes=[];\nfor(const z of [15,13]){\nawait page.mouse.wheel(0,-60);\n({...__wheelEvidence,start:undefined,geometryUnchanged:unchanged});}\n  const latencies=[]; const result={commandP95,};";
+ const result=instrument(source,{early:true});
+ assert.ok(result.indexOf("send('Profiler.start')")<result.indexOf('await page.goto'));
+ const loop=result.slice(result.indexOf('for(const z'),result.indexOf('const navigationProfile='));
+ assert.ok(!loop.includes('cdp'));assert.ok(!loop.includes('Cdp'));assert.ok(!loop.includes('Profiler'));assert.ok(!loop.includes('clock'));
+ assert.equal((loop.match(/await /g)||[]).length,1);
+ assert.ok(result.includes("m.name==='NavigationStart'"));
+});

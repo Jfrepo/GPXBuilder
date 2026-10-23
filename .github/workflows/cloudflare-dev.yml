@@ -22,13 +22,14 @@ on:
           - diagnose
           - stage
       measurement:
-        description: 'Three unprofiled fresh contexts or one CPU profile'
+        description: 'Bounded fresh-context diagnosis; causal sampling starts before navigation'
         type: choice
         required: true
         default: repeatability
         options:
           - repeatability
           - profile
+          - causal
 
 permissions:
   contents: read

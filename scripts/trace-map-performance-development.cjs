@@ -19,7 +19,8 @@ function sanitizeProfile(profile){
  }
  return {startTime:profile.startTime,endTime:profile.endTime,samples:profile.samples,timeDeltas:profile.timeDeltas,nodes:profile.nodes.map(n=>({id:n.id,children:n.children||[],callFrame:{functionName:n.callFrame.functionName.slice(0,120),source:source(n.callFrame.url),lineNumber:n.callFrame.lineNumber,columnNumber:n.callFrame.columnNumber}}))};
 }
-function instrument(source,{profile=true}={}){
+function instrument(source,{profile=true,early=false}={}){
+ if(early)profile=false;
  const needle='  const modes=[];';
  const sample='({...__wheelEvidence,start:undefined,geometryUnchanged:';
  const wheelLine=source.split('\n').find(line=>line.includes('await page.mouse.wheel(0,-60);'));
@@ -28,7 +29,7 @@ function instrument(source,{profile=true}={}){
  if(!source.includes('for(const z of [15,13])')||!source.includes('  const latencies=')||!source.includes('const result={commandP95,'))throw Error('Unexpected warm-control instrumentation point.');
  source=source.replace('for(const z of [15,13])','for(const z of [15,13,15])');
  source=source.replace('  const latencies=',"  const diagnosticWarmControls=modes.map(m=>({mode:m.mode,samples:m.samples.splice(2)}));\n  const latencies=");
- source=source.replace('const result={commandP95,',"const result={diagnosticWarmControls,profiling:'"+(profile?'1ms CPU sampling':'disabled; no additional per-wheel waits')+"',commandP95,");
+ source=source.replace('const result={commandP95,',"const result={diagnosticWarmControls,profiling:'"+(early?'1ms CPU sampling before navigation; no added per-wheel waits':profile?'1ms CPU sampling':'disabled; no additional per-wheel waits')+"',commandP95,");
  if(profile){
  source='const sanitizeProfile='+sanitizeProfile.toString()+';\n'+source;
  source=source.replace(wheelLine,`    await cdp.send('Profiler.start');
@@ -39,6 +40,14 @@ ${wheelLine}
     const rawProfile=await cdp.send('Profiler.stop');
     samples[samples.length-1].cpuProfile=sanitizeProfile(rawProfile.profile);
     samples[samples.length-1].profileClock={monotonicMinusPageMs:(clockBefore+clockAfter)/2-pageNow,uncertaintyMs:(clockAfter-clockBefore)/2};`);
+ }
+ if(early){
+  const navigation="  await page.goto(URL,{waitUntil:'domcontentloaded'});";
+  if(source.split(navigation).length!==2)throw Error('Unexpected navigation instrumentation point.');
+  source='const sanitizeProfile='+sanitizeProfile.toString()+';\n'+source;
+  source=source.replace(navigation,"  const navigationCdp=await context.newCDPSession(page);await navigationCdp.send('Profiler.enable');await navigationCdp.send('Profiler.setSamplingInterval',{interval:1000});await navigationCdp.send('Performance.enable');await navigationCdp.send('Profiler.start');\n"+navigation);
+  source=source.replace('  const diagnosticWarmControls=',"  const navigationProfile=sanitizeProfile((await navigationCdp.send('Profiler.stop')).profile);\n  const navigationMetrics=(await navigationCdp.send('Performance.getMetrics')).metrics;\n  const navigationStartMs=navigationMetrics.find(m=>m.name==='NavigationStart')?.value*1000;\n  if(!Number.isFinite(navigationStartMs)||navigationStartMs<=0)throw Error('Missing navigation clock anchor');\n  const diagnosticWarmControls=");
+  source=source.replace('const result={diagnosticWarmControls,','const result={navigationProfile,navigationStartMs,diagnosticWarmControls,');
  }
  const setup=profile?"  const cdp=await context.newCDPSession(page);await cdp.send('Profiler.enable');await cdp.send('Profiler.setSamplingInterval',{interval:1000});await cdp.send('Performance.enable');\n":'';
  source=source.replace(needle,'  await page.evaluate('+JSON.stringify('('+installTrace.toString()+')(__performanceAcceptance.map,__mancardoGoogleMap)')+');\n'+setup+needle);
@@ -52,8 +61,9 @@ async function run(){
  if(!root||execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim()!==PIN)throw Error('Diagnostic candidate SHA mismatch.');
  const filename=path.join(root,'scripts/check-map-performance-development.cjs');
  const mod=new Module(filename,module);mod.filename=filename;mod.paths=Module._nodeModulePaths(path.dirname(filename));
- const repeat=process.env.PERFORMANCE_DIAGNOSTIC_MODE==='repeatability';
- mod._compile(instrument(fs.readFileSync(filename,'utf8'),{profile:!repeat}),filename);
+ const early=process.env.PERFORMANCE_DIAGNOSTIC_MODE==='causal';
+ const repeat=early||process.env.PERFORMANCE_DIAGNOSTIC_MODE==='repeatability';
+ mod._compile(instrument(fs.readFileSync(filename,'utf8'),{profile:!repeat,early}),filename);
  const output=process.env.PERFORMANCE_LIVE_EVIDENCE;
  if(!output)throw Error('Evidence output path is required.');
  const runs=[];
@@ -74,7 +84,7 @@ async function run(){
  try{validateBrowserEvidence(evidence)}catch{acceptancePassed=false;}
  runs.push({context:index+1,acceptancePassed,evidence});
  fs.writeFileSync(file,JSON.stringify(evidence,null,2)+'\n');
- if(repeat)fs.writeFileSync(output,JSON.stringify({sourceSha:PIN,mode:'three fresh browsers; unprofiled; original gates retained per context',completedContexts:runs.length,acceptancePassed:runs.length===3&&runs.every(r=>r.acceptancePassed),runs},null,2)+'\n');
+ if(repeat)fs.writeFileSync(output,JSON.stringify({sourceSha:PIN,mode:early?'three fresh browsers; sampling before navigation; no extra per-wheel waits; original gates retained':'three fresh browsers; unprofiled; original gates retained per context',completedContexts:runs.length,acceptancePassed:runs.length===3&&runs.every(r=>r.acceptancePassed),runs},null,2)+'\n');
  }
  process.env.PERFORMANCE_LIVE_EVIDENCE=output;
  if(runs.some(r=>!r.acceptancePassed))throw Error('One or more original acceptance gates failed.');
