@@ -63,7 +63,9 @@ Development artifact. Its permissions are read-only and it cannot deploy.
 
 No D1 schema, production data, authentication, Access policy, account ownership,
 recovery design or production deployment configuration changes are included.
-The delete module adds only a read-only pending-authorization query for the editor.
+The delete module exposes a read-only pending-authorization query for the editor.
+The separately authorized single-track Delete dialog is documented in
+`library-delete-dialog.md`.
 There is no new polling. These tests do not establish physical-device or live
 Google-provider acceptance.
 

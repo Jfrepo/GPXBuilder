@@ -113,6 +113,15 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 .discard-actions{display:flex;flex-wrap:wrap;gap:.6rem}
 .discard-actions .icon-btn{flex:1;min-height:44px;white-space:nowrap}
 #discardEditConfirm{color:var(--danger);border-color:var(--danger);background:var(--surface)}
+#libraryDeleteDialog{width:calc(100% - 2rem);max-width:420px;max-height:calc(100% - 2rem);overflow:auto;margin:auto;padding:1.2rem;border:1px solid var(--border);border-top:5px solid var(--accent);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:0 14px 48px rgba(0,0,0,.3)}
+#libraryDeleteDialog::backdrop{background:rgba(16,40,43,.5)}
+.discard-heading{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.6rem}
+.discard-heading h3{margin:0;flex:1;font-size:1.25rem}
+#libraryDeleteClose{flex:none;min-width:44px;min-height:44px;padding:0;font-size:1.2rem}
+#libraryDeleteDescription{overflow-wrap:anywhere;font-size:.92rem;line-height:1.5;margin:.4rem 0 1.2rem}
+.discard-actions{display:flex;flex-wrap:wrap;gap:.6rem}
+.discard-actions .icon-btn{flex:1;min-height:44px;white-space:nowrap}
+#libraryDeleteConfirm{color:var(--danger);border-color:var(--danger);background:var(--surface)}
 .dialog h3{margin:0 0 .7rem; font-size:1.15rem;}
 .dialog input[type=text]{width:100%; padding:.55rem .6rem; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text); font-size:.95rem; margin-bottom:.7rem;}
 .dialog .btnrow{display:flex; gap:.5rem; justify-content:flex-end;}
@@ -360,6 +369,19 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
     </div>
   </div>
 </div>
+
+<dialog id="libraryDeleteDialog" aria-labelledby="libraryDeleteTitle" aria-describedby="libraryDeleteDescription">
+  <div class="discard-heading">
+    <h3 id="libraryDeleteTitle">Delete track?</h3>
+    <button type="button" class="icon-btn" id="libraryDeleteClose" aria-label="Keep track and close">×</button>
+  </div>
+  <p id="libraryDeleteDescription"></p>
+  <p id="libraryDeleteStatus" role="status"></p>
+  <div class="discard-actions">
+    <button type="button" class="icon-btn primary" id="libraryDeleteKeep" autofocus>Keep track</button>
+    <button type="button" class="icon-btn" id="libraryDeleteConfirm" disabled>Delete track</button>
+  </div>
+</dialog>
 
 <dialog id="discardEditDialog" aria-labelledby="discardEditTitle" aria-describedby="discardEditDescription">
   <div class="discard-heading">
@@ -625,7 +647,7 @@ var map = L.map('mapDiv', {zoomControl:true}).setView([-32.5,147.0], 6);
 // Capture at document level so the shortcut remains reliable after clicking the map,
 // Leaflet's +/- controls, or other buttons that take focus.
 function handleMapZoomShortcut(ev){
-  if(els.discardEditDialog.open)return;
+  if(document.querySelector('dialog[open]'))return;
   if(!ev.shiftKey) return;
 
   var target=ev.target;
