@@ -1,10 +1,18 @@
 # Cancel track editing
 
-Cancel sits beside Complete Change in the existing responsive toolbar. New route,
+The completion tick is the sole Complete Change control. It is amber with a visible
+! while an edit awaits completion, and neutral/disabled otherwise. Cancel is a
+fitted × directly below it on desktop (alongside it in the mobile toolbar), with
+an accessible name and tooltip. The top banner contains mode guidance only. New route,
 Extend, Move, Reverse, point deletion and Undo/Redo establish a cancellable working
-session. Cancel confirms a remaining geometry change, restores the pre-session
+session. Cancel confirms a remaining geometry change in a scoped, accessible
+Mancardo dialog. Keep editing has initial focus; Escape, close and backdrop
+dismiss without discarding. Confirm rechecks the original session, whole working
+copy and saved row before restoring anything. Stale prompts cannot discard later
+edits, completed Saves or concurrent updates. Cancel restores the pre-session
 working copy and selection/history/dirty indicator, and exits editing. Empty or
-fully undone sessions do not prompt. A new route is discarded without naming,
+fully undone sessions do not prompt. Join To Point before destination selection
+retains its immediate Cancel exit without starting a discard session. A new route is discarded without naming,
 creating a library row or deleting any existing track. Only recovery storage with
 that draft's exact ID may be removed.
 
@@ -39,9 +47,10 @@ dirty state/history, new/name-modal lifecycle, no-op and undo, successful/failed
 Save, staged and standalone operations, concurrent updates, map navigation, range
 selection and blocked note typing.
 
-Five additional authenticated regressions in `request-volume-browser.test.cjs`
+Six additional authenticated regressions in `request-volume-browser.test.cjs`
 exercise real IndexedDB queues with synthetic held Save/rename uploads, blocked
-note publication, delayed Shared publication and pending deletion authorization.
+note publication, delayed Shared publication, an upload acknowledgement while the
+discard dialog is open, and pending deletion authorization.
 They prove Cancel does not cause compensating PUT/DELETE/Shared publication and
 cannot erase earlier durable saves. Existing responsive-toolbar tests now include
 the new control and keyboard Cancel behavior. The selection-only Node adapter

@@ -76,7 +76,10 @@ button{font-family:'Source Sans 3',system-ui,sans-serif; cursor:pointer;}
 .map-wrap{flex:1; position:relative; min-height:0;}
 #mapDiv{width:100%; height:100%;}
 .leaflet-control-attribution{display:none!important;}
-.mode-banner{position:absolute; left:50%; top:.8rem; transform:translateX(-50%); background:var(--accent); color:var(--accent-contrast); padding:.4rem .8rem; border-radius:20px; font-size:.8rem; font-weight:600; z-index:750; display:flex; gap:.5rem; align-items:center;}
+/* Keep editing actions below the map-layer row, with room for the desktop toolbar. */
+.mode-banner{position:absolute; left:50%; top:3.5rem; transform:translateX(-50%); width:max-content; max-width:calc(100% - 10rem); box-sizing:border-box; background:var(--accent); color:var(--accent-contrast); padding:.5rem .7rem; border-radius:12px; font-size:.8rem; font-weight:600; z-index:750; display:flex; flex-wrap:wrap; gap:.5rem .75rem; align-items:center; justify-content:center;}
+.mode-banner>span{min-width:0;}
+@media(max-width:767px){.mode-banner{max-width:calc(100% - 1.4rem)}}
 .layer-toggle{position:absolute; right:.7rem; top:.8rem; z-index:750; background:var(--surface); border:1px solid var(--border); border-radius:4px; overflow:hidden; display:flex;}
 .layer-toggle button{border:none; background:var(--surface); padding:.4rem .7rem; font-size:.78rem; color:var(--text);}
 .layer-toggle button.on{background:var(--accent); color:var(--accent-contrast);}
@@ -101,6 +104,15 @@ table.points tr.sel{background:var(--surface-2); outline:1px solid var(--accent)
 table.points tr:hover{background:var(--surface-2); cursor:pointer;}
 .overlay{position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; z-index:2000; padding:1rem;}
 .dialog{background:var(--surface); border-radius:6px; padding:1.1rem; width:100%; max-width:380px; border:1px solid var(--border);}
+#discardEditDialog{width:calc(100% - 2rem);max-width:420px;max-height:calc(100% - 2rem);overflow:auto;margin:auto;padding:1.2rem;border:1px solid var(--border);border-top:5px solid var(--accent);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:0 14px 48px rgba(0,0,0,.3)}
+#discardEditDialog::backdrop{background:rgba(16,40,43,.5)}
+.discard-heading{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.6rem}
+.discard-heading h3{margin:0;flex:1;font-size:1.25rem}
+#discardEditClose{flex:none;min-width:44px;min-height:44px;padding:0;font-size:1.2rem}
+#discardEditDescription{font-size:.92rem;line-height:1.5;margin:.4rem 0 1.2rem}
+.discard-actions{display:flex;flex-wrap:wrap;gap:.6rem}
+.discard-actions .icon-btn{flex:1;min-height:44px;white-space:nowrap}
+#discardEditConfirm{color:var(--danger);border-color:var(--danger);background:var(--surface)}
 .dialog h3{margin:0 0 .7rem; font-size:1.15rem;}
 .dialog input[type=text]{width:100%; padding:.55rem .6rem; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text); font-size:.95rem; margin-bottom:.7rem;}
 .dialog .btnrow{display:flex; gap:.5rem; justify-content:flex-end;}
@@ -179,6 +191,10 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
   .points-table-wrap{max-height:160px;margin-top:.2rem}
   .slope-legend{right:9.7rem;left:auto}
 }
+/* Completion is distinct from Save: amber and ! mean an edit still needs finishing. */
+#completeChangeBtn{position:relative}
+#completeChangeBtn.completion-pending:not(:disabled){background:#facc15!important;border-color:#854d0e!important;color:#422006!important}
+#completeChangeBtn .completion-pending-mark{position:absolute;right:2px;top:1px;font:bold 12px/14px sans-serif}
 @media (prefers-color-scheme:dark) and (min-width:768px){
   .toolbar{background:rgba(27,34,39,.95)}
 }
@@ -253,7 +269,6 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
       <div class="map-wrap" id="mapWrap">
         <div class="mode-banner hidden" id="modeBanner">
           <span>Drawing new route &mdash; click the map to add points</span>
-          <button class="icon-btn" id="finishDrawBtn" style="min-height:26px; padding:.2rem .5rem;">Done</button>
         </div>
         <div class="layer-toggle">
           <button id="layerStreetsBtn" class="on">Streets</button>
@@ -302,8 +317,8 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
             <button class="icon-btn tool-icon" id="joinToPointBtn" disabled aria-label="Join To Point" data-tooltip="Join To Point" title="Join To Point"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M6.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/><rect x="12.5" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><rect x="18.2" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><rect x="23.9" y="13.5" width="3.3" height="3.3" rx=".4" fill="currentColor"/><path d="M25.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/></svg></button>
             <button class="icon-btn tool-icon" id="movePointBtn" disabled aria-label="Move point" data-tooltip="Move point" title="Move point">✥</button>
             <button class="icon-btn tool-icon" id="extendTrackBtn" disabled aria-label="Extend Track" data-tooltip="Extend Track" title="Extend Track"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><rect x="9.2" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><rect x="15.4" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><path d="M25.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/></svg></button>
-            <button class="icon-btn primary hidden tool-icon" id="completeChangeBtn" aria-label="Complete Change" data-tooltip="Complete Change" title="Complete Change">✓</button>
-            <button class="icon-btn hidden" id="cancelChangeBtn" aria-label="Cancel edit" title="Discard this edit">Cancel</button>
+            <button class="icon-btn tool-icon" id="completeChangeBtn" disabled aria-label="Complete Change" data-tooltip="No edit to complete" title="No edit to complete">✓<span class="completion-pending-mark hidden" aria-hidden="true">!</span></button>
+            <button class="icon-btn hidden tool-icon" id="cancelChangeBtn" aria-label="Cancel edit" data-tooltip="Cancel edit" title="Cancel edit">×</button>
           </div>
           <div class="grp">
             <button class="icon-btn danger tool-icon" id="deletePointBtn" disabled aria-label="Delete point" data-tooltip="Delete point" title="Delete point">⊖</button>
@@ -342,6 +357,18 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
     </div>
   </div>
 </div>
+
+<dialog id="discardEditDialog" aria-labelledby="discardEditTitle" aria-describedby="discardEditDescription">
+  <div class="discard-heading">
+    <h3 id="discardEditTitle">Discard these edits?</h3>
+    <button type="button" class="icon-btn" id="discardEditClose" aria-label="Keep editing and close">×</button>
+  </div>
+  <p id="discardEditDescription"></p>
+  <div class="discard-actions">
+    <button type="button" class="icon-btn primary" id="discardEditKeep" autofocus>Keep editing</button>
+    <button type="button" class="icon-btn" id="discardEditConfirm">Discard changes</button>
+  </div>
+</dialog>
 
 <div class="overlay hidden" id="importOverlay">
   <div class="dialog" style="max-width:420px;">
@@ -395,11 +422,12 @@ var state = {
 var els = {};
 ["hamburgerBtn","mobileLibraryToggle","drawer","drawerBackdrop","drawerCloseBtn","trackList","sharedTrackList","myLibraryTab","sharedLibraryTab","myLibraryPanel","sharedLibraryPanel","refreshSharedBtn","sharedUserSelect","newRouteBtn","exportSelectedBtn","deleteSelectedBtn","selectAllTracks","selectAllWrap",
  "fileInput","importBtn","saveBtn",
- "mapWrap","desktopToolbarHost","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
+ "mapWrap","desktopToolbarHost","modeBanner","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
  "splitAfterBtn","joinNextBtn","joinToPointBtn","movePointBtn","extendTrackBtn","completeChangeBtn","cancelChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
  "pointsToggle","pointsWrap","pointsBody",
+ "discardEditDialog","discardEditTitle","discardEditDescription","discardEditClose","discardEditKeep","discardEditConfirm",
  "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
  "importOverlay","importList","importCancelBtn","importConfirmBtn"
 ].forEach(function(id){ els[id] = document.getElementById(id); });
@@ -594,6 +622,7 @@ var map = L.map('mapDiv', {zoomControl:true}).setView([-32.5,147.0], 6);
 // Capture at document level so the shortcut remains reliable after clicking the map,
 // Leaflet's +/- controls, or other buttons that take focus.
 function handleMapZoomShortcut(ev){
+  if(els.discardEditDialog.open)return;
   if(!ev.shiftKey) return;
 
   var target=ev.target;
@@ -1101,17 +1130,50 @@ function removeSessionDraft(id){
   try{var raw=localStorage.getItem(AUTO_DRAFT_KEY);if(raw&&JSON.parse(raw).id===id)localStorage.removeItem(AUTO_DRAFT_KEY);}catch(e){}
 }
 function endTrackEdit(){
+  closeDiscardEdit();
   if(editSession){if(editSession.historyIsolated)state.history=editSession.history.concat(state.history).slice(-60);editSession=null;}
   state.mode='view';state.extend=null;state.joinFrom=null;
   updateModeBanner();
 }
+var pendingDiscardEdit=null;
+function closeDiscardEdit(){
+  var pending=pendingDiscardEdit;
+  pendingDiscardEdit=null;
+  if(els.discardEditDialog.open)els.discardEditDialog.close();
+  if(pending)queueMicrotask(function(){
+    if(els.discardEditDialog.open||!els.nameOverlay.classList.contains('hidden'))return;
+    var target=pending.focus;
+    if(!target||!target.isConnected||target.disabled||!target.getClientRects().length)target=els.saveBtn.disabled?els.newRouteBtn:els.saveBtn;
+    target.focus();
+  });
+}
 function cancelTrackEdit(){
+  if(!editSession&&state.mode==='joinpoint'){state.mode='view';state.extend=null;state.joinFrom=null;updateModeBanner();render();return true;}
   if(!editSession)return false;
+  if(!els.nameOverlay.classList.contains('hidden'))return false;
+  if(pendingDiscardEdit){els.discardEditKeep.focus();return false;}
   if(!validTrackEdit())return false;
   var session=editSession;
-  var changed=JSON.stringify(state.current.segments)!==session.geometry;
-  if(changed&&!window.confirm(session.isNew?'Discard this new unsaved track?':'Discard changes made in this edit? Earlier unsaved changes and pending saves will be kept.'))return false;
-  if(!validTrackEdit())return false;
+  if(JSON.stringify(state.current.segments)===session.geometry)return discardTrackEdit(session);
+  pendingDiscardEdit={session:session,current:JSON.stringify(state.current),currentId:state.currentId,focus:document.activeElement};
+  els.discardEditTitle.textContent=session.isNew?'Discard unsaved track?':'Discard these edits?';
+  els.discardEditDescription.textContent=session.isNew?'Only this new unsaved track will be discarded. Earlier unsaved work and pending saves will be kept.':'Only changes made in this edit will be discarded. Your saved track, earlier unsaved work and pending saves will be kept.';
+  els.discardEditConfirm.textContent=session.isNew?'Discard track':'Discard changes';
+  els.discardEditDialog.showModal();
+  els.discardEditKeep.focus();
+  return false;
+}
+function confirmDiscardEdit(){
+  var pending=pendingDiscardEdit;
+  if(!pending)return false;
+  if(editSession!==pending.session||state.currentId!==pending.currentId||JSON.stringify(state.current)!==pending.current){
+    closeDiscardEdit();window.alert('The edit changed while this confirmation was open. Your work has been kept. Review it before choosing Cancel again.');return false;
+  }
+  if(!validTrackEdit()){closeDiscardEdit();return false;}
+  return discardTrackEdit(pending.session);
+}
+function discardTrackEdit(session){
+  if(editSession!==session||!validTrackEdit())return false;
   if(session.isNew)removeSessionDraft(session.trackId);
   sharedPreviewRequest++;
   state.current=deepClone(session.current);state.currentId=session.previousId;
@@ -1121,6 +1183,7 @@ function cancelTrackEdit(){
   editSession=null;state.mode='view';state.extend=null;state.joinFrom=null;
   closeNameDialog();editSaveState.restore(session.dirty);
   updateModeBanner();render();renderLibrary();
+  closeDiscardEdit();
   return true;
 }
 function saveTrackEdit(name){
@@ -1471,9 +1534,12 @@ function updateModeBanner(){
   else if(state.mode==='extend') msg.textContent='Extend Track: tap map to add connected points';
   else if(state.mode==='draw') msg.textContent='Drawing mode — click the map to add points';
   else msg.textContent='Editing track — Complete Change keeps changes unsaved; Cancel discards this edit';
-  els.finishDrawBtn.textContent = !editSession && (state.mode==='move' || state.mode==='joinpoint') ? 'Cancel' : 'Complete Change';
-  els.completeChangeBtn.classList.toggle('hidden', !editSession && !(state.mode==='draw' || state.mode==='extend'));
-  els.cancelChangeBtn.classList.toggle('hidden', !editSession);
+  var pending = !!editSession || state.mode==='draw' || state.mode==='extend';
+  els.completeChangeBtn.disabled = !pending;
+  els.completeChangeBtn.classList.toggle('completion-pending', pending);
+  els.completeChangeBtn.querySelector('.completion-pending-mark').classList.toggle('hidden', !pending);
+  els.completeChangeBtn.title = els.completeChangeBtn.dataset.tooltip = pending ? 'Complete Change — finish this edit' : 'No edit to complete';
+  els.cancelChangeBtn.classList.toggle('hidden', !editSession&&state.mode!=='joinpoint');
 }
 
 function fitToTrack(){
@@ -1890,6 +1956,7 @@ function renderPointsTable(){
 
 // ---------- name dialog ----------
 function openNameDialog(opts){
+  closeDiscardEdit();
   els.nameDialogTitle.textContent = opts.title;
   els.nameInput.value = opts.value||'';
   els.nameHelp.textContent = opts.help||'';
@@ -1985,7 +2052,7 @@ els.saveBtn.onclick = function(){
   }
 };
 els.newRouteBtn.onclick = startNewRoute;
-els.finishDrawBtn.onclick = function(){
+els.completeChangeBtn.onclick = function(){
   if(editSession){
     if(!validTrackEdit())return false;
     if(!state.currentId){openNameDialog({title:'Name this route',value:state.current.name==='New route'?'':state.current.name,help:'Save this route, or return to editing and use Cancel to discard it.',mode:'save'});return;}
@@ -2011,8 +2078,23 @@ els.joinNextBtn.onclick = joinNext;
 els.joinToPointBtn.onclick = startJoinToPoint;
 els.movePointBtn.onclick = movePoint;
 els.extendTrackBtn.onclick = extendTrack;
-els.completeChangeBtn.onclick = function(){ els.finishDrawBtn.click(); };
 els.cancelChangeBtn.onclick = cancelTrackEdit;
+els.discardEditKeep.onclick = closeDiscardEdit;
+els.discardEditClose.onclick = closeDiscardEdit;
+els.discardEditConfirm.onclick = confirmDiscardEdit;
+els.discardEditDialog.addEventListener('cancel',function(ev){ev.preventDefault();ev.stopPropagation();closeDiscardEdit();});
+els.discardEditDialog.addEventListener('click',function(ev){
+  var r=els.discardEditDialog.getBoundingClientRect();
+  if(ev.target===els.discardEditDialog&&(ev.clientX<r.left||ev.clientX>r.right||ev.clientY<r.top||ev.clientY>r.bottom))closeDiscardEdit();
+});
+els.discardEditDialog.addEventListener('keydown',function(ev){
+  ev.stopPropagation();
+  if(ev.key==='Tab'){
+    var first=els.discardEditClose,last=els.discardEditConfirm;
+    if(ev.shiftKey&&document.activeElement===first){ev.preventDefault();last.focus();}
+    else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first.focus();}
+  }
+});
 els.reverseBtn.onclick = reverseTrack;
 els.undoBtn.onclick = undo;
 els.redoBtn.onclick = redo;
