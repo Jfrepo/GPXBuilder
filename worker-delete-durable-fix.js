@@ -145,16 +145,19 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     }
     return Promise.all(Array.from(new Set(texts)).map(function(text){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)).then(function(d){return Array.from(new Uint8Array(d)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');});}));
   }
-  function authorisedDelete(ids){
+  function authorisedDelete(ids,expected){
     if(authorizing)return Promise.resolve(false);
     ids=Array.from(new Set((ids||[]).map(String))).filter(function(id){return (state.library||[]).some(function(t){return t&&String(t.id)===id;});});
     if(!ids.length)return Promise.resolve(false);
     var snapshots=Object.create(null);ids.forEach(function(id){snapshots[id]=JSON.stringify((state.library||[]).find(function(t){return t&&String(t.id)===id;}));});
     authorizing=true;
     var hashes=Promise.resolve().then(function(){return Promise.all(ids.map(function(id){return revisionHashes(snapshots[id]).then(function(hashes){return [id,hashes];});}));});
-    return Promise.all([readWorkspace(ids),hashes]).then(function(result){
+    return hashes.then(function(h){return readWorkspace(ids).then(function(ws){return [ws,h];});}).then(function(result){
       var ws=result[0],hashes=Object.fromEntries(result[1]);
       if(!ws.accountKey||ws.records.length!==ids.length)throw new Error('Sync My Library before deleting. The local tracks have not been removed.');
+      if(expected&&((typeof editSession!=='undefined'&&editSession)||state.currentId!==expected.currentId||state.current!==expected.editorRef||JSON.stringify(state.current)!==expected.editor))throw new Error('The editor changed while the confirmation was open. Finish editing and review the track before deleting; no track was removed.');
+      if(expected&&(expected.stored!==expected.snapshot||storedDeleteRow(expected.id)!==expected.stored||localStorage.getItem(LIBRARY_KEY)!==JSON.stringify(state.library)))throw new Error('The saved track changed while the confirmation was open. Review it before deleting; no track was removed.');
+      if(expected&&(ids.length!==1||ids[0]!==expected.id||ws.accountKey!==expected.accountKey||snapshots[expected.id]!==expected.snapshot||JSON.stringify(ws.records[0].meta)!==expected.meta))throw new Error('This track or account changed while the confirmation was open. Review it and try again; no track was removed.');
       var records=ws.records.map(function(x){
         if(!x.meta||x.meta.deleted||!Number.isInteger(Number(x.meta.revision))||Number(x.meta.revision)<1)throw new Error('Sync My Library before deleting. A known cloud revision is required; no track was removed.');
         if(hashes[x.id].indexOf(x.meta.sha256)<0||JSON.stringify((state.library||[]).find(function(t){return t&&String(t.id)===x.id;}))!==snapshots[x.id])throw new Error('This track has unsynced or newly received changes. Sync and review it before deleting; no track was removed.');
@@ -169,10 +172,63 @@ const DURABLE_DELETE_BRIDGE = String.raw`
       return retryPending().then(function(){return true;});
     }).catch(function(e){markStatus('conflict','Delete not applied',e&&e.message||'No deletion was applied.');console.warn('Delete authorization failed',e);return false;}).finally(function(){authorizing=false;});
   }
+  // The modal is only for a single My Library row. Bulk and armed toolbar
+  // deletion retain their existing confirmation and durable authorization paths.
+  var pendingDeleteDialog=null,deleteDialogReady=false;
+  function closeDeleteDialog(){
+    var pending=pendingDeleteDialog;pendingDeleteDialog=null;
+    var dialog=document.getElementById('libraryDeleteDialog');
+    if(dialog.open)dialog.close();
+    if(pending)queueMicrotask(function(){
+      if(document.querySelector('dialog[open]'))return;
+      var focus=pending.focus&&pending.focus.isConnected?pending.focus:document.querySelector('[data-track-id="'+CSS.escape(pending.id)+'"] .track-more');
+      if(focus)focus.focus();
+    });
+  }
+  function storedDeleteRow(id){return JSON.stringify(JSON.parse(localStorage.getItem(LIBRARY_KEY)||'[]').find(function(t){return t&&String(t.id)===id;}));}
+  function openDeleteDialog(item,trigger){
+    var dialog=document.getElementById('libraryDeleteDialog'),keep=document.getElementById('libraryDeleteKeep'),confirm=document.getElementById('libraryDeleteConfirm'),status=document.getElementById('libraryDeleteStatus');
+    if(authorizing||document.querySelector('dialog[open]:not(#libraryDeleteDialog)'))return;
+    if(pendingDeleteDialog){keep.focus();return;}
+    if(!deleteDialogReady){
+      deleteDialogReady=true;
+      keep.addEventListener('click',closeDeleteDialog);
+      document.getElementById('libraryDeleteClose').addEventListener('click',closeDeleteDialog);
+      dialog.addEventListener('close',function(){if(!dialog.open)closeDeleteDialog();});
+      dialog.addEventListener('cancel',function(ev){ev.preventDefault();ev.stopPropagation();closeDeleteDialog();});
+      dialog.addEventListener('click',function(ev){var r=dialog.getBoundingClientRect();if(ev.target===dialog&&(ev.clientX<r.left||ev.clientX>r.right||ev.clientY<r.top||ev.clientY>r.bottom))closeDeleteDialog();});
+      dialog.addEventListener('keydown',function(ev){
+        ev.stopPropagation();
+        if(ev.key==='Tab'){
+          var buttons=Array.from(dialog.querySelectorAll('button:not(:disabled)')),first=buttons[0],last=buttons[buttons.length-1];
+          if(ev.shiftKey&&document.activeElement===first){ev.preventDefault();last.focus();}
+          else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first.focus();}
+        }
+      });
+      confirm.addEventListener('click',function(){
+        var pending=pendingDeleteDialog;
+        if(!pending||!pending.accountKey||confirm.disabled)return;
+        // Close/invalidate before authorizing: a repeated click cannot reuse intent.
+        closeDeleteDialog();
+        authorisedDelete([pending.id],pending);
+      });
+    }
+    var stored;try{stored=storedDeleteRow(String(item.id));}catch(error){markStatus('conflict','Delete not applied','The local library cannot be read. No track was removed.');return;}
+    var pending={id:String(item.id),snapshot:JSON.stringify(item),currentId:state.currentId,editor:JSON.stringify(state.current),editorRef:state.current,stored:stored,focus:trigger};pendingDeleteDialog=pending;
+    document.getElementById('libraryDeleteDescription').textContent='Delete “'+(item.name||'this track')+'” from My Library? This cannot be undone.';
+    confirm.disabled=true;status.textContent='Checking the saved track…';dialog.showModal();keep.focus();
+    readWorkspace([pending.id]).then(function(ws){
+      if(pendingDeleteDialog!==pending)return;
+      var record=ws.records[0];
+      if(!ws.accountKey||!record||!record.meta||record.meta.deleted)throw new Error('Sync My Library and review this track before deleting.');
+      pending.accountKey=ws.accountKey;pending.meta=JSON.stringify(record.meta);
+      status.textContent='';confirm.disabled=false;
+    }).catch(function(error){if(pendingDeleteDialog===pending)status.textContent=error.message||'Unable to check this track. Keep it and try again.';});
+  }
   window.mancardoReconciledRevisionHashes=revisionHashes;
   // Read-only editor boundary: a confirmed deletion may still be awaiting
   // workspace/hash checks. Do not start a cancellable edit until it settles.
-  window.mancardoEditDeletionPending=function(){return authorizing;};
+  window.mancardoEditDeletionPending=function(){return authorizing||!!pendingDeleteDialog;};
   window.mancardoAuthorizedDelete=authorisedDelete;
 
   document.addEventListener('click',function(ev){
@@ -183,7 +239,7 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     if(target.classList.contains('mancardo-menu-delete')){
       var card=target.closest('.track-item'),id=card&&card.getAttribute('data-track-id');
       var item=(state.library||[]).find(function(t){return t&&String(t.id)===String(id);});
-      if(item&&window.confirm('Delete "'+(item.name||'this track')+'" from My Library? This cannot be undone.'))authorisedDelete([id]);
+      if(item)openDeleteDialog(item,target);
     }else if(target.id==='deleteSelectedBtn'){
       var selected=(state.library||[]).filter(function(t){return t&&t.visible!==false;});
       if(selected.length&&window.confirm('Delete '+selected.length+' selected track(s) from My Library? This cannot be undone.'))authorisedDelete(selected.map(function(t){return t.id;}));
