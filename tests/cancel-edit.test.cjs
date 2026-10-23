@@ -79,7 +79,7 @@ for(const width of [2048,1100,768,390,320])test(`sole completion tick and fitted
    const hit=e=>{const r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));};
    return {adjacent:innerWidth>=768?cr.top>=fr.bottom&&cr.top-fr.bottom<10:cr.left>=fr.right&&cr.left-fr.right<10,inside:br.left>=0&&br.right<=innerWidth,clearOfLayers:br.top>=lr.bottom,hit:hit(c)&&hit(f),fits:c.scrollWidth<=c.clientWidth,tooltip:c.dataset.tooltip,amber:getComputedStyle(f).backgroundColor,pending:!f.querySelector('.completion-pending-mark').classList.contains('hidden')};
   });
-  assert.equal(layout.adjacent,true);assert.equal(layout.inside,true);assert.equal(layout.clearOfLayers,true);assert.equal(layout.hit,true);assert.equal(layout.fits,true);assert.equal(layout.tooltip,'Cancel edit');assert.equal(layout.amber,'rgb(250, 204, 21)');assert.equal(layout.pending,true);
+  assert.equal(layout.adjacent,true);assert.equal(layout.inside,true);assert.equal(layout.clearOfLayers,true,JSON.stringify({width,mode,layout}));assert.equal(layout.hit,true);assert.equal(layout.fits,true);assert.equal(layout.tooltip,'Cancel edit');assert.equal(layout.amber,'rgb(250, 204, 21)');assert.equal(layout.pending,true);
   if(process.env.CANCEL_LAYOUT_ARTIFACT_DIR){fs.mkdirSync(process.env.CANCEL_LAYOUT_ARTIFACT_DIR,{recursive:true});await p.screenshot({path:`${process.env.CANCEL_LAYOUT_ARTIFACT_DIR}/${width}-${mode}.png`});}
   await p.locator('#cancelChangeBtn').click();if(await p.locator('#discardEditDialog').isVisible())await p.locator('#discardEditConfirm').click();assert.equal(await p.locator('#modeBanner').isVisible(),false);assert.equal(await tick.isDisabled(),true);assert.equal(await p.locator('#nameOverlay').isVisible(),false);
   assert.equal(await tick.evaluate(e=>getComputedStyle(e).backgroundColor==='rgb(250, 204, 21)'),false);
@@ -139,4 +139,14 @@ for(const action of ['completeChangeBtn','saveBtn'])test(`new-route ${action} in
  const p=await setup(t);await p.evaluate(()=>{startNewRoute();addPoint();});await p.locator('#cancelChangeBtn').click();
  await p.evaluate(action=>{els[action].click();window.later=snapshot();els.discardEditConfirm.click();},action);
  assert.equal(await p.locator('#discardEditDialog').isVisible(),false);assert.equal(await p.locator('#nameOverlay').isVisible(),true);assert.equal(await p.evaluate(()=>snapshot()===later),true);assert.equal(await p.locator('#nameInput').evaluate(e=>e===document.activeElement),true);
+});
+
+test('mode guidance follows wrapped layer controls without a window resize or polling',async t=>{
+ const p=await setup(t,{mobile:true});await p.setViewportSize({width:320,height:740});await p.evaluate(()=>startNewRoute());
+ await p.addStyleTag({content:'.layer-toggle{width:170px!important}'});
+ await p.waitForFunction(()=>{const layer=document.querySelector('.layer-toggle').getBoundingClientRect(),banner=document.getElementById('modeBanner').getBoundingClientRect();return layer.height>60&&banner.top>=layer.bottom+10;});
+ if(process.env.CANCEL_LAYOUT_ARTIFACT_DIR)await p.screenshot({path:process.env.CANCEL_LAYOUT_ARTIFACT_DIR+'/wrapped-layer-mobile.png'});
+ await p.addStyleTag({content:'.layer-toggle{width:300px!important;max-width:none!important}'});
+ await p.waitForFunction(()=>{const layer=document.querySelector('.layer-toggle'),banner=document.getElementById('modeBanner');return layer.offsetHeight<60&&banner.style.getPropertyValue('--edit-banner-top')===(layer.offsetTop+layer.offsetHeight+12)+'px';});
+ await p.locator('#cancelChangeBtn').click();assert.equal(await p.locator('#completeChangeBtn').isDisabled(),true);
 });
