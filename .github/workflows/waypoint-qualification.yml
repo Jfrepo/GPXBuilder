@@ -1,0 +1,104 @@
+name: Waypoint Qualification and Approved Development Release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'worker-waypoint-save.js'
+      - 'worker-shared-waypoint-cloud.js'
+      - 'tests/waypoint-display.test.cjs'
+      - 'scripts/build-waypoint-development.cjs'
+      - '.github/workflows/waypoint-qualification.yml'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  waypoint-qualification:
+    if: github.head_ref == 'feature/waypoint-labels-lookout'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Qualify exact head with synthetic checks only
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          npm run test:source
+          npm run test:packaged-server
+          npm run test:browser
+          npm run test:waypoints
+          node --test tests/waypoint-development-release.test.cjs
+      - name: Prepare narrow Development package (unresolved binding; no deploy)
+        run: |
+          node scripts/build-waypoint-development.cjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waypoint-development-${{ github.event.pull_request.head.sha }}
+          path: dist/waypoint-development/
+          if-no-files-found: error
+          retention-days: 7
+
+  approved-development-release:
+    needs: waypoint-qualification
+    if: github.event.action == 'synchronize' && github.event.pull_request.number == 81 && github.head_ref == 'feature/waypoint-labels-lookout' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: development
+    concurrency:
+      group: mancardo-dev
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: controller
+          persist-credentials: false
+      - name: Enforce the single approved preparation change above the immutable candidate
+        working-directory: controller
+        run: |
+          git fetch --no-tags --depth=2 origin "${{ github.event.pull_request.head.sha }}"
+          test "$(git rev-parse HEAD^)" = cab7b4976b6eee05748ae270aacd6cc2ec4391f4
+          node -e 'const c=require("node:child_process");const allowed=new Set([".github/workflows/waypoint-qualification.yml","scripts/release-waypoint-development.cjs","tests/waypoint-development-release.test.cjs"]);const files=c.execFileSync("git",["diff","--name-only","HEAD^","HEAD"],{encoding:"utf8"}).trim().split("\n");if(files.some(f=>!allowed.has(f)))process.exit(1)'
+      - uses: actions/checkout@v4
+        with:
+          ref: cab7b4976b6eee05748ae270aacd6cc2ec4391f4
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the immutable reviewed application package
+        working-directory: candidate
+        run: |
+          npm ci --ignore-scripts
+          npx --no-install playwright install --with-deps chromium
+          node scripts/build-waypoint-development.cjs
+      - name: Verify live isolation, deploy only if verified, and run bounded synthetic acceptance
+        env:
+          CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+          EVIDENCE_PATH: ${{ github.workspace }}/waypoint-development-result.json
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEV_DB: ${{ secrets.CLOUDFLARE_DEV_D1_DATABASE_ID }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node controller/scripts/release-waypoint-development.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: waypoint-development-result-${{ github.run_id }}
+          path: waypoint-development-result.json
+          if-no-files-found: warn
+          retention-days: 7

@@ -65,7 +65,7 @@ const CLIENT=String.raw`
   function api(path,opts){opts=opts||{};opts.credentials='include';opts.cache='no-store';opts.headers=Object.assign({'accept':'application/json'},opts.headers||{});return fetch('/api/shared-waypoints'+path,opts);}
   function loadLocal(){try{var x=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(x)?x:[];}catch(e){return [];}}
   function saveLocal(x){localStorage.setItem(KEY,JSON.stringify(x));}
-  function glyph(icon){return {pin:'📍',camp:'⛺',hotel:'🏨',fuel:'⛽',food:'🍴',trail:'🥾',parking:'🅿️',hazard:'⚠️'}[icon]||'📍';}
+  function glyph(icon){return {pin:'📍',camp:'⛺',hotel:'🏨',fuel:'⛽',food:'🍴',trail:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><g transform="rotate(30 12 12)"><path d="M6 3l4-1v3l-4 1z M14 3l4 1v3l-4-1z M11 3l2 1v3l-2-1z M6 8l4-1v3l-4 1z M14 8l4 1v3l-4-1z M11 8l2 1v3l-2-1z M6 13l4-1v3l-4 1z M14 13l4 1v3l-4-1z M11 13l2 1v3l-2-1z M6 18l4-1v3l-4 1z M14 18l4 1v3l-4-1z M11 18l2 1v3l-2-1z"/></g></svg>',parking:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4v7h6V4h4l3 12v4h-8v-6h-4v6H2v-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M2 16h8m4 0h8" stroke="currentColor" stroke-width="2"/></svg>',hazard:'⚠️'}[icon]||'📍';}
   function modifiedBy(){var el=document.getElementById('sharedUserSelect');return el&&el.value?el.value:'';}
   function publishWaypoint(id){
     var w=loadLocal().find(function(x){return x&&String(x.id)===String(id);});if(!w)return;
@@ -98,8 +98,8 @@ const CLIENT=String.raw`
     if(shared.length){var empty=wrap.querySelector('.empty-note');if(empty&&/No shared tracks/.test(empty.textContent||''))empty.remove();}
     shared.forEach(function(w){
       var d=document.createElement('div');d.className='shared-item mancardo-shared-waypoint-item';d.style.cursor='pointer';d.onclick=function(){previewShared(w);};
-      var n=document.createElement('div');n.className='shared-item-name';n.textContent=glyph(w.icon)+' '+(w.name||'Waypoint');d.appendChild(n);
-      var m=document.createElement('div');m.className='shared-item-meta';m.textContent=(w.icon||'pin')+' waypoint · '+(+w.lat).toFixed(5)+', '+(+w.lon).toFixed(5)+' · v'+(w.version||1)+' · '+(w.modifiedBy||'Unknown');d.appendChild(m);
+      var n=document.createElement('div');n.className='shared-item-name';var icon=document.createElement('span');icon.innerHTML=glyph(w.icon);icon.setAttribute('aria-hidden','true');n.appendChild(icon);n.appendChild(document.createTextNode(' '+(w.name||'Waypoint')));d.appendChild(n);
+      var m=document.createElement('div');m.className='shared-item-meta';m.textContent=({pin:'Pin',camp:'Camp',hotel:'Hotel',fuel:'Fuel',food:'Food',trail:'Trail',parking:'Lookout',hazard:'Hazard'}[w.icon]||'Pin')+' waypoint · '+(+w.lat).toFixed(5)+', '+(+w.lon).toFixed(5)+' · v'+(w.version||1)+' · '+(w.modifiedBy||'Unknown');d.appendChild(m);
       var a=document.createElement('div');a.className='shared-item-actions';
       var p=document.createElement('button');p.type='button';p.className='icon-btn';p.textContent='Preview';p.onclick=function(ev){ev.stopPropagation();previewShared(w);};a.appendChild(p);
       var c=document.createElement('button');c.type='button';c.className='icon-btn primary';c.textContent='Copy to My Library';c.onclick=function(ev){ev.stopPropagation();copyShared(w);};a.appendChild(c);

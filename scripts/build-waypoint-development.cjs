@@ -1,0 +1,24 @@
+// Offline preparation only. No network, secrets, D1 access or deployment.
+const fs=require('node:fs');
+const path=require('node:path');
+const {execFileSync}=require('node:child_process');
+const {graph,digest}=require('./build-production.cjs');
+const root=path.resolve(__dirname,'..');
+const out=path.join(root,'dist/waypoint-development');
+const sourceSha=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+if(!/^[a-f0-9]{40}$/.test(sourceSha))throw Error('Expected exact source commit');
+const config=fs.readFileSync(path.join(root,'wrangler.dev.toml'),'utf8');
+if(!/^name = "mancardo-dev-test"$/m.test(config)||!/^main = "worker-delete-durable-fix.js"$/m.test(config)||!/^database_name = "mancardo-private-library-dev"$/m.test(config)||!/^database_id = "DEV_DATABASE_ID_REQUIRED"$/m.test(config)||config.toLowerCase().includes('6ada726b-aae6-441b-a698-69dc0789c7b7'))throw Error('Unexpected Development template');
+if((config.match(/^binding = /gm)||[]).length!==2||!/^binding = "ASSETS"$/m.test(config)||!/^binding = "PRIVATE_LIBRARY_DB"$/m.test(config))throw Error('Unexpected bindings');
+const runtime=graph('worker-delete-durable-fix.js');
+fs.rmSync(out,{recursive:true,force:true});
+fs.mkdirSync(path.join(out,'assets'),{recursive:true});
+for(const file of runtime)fs.copyFileSync(path.join(root,file),path.join(out,file));
+fs.copyFileSync(path.join(root,'index.html'),path.join(out,'assets/index.html'));
+fs.writeFileSync(path.join(out,'wrangler.toml'),config.replace('directory = "."','directory = "assets"'));
+const files=[...runtime,'assets/index.html','wrangler.toml'].sort();
+const manifest=Object.fromEntries(files.map(file=>[file,digest(fs.readFileSync(path.join(out,file)))]));
+fs.writeFileSync(path.join(out,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+const manifestSha256=digest(fs.readFileSync(path.join(out,'manifest.json')));
+fs.writeFileSync(path.join(out,'release.json'),JSON.stringify({sourceSha,manifestSha256,target:'mancardo-dev-test',databaseName:'mancardo-private-library-dev',deploymentReady:false,reason:'Dedicated Development database identity and existing Worker bindings must be verified; placeholder is intentionally unresolved.',runtimeModules:runtime.length,assets:['index.html']},null,2)+'\n');
+console.log(JSON.stringify({sourceSha,manifestSha256,out,deploymentReady:false}));
