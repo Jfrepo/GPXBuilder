@@ -57,7 +57,8 @@ const WAYPOINT_FEATURE = String.raw`
     if(!pinned&&waypointInfoPinned)return;
     cancelHoverClose();
     if(!waypointInfo){
-      waypointInfo=L.popup({autoPan:false,closeOnClick:false,offset:L.point(0,-38),maxWidth:260,className:'mancardo-waypoint-popup'});
+      var Popup=googleWaypointPopup||L.Popup;
+      waypointInfo=new Popup({pane:googleWaypointPopup?'mancardoWaypointPopups':'popupPane',autoPan:false,closeOnClick:false,offset:L.point(0,-38),maxWidth:260,className:'mancardo-waypoint-popup'});
       waypointInfo.on('remove',function(){
         var focusMarker=restoreWaypointFocus&&waypointInfoPinned&&waypointMarkers[activeWaypointId];
         cancelHoverClose();activeWaypointId=null;waypointInfoPinned=false;
@@ -78,7 +79,7 @@ const WAYPOINT_FEATURE = String.raw`
   }
   document.addEventListener('keydown',function(ev){if(ev.key==='Escape')closeWaypointName(true);});
   // Leaflet owns interaction; the Google basemap beneath it is decorative.
-  map.on('click dragstart',closeWaypointName);
+  map.on('click dragstart zoomstart',closeWaypointName);
   var waypointMenuId=null;
   var waypointIconMenuId=null;
   var pendingWaypoint=null;
@@ -248,12 +249,79 @@ const WAYPOINT_FEATURE = String.raw`
     var svg=waypointSvg(normaliseIcon(kind));
     return L.icon({iconUrl:'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg),iconSize:[34,42],iconAnchor:[17,42]});
   }
+  // Google draws tracks and imagery on its own animation clock. Keep accessible
+  // Leaflet markers above the interaction surface, but use that same projection.
+  // This pane must not inherit Leaflet's independent pan/zoom transform.
+  var googleWaypointOverlay=null, googleWaypointMarker=null, googleWaypointPopup=null;
+  function useGoogleWaypointProjection(){
+    if(googleWaypointOverlay)return true;
+    var g=window.__mancardoGoogleMap;
+    if(!g||!window.google||!google.maps||!google.maps.OverlayView)return false;
+    var pane=map.createPane('mancardoWaypoints',map.getContainer());
+    pane.style.zIndex='650';pane.style.pointerEvents='none';
+    var popupPane=map.createPane('mancardoWaypointPopups',map.getContainer());
+    popupPane.style.zIndex='700';popupPane.style.pointerEvents='none';
+    closeWaypointName();waypointInfo=null;
+    googleWaypointOverlay=new google.maps.OverlayView();
+    googleWaypointOverlay.onAdd=function(){};
+    googleWaypointOverlay.onRemove=function(){};
+    googleWaypointOverlay.draw=function(){
+      Object.keys(waypointMarkers).forEach(function(id){waypointMarkers[id].update();});
+      if(waypointInfo&&map.hasLayer(waypointInfo))waypointInfo._updatePosition();
+    };
+    googleWaypointMarker=L.Marker.extend({
+      _initIcon:function(){
+        L.Marker.prototype._initIcon.call(this);
+        this._icon.classList.remove('leaflet-zoom-animated');
+        this._icon.style.pointerEvents='auto';
+      },
+      _setPos:function(){
+        var projection=googleWaypointOverlay.getProjection();
+        var ll=this.getLatLng();
+        var point=projection&&projection.fromLatLngToContainerPixel(new google.maps.LatLng(ll.lat,ll.lng));
+        if(!point){if(this._icon)this._icon.style.visibility='hidden';return;}
+        this._icon.style.visibility='';
+        L.Marker.prototype._setPos.call(this,L.point(point.x,point.y));
+      }
+    });
+    googleWaypointPopup=L.Popup.extend({
+      _initLayout:function(){
+        L.Popup.prototype._initLayout.call(this);
+        this._container.classList.remove('leaflet-zoom-animated');
+        this._container.style.pointerEvents='auto';
+      },
+      _updatePosition:function(){
+        if(!this._map)return;
+        var projection=googleWaypointOverlay.getProjection();
+        var ll=this.getLatLng();
+        var point=projection&&projection.fromLatLngToContainerPixel(new google.maps.LatLng(ll.lat,ll.lng));
+        if(!point){this._container.style.visibility='hidden';return;}
+        this._container.style.visibility='';
+        L.DomUtil.setPosition(this._container,L.point(point.x,point.y));
+        this._container.style.bottom=(-this.options.offset.y)+'px';
+        this._container.style.left=(-Math.round(this._containerWidth/2)+this.options.offset.x)+'px';
+      },
+      _animateZoom:function(){this._updatePosition();},
+      _adjustPan:function(){
+        if(!this.options.autoPan||!this._map)return;
+        var box=this._container.getBoundingClientRect(),bounds=map.getContainer().getBoundingClientRect();
+        var dx=Math.max(0,box.right-bounds.right+5),dy=Math.max(0,box.bottom-bounds.bottom+5);
+        if(box.left-dx<bounds.left+5)dx=box.left-bounds.left-5;
+        if(box.top-dy<bounds.top+5)dy=box.top-bounds.top-5;
+        if(dx||dy)map.fire('autopanstart').panBy([dx,dy]);
+      }
+    });
+    googleWaypointOverlay.setMap(g);
+    return true;
+  }
   function renderWaypointMarkers(){
+    var googlePositioned=useGoogleWaypointProjection();
     clearWaypointMarkers();
     waypoints.forEach(function(w){
       if(w.visible===false)return;
       var label=(w.name||'Waypoint')+' · '+iconOption(w.icon).label;
-      var marker=L.marker([+w.lat,+w.lon],{title:label,alt:label,icon:markerIcon(w.icon),draggable:false,keyboard:true,bubblingMouseEvents:false,zIndexOffset:12000}).addTo(map);
+      var Marker=googlePositioned?googleWaypointMarker:L.Marker;
+      var marker=new Marker([+w.lat,+w.lon],{pane:googlePositioned?'mancardoWaypoints':'markerPane',title:label,alt:label,icon:markerIcon(w.icon),draggable:false,keyboard:true,bubblingMouseEvents:false,zIndexOffset:12000}).addTo(map);
       marker.getElement().classList.add('mancardo-saved-waypoint-marker');
       marker.on('mousedown',clearHold);
       marker.on('mouseover',function(){showWaypointName(w,marker,false);});
@@ -352,6 +420,13 @@ const WAYPOINT_FEATURE = String.raw`
   ensureDialog();
   renderWaypointLibrary();
   renderWaypointMarkers();
+  // The Google loader may finish after the saved-waypoint client boots.
+  var googleProjectionAttempts=0;
+  function awaitGoogleWaypointProjection(){
+    if(useGoogleWaypointProjection()){renderWaypointMarkers();return;}
+    if(++googleProjectionAttempts<120)setTimeout(awaitGoogleWaypointProjection,250);
+  }
+  if(!googleWaypointOverlay)awaitGoogleWaypointProjection();
 })();
 `;
 
