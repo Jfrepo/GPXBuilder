@@ -11,6 +11,8 @@ on:
       - 'scripts/release-map-performance-development.cjs'
       - 'tests/map-performance-development.test.cjs'
       - 'scripts/trace-map-performance-development.cjs'
+      - 'scripts/diagnose-fuel-delivery.cjs'
+      - 'tests/fuel-delivery-diagnostic.test.cjs'
   workflow_dispatch:
     inputs:
       operation:
@@ -20,6 +22,7 @@ on:
         default: diagnose
         options:
           - diagnose
+          - fuel-delivery
           - stage
       measurement:
         description: 'Bounded fresh-context diagnosis; causal sampling starts before navigation'
@@ -41,7 +44,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/mancardo-dev') || github.ref == 'refs/heads/release/accelerated-stability-20261016'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/mancardo-dev' || github.ref == 'refs/heads/release/accelerated-stability-20261016')
     environment: development
     steps:
       - uses: actions/checkout@v4
@@ -167,5 +170,43 @@ jobs:
         with:
           name: performance-diagnostic-${{ github.run_id }}
           path: performance-diagnostic.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  diagnose-fuel-delivery:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev' && inputs.operation == 'fuel-delivery'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 6ac8fb56f3b74b1a2c96b187cc19d64442944e66
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify diagnostic guards
+        run: node --test controller/tests/fuel-delivery-diagnostic.test.cjs controller/tests/map-performance-development.test.cjs
+      - name: Read exact Development version and served Fuel bytes only
+        env:
+          CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+          EVIDENCE_PATH: ${{ github.workspace }}/fuel-delivery-diagnostic.json
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node controller/scripts/diagnose-fuel-delivery.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuel-delivery-diagnostic-${{ github.run_id }}
+          path: fuel-delivery-diagnostic.json
           if-no-files-found: warn
           retention-days: 7

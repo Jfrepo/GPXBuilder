@@ -31,7 +31,7 @@ test('real Google acceptance enforces the measured command latency target',()=>{
 
 test('diagnostic operation has no deployment credentials or commands, and staging is explicit',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- const diagnostic=workflow.split('  diagnose-performance:')[1];
+ const diagnostic=workflow.split('  diagnose-performance:')[1].split('  diagnose-fuel-delivery:')[0];
  assert.ok(diagnostic.includes("inputs.operation == 'diagnose'"));
  assert.ok(workflow.includes("inputs.operation == 'stage'"));
  assert.ok(workflow.includes('default: diagnose'));
@@ -95,7 +95,7 @@ test('Combined preparation pins the qualified runtime and manifest in both stage
  assert.equal(PIN,'6ac8fb56f3b74b1a2c96b187cc19d64442944e66');
  assert.equal(MANIFEST,'ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4');
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.equal(workflow.split('ref: '+PIN).length-1,2);
+ assert.equal(workflow.split('ref: '+PIN).length-1,3);
 });
 test('delivered Cancel check verifies session, sole tick, modal UI and handlers',()=>{
  const spans=[
