@@ -55,3 +55,26 @@ test('CPU profiles strip URLs, query credentials and unrelated frame metadata',(
  assert.ok(!JSON.stringify(result).includes('DO_NOT_KEEP'));assert.ok(!JSON.stringify(result).includes('https://'));
  assert.deepEqual(result.samples,[1]);
 });
+
+test('repeatability removes profiler waits and preserves original wheel invocation and acceptance count',()=>{
+ const {instrument}=require('../scripts/trace-map-performance-development.cjs');
+ const source="isolate();\n  const modes=[];\nawait page.mouse.wheel(0,-60);\nfor(const z of [15,13]){}\n  const latencies=[]; const result={commandP95,};\n({...__wheelEvidence,start:undefined,geometryUnchanged:unchanged});\nlatencies.length===8;validate();";
+ const result=instrument(source,{profile:false});
+ for(const excluded of ['cdp.send','newCDPSession','clockBefore','Profiler.start'])assert.ok(!result.includes(excluded));
+ assert.ok(result.includes('await page.mouse.wheel(0,-60);'));
+ assert.ok(result.includes('latencies.length===8'));
+ assert.ok(result.includes('samples.splice(2)'));
+ const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');assert.ok(workflow.includes('default: repeatability'));
+});
+test('repeatability completes three contexts and retains an earlier failure',async()=>{
+ const vm=require('node:vm'),os=require('node:os');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'performance-repeat-'));
+ const output=path.join(dir,'result.json'),env={CANDIDATE_ROOT:'/synthetic',PERFORMANCE_DIAGNOSTIC_MODE:'repeatability',PERFORMANCE_LIVE_EVIDENCE:output};
+ let calls=0;
+ const checker="  const modes=[];\nawait page.mouse.wheel(0,-60);\nfor(const z of [15,13]){}\n  const latencies=[]; const result={commandP95,};\n({...__wheelEvidence,start:undefined,geometryUnchanged:unchanged});";
+ class FakeModule{constructor(){this.exports={check:async()=>{calls++;fs.writeFileSync(env.PERFORMANCE_LIVE_EVIDENCE,JSON.stringify({provider:'real Google Maps',syntheticOnly:true,errors:[],commandTargetMs:100,commandTargetMet:calls!==1,commandP95:calls===1?300:50,modes:[],diagnosticWarmControls:[]}));}}}_compile(){}static _nodeModulePaths(){return []}}
+ const source=fs.readFileSync(path.join(__dirname,'../scripts/trace-map-performance-development.cjs'),'utf8');
+ const guards=require('../scripts/release-map-performance-development.cjs');
+ const loader=name=>name==='node:module'?FakeModule:name==='node:child_process'?{execFileSync:()=>guards.PIN}:name==='node:fs'?{...fs,readFileSync:(file,...args)=>String(file).startsWith('/synthetic/')?checker:fs.readFileSync(file,...args)}:name==='./release-map-performance-development.cjs'?guards:require(name);
+ try{const result=vm.runInNewContext(source+'\nrun();',{require:loader,module:{exports:{}},process:{env},console,URL});await assert.rejects(result);const report=JSON.parse(fs.readFileSync(output));assert.equal(calls,3);assert.equal(report.completedContexts,3);assert.equal(report.acceptancePassed,false);assert.deepEqual(report.runs.map(r=>r.acceptancePassed),[false,true,true]);}finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

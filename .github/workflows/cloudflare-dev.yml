@@ -21,6 +21,14 @@ on:
         options:
           - diagnose
           - stage
+      measurement:
+        description: 'Three unprofiled fresh contexts or one CPU profile'
+        type: choice
+        required: true
+        default: repeatability
+        options:
+          - repeatability
+          - profile
 
 permissions:
   contents: read
@@ -140,6 +148,7 @@ jobs:
       - name: Trace existing Development candidate with synthetic state only
         env:
           CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+          PERFORMANCE_DIAGNOSTIC_MODE: ${{ inputs.measurement }}
           PERFORMANCE_LIVE_EVIDENCE: ${{ github.workspace }}/performance-diagnostic.json
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
