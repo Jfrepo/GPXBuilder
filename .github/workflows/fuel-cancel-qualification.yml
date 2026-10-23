@@ -1,0 +1,39 @@
+name: Combined Fuel and Cancel Qualification
+on:
+  push:
+    branches: ['integration/fuel-cancel-reviewed']
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Qualify exact candidate with synthetic tests only
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          node --test tests/fuel-cache.test.cjs
+          npm run test:source
+          npm run test:packaged-server
+          npm run test:browser
+          npm run test:waypoints
+          npm run test:map-performance
+          npm run test:cancel
+          node --test tests/waypoint-development-release.test.cjs
+          node scripts/build-waypoint-development.cjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fuel-cancel-development-${{ github.sha }}
+          path: dist/waypoint-development/
+          if-no-files-found: error
+          retention-days: 7
