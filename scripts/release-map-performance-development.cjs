@@ -3,12 +3,12 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
-const PIN='c221bdfb02b6791e7bfeb2c1d934570216b568bd';
-const MANIFEST='cf2699be0b590d54ac83b17b1ca261b8d62e19a3e6cca62077920b7213ce4ca8';
+const PIN='227ec8853ef96f5de7b615f24b6748e9c96d912d';
+const MANIFEST='bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f';
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
-const TAG='cancel-c221bdfb02b6', MESSAGE=PIN+' '+MANIFEST;
+const TAG='cancel-227ec8853ef9', MESSAGE=PIN+' '+MANIFEST;
 function requiredEnv(env){
   if(!env.CF_TOKEN||!/^[a-f0-9]{32}$/i.test(env.CF_ACCOUNT||''))throw Error('Existing Development API token/account configuration is missing or invalid.');
   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(env.DEV_DB||'')||env.DEV_DB.toLowerCase()===PRODUCTION)throw Error('Development database ID is missing, invalid or Production.');
@@ -121,6 +121,8 @@ function validateCancelHtml(html,source){
     ['// ---------- cancellable editor sessions ----------','// ---------- history ----------'],
     ['<div class="mode-banner hidden" id="modeBanner">','<div class="layer-toggle">'],
     ['<dialog id="discardEditDialog"','</dialog>'],
+    ['.mode-banner{','.layer-toggle{'],
+    ['// Follow actual map-layer row height','function fitToTrack(){'],
     ['#discardEditDialog{','.dialog h3{'],
     ['/* Completion is distinct from Save:','@media (prefers-color-scheme:dark)'],
     ['els.completeChangeBtn.onclick = function(){','els.deleteTrackBtn.onclick'],

@@ -14,7 +14,7 @@ test('accepts only verifiable single-version traffic',()=>{assert.throws(()=>lat
 const fs=require('node:fs'),path=require('node:path');
 test('manual staging pins only the exact Cancel candidate and never deploys preparation via push',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(workflow.includes("ref: c221bdfb02b6791e7bfeb2c1d934570216b568bd"));
+ assert.ok(workflow.includes("ref: 227ec8853ef96f5de7b615f24b6748e9c96d912d"));
  assert.ok(workflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'"));
  for(const file of ['scripts/release-map-performance-development.cjs','tests/map-performance-development.test.cjs'])assert.ok(workflow.includes("      - '"+file+"'"));
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
@@ -92,8 +92,8 @@ test('causal sampling starts before navigation and adds no profiler calls or wai
 
 const {validateCancelHtml,PIN,MANIFEST}=require('../scripts/release-map-performance-development.cjs');
 test('Cancel preparation pins the qualified runtime and manifest in both stage and diagnose checkouts',()=>{
- assert.equal(PIN,'c221bdfb02b6791e7bfeb2c1d934570216b568bd');
- assert.equal(MANIFEST,'cf2699be0b590d54ac83b17b1ca261b8d62e19a3e6cca62077920b7213ce4ca8');
+ assert.equal(PIN,'227ec8853ef96f5de7b615f24b6748e9c96d912d');
+ assert.equal(MANIFEST,'bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f');
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
  assert.equal(workflow.split('ref: '+PIN).length-1,2);
 });
@@ -102,6 +102,8 @@ test('delivered Cancel check verifies session, sole tick, modal UI and handlers'
   ['// ---------- cancellable editor sessions ----------','// ---------- history ----------'],
   ['<div class="mode-banner hidden" id="modeBanner">','<div class="layer-toggle">'],
   ['<dialog id="discardEditDialog"','</dialog>'],
+    ['.mode-banner{','.layer-toggle{'],
+    ['// Follow actual map-layer row height','function fitToTrack(){'],
   ['#discardEditDialog{','.dialog h3{'],
   ['/* Completion is distinct from Save:','@media (prefers-color-scheme:dark)'],
   ['els.completeChangeBtn.onclick = function(){','els.deleteTrackBtn.onclick'],
