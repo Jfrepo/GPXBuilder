@@ -1,7 +1,7 @@
-name: Combined Fuel and Cancel Qualification
+name: Combined Fuel Cancel and Delete Qualification
 on:
   push:
-    branches: ['integration/fuel-cancel-reviewed']
+    branches: ['integration/fuel-cancel-delete-reviewed']
 permissions:
   contents: read
 jobs:
@@ -33,7 +33,7 @@ jobs:
           git diff --exit-code
       - uses: actions/upload-artifact@v4
         with:
-          name: fuel-cancel-development-${{ github.sha }}
+          name: fuel-cancel-delete-development-${{ github.sha }}
           path: dist/waypoint-development/
           if-no-files-found: error
           retention-days: 7
