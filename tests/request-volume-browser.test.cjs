@@ -940,7 +940,7 @@ async function exerciseToolbarControls(f, duringEditing) {
   await f.page.locator('#movePointBtn').press('Enter');
   assert.equal(await modeHidden(), false);
   assert.match(await f.page.locator('#modeBanner span').textContent(), /^Move point:/);
-  assert.equal(await f.page.locator('#finishDrawBtn').textContent(), 'Complete Change');
+  assert.equal(await f.page.locator('#completeChangeBtn').isEnabled(), true);
   assert.equal(await f.page.locator('#cancelChangeBtn').isVisible(), true);
   assert.equal(await f.page.locator('#movePointBtn').isEnabled(), false);
   await f.page.locator('#cancelChangeBtn').press('Enter');
@@ -962,7 +962,7 @@ async function exerciseToolbarControls(f, duringEditing) {
   // while keeping this layout regression strictly free of track edits.
   await f.page.locator('#completeChangeBtn').press('Enter');
   assert.equal(await modeHidden(), true);
-  assert.equal(await f.page.locator('#completeChangeBtn').isVisible(), false);
+  assert.equal(await f.page.locator('#completeChangeBtn').isDisabled(), true);
   assert.equal(await f.page.locator('#movePointBtn').isEnabled(), true);
   assert.equal(await f.page.locator('#extendTrackBtn').isEnabled(), true);
   await points.press('Enter');
@@ -1053,21 +1053,22 @@ for (const scenario of [
 
 // Cancel uses only the editor copy, even while an earlier durable Save awaits
 // acknowledgement. These cases execute the real IndexedDB outbox and API path.
-for (const origin of ['explicit Save', 'earlier rename']) {
+for (const origin of ['explicit Save', 'earlier rename', 'Save ACK during confirmation']) {
   test('full editor: Cancel preserves a held ' + origin + ' upload without compensating writes', { timeout: 30000 }, async t => {
     const f=await fixture(t);await f.identify();const held=f.hold('put');
-    if(origin==='explicit Save'){
+    if(origin!=='earlier rename'){
       await f.page.locator('#reverseBtn').evaluate(b=>b.click());
       await f.page.locator('#saveBtn').evaluate(b=>b.click());
       await f.page.clock.runFor(40);
     }else await f.rename('Saved before cancellable edit');
     const first=await held.entered;
-    const durable=await f.durableState();
+    let durable=await f.durableState();
     await f.page.locator('#reverseBtn').evaluate(b=>b.click());
-    f.page.once('dialog',d=>d.accept());
     await f.page.locator('#cancelChangeBtn').evaluate(b=>b.click());
+    if(origin==='Save ACK during confirmation'){f.release('put');await observed(()=>f.requests('put')[0].settled);await f.page.clock.runFor(6000);durable=await f.durableState();}
+    await f.page.locator('#discardEditConfirm').click();
     assert.deepEqual(await f.durableState(),durable,'Cancel must not touch library, outbox, sync revision or pending deletes');
-    f.release('put');await observed(()=>f.requests('put')[0].settled);
+    if(origin!=='Save ACK during confirmation')f.release('put');await observed(()=>f.requests('put')[0].settled);
     await f.page.clock.runFor(6000);await f.startSync();assert.equal(await f.finishSync(),true);
     assert.equal(f.requests('put').length,1);assert.deepEqual(f.model.row.track,first.body.track);
     assert.deepEqual(f.writes().map(r=>r.method),['PUT']);f.assertSafe();
@@ -1078,7 +1079,7 @@ test('full editor: blocked note editing during Cancel session never publishes Sh
  const writes=f.writes().length,publishes=f.requests('publish').length;
  await f.page.locator('#reverseBtn').evaluate(b=>b.click());
  f.page.once('dialog',d=>d.accept());await f.page.locator('.track-note textarea').evaluate(el=>{el.value='Blocked edit';el.dispatchEvent(new Event('input',{bubbles:true}));});
- f.page.once('dialog',d=>d.accept());await f.page.locator('#cancelChangeBtn').evaluate(b=>b.click());
+ await f.page.locator('#cancelChangeBtn').evaluate(b=>b.click());await f.page.locator('#discardEditConfirm').click();
  await f.page.clock.runFor(6000);await f.startSync();await f.finishSync();assert.equal(f.requests('publish').length,publishes);assert.equal(f.writes().length,writes);assert.equal((await f.tracks())[0].note,'Prior saved note');f.assertSafe();
 });
 test('full editor: publication begun before editing cannot replace the active working copy', {timeout:30000},async t=>{
@@ -1088,10 +1089,12 @@ test('full editor: publication begun before editing cannot replace the active wo
  await held.entered;
  await f.page.locator('#reverseBtn').evaluate(b=>b.click());
  const points=await f.page.locator('#pointsToggle').evaluate(b=>{b.click();return document.getElementById('pointsBody').textContent;});
+ await f.page.locator('#cancelChangeBtn').evaluate(b=>b.click());
+ assert.equal(await f.page.locator('#discardEditDialog').isVisible(),true);
  f.page.once('dialog',d=>d.accept());f.release('publish');await observed(()=>f.requests('publish')[0].settled);
  await f.page.clock.runFor(1500);
  assert.equal(await f.page.locator('#pointsBody').textContent(),points,'Publication ACK must not replace in-progress geometry');
- const before=await f.durableState();f.page.once('dialog',d=>d.accept());await f.page.locator('#cancelChangeBtn').evaluate(b=>b.click());
+ const before=await f.durableState();f.page.once('dialog',d=>d.accept());await f.page.locator('#discardEditConfirm').click();
  assert.equal(await f.page.locator('#pointsBody').textContent(),points,'Conflict leaves editor intact');assert.deepEqual(await f.durableState(),before,'Conflict must not roll back publication identity');assert.equal(f.requests('publish').length,1);f.assertSafe();
 });
 test('full editor: an edit cannot begin during confirmed deletion authorization', {timeout:30000},async t=>{
