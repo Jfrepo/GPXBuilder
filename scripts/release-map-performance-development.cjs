@@ -10,6 +10,10 @@ const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
 const TAG='fuel-cancel-6ac8fb56f3b7', MESSAGE=PIN+' '+MANIFEST;
 const EXPECTED_PREVIOUS_MESSAGE='227ec8853ef96f5de7b615f24b6748e9c96d912d bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f';
+const VERIFIED_VERSION='7e6aed39-3549-4d1a-947d-8bd6caf9730a',VERIFIED_DEPLOYMENT='b29387d1-19d2-4240-ac4e-2d201d3774b0';
+function validateExistingVersion(deployment,version){
+  if(deployment.id!==VERIFIED_DEPLOYMENT||activeVersion(deployment)!==VERIFIED_VERSION||version.annotations?.['workers/tag']!==TAG||version.annotations?.['workers/message']!==MESSAGE)throw Error('Verify-only requires the exact existing reviewed Development version; no deployment allowed.');
+}
 function validatePreviousVersion(version){
   const message=version.annotations?.['workers/message'];
   if(message!==EXPECTED_PREVIOUS_MESSAGE&&message!==MESSAGE)throw Error('Development no longer matches the reviewed Cancel preview; recompose and coordinate before staging.');
@@ -36,6 +40,8 @@ function latest(result){const d=result.deployments?.[0];if(!d||!Array.isArray(d.
 function activeVersion(d){return d.versions.length===1&&d.versions[0].percentage===100?d.versions[0].version_id:null;}
 async function release(){
   const env=process.env;requiredEnv(env);
+  if(env.VERIFY_ONLY!==undefined&&!['true','false'].includes(env.VERIFY_ONLY))throw Error('Invalid verify-only mode.');
+  const verifyOnly=env.VERIFY_ONLY==='true';
   const root=path.resolve(env.CANDIDATE_ROOT||'.');
   if(execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim()!==PIN)throw Error('Wrong candidate checkout.');
   const out=path.join(root,'dist/waypoint-development');
@@ -47,7 +53,7 @@ async function release(){
   }
   const configFile=path.join(out,'wrangler.toml'),config=fs.readFileSync(configFile,'utf8');
   if(!/^name = "mancardo-dev-test"$/m.test(config)||!/^database_name = "mancardo-private-library-dev"$/m.test(config)||(config.match(/DEV_DATABASE_ID_REQUIRED/g)||[]).length!==1||config.toLowerCase().includes(PRODUCTION))throw Error('Unsafe Development target config.');
-  const evidence={candidate:PIN,manifestSha256:MANIFEST,url:URL,isolationVerified:false,authenticationPreserved:false,deployAttempted:false,deploymentVerified:false,deliveredCancelVerified:false,cancelAcceptancePassed:false,acceptancePassed:false};
+  const evidence={verifyOnly,candidate:PIN,manifestSha256:MANIFEST,url:URL,isolationVerified:false,authenticationPreserved:false,deployAttempted:false,deploymentVerified:false,deliveredCancelVerified:false,cancelAcceptancePassed:false,acceptancePassed:false};
   const evidencePath=path.resolve(env.EVIDENCE_PATH||'performance-development-result.json');
   const save=()=>fs.writeFileSync(evidencePath,JSON.stringify(evidence,null,2)+'\n');
   save();
@@ -78,11 +84,13 @@ async function release(){
     if(!prior)throw Error('Development is not a single-version deployment; stop before changing traffic.');
     const version=await read(prefix+'/versions/'+encodeURIComponent(prior));
     validatePreviousVersion(version);
+    if(verifyOnly)validateExistingVersion(before,version);
     evidence.previousDeploymentId=before.id;evidence.previousVersionId=prior;save();
     let expectedVersion=prior;
     if(version.annotations?.['workers/tag']===TAG&&version.annotations?.['workers/message']===MESSAGE){
       evidence.alreadyDeployed=true;
     }else{
+      if(verifyOnly)throw Error('Verify-only cannot deploy.');
       // Repeat the read-only identity check immediately before the one allowed write.
       await verifyIdentity();
       if(latest(await read(prefix+'/deployments')).id!==before.id)throw Error('Development deployment changed during preflight; no deployment attempted.');
@@ -97,6 +105,7 @@ async function release(){
     const after=latest(await read(prefix+'/deployments'));
     if(activeVersion(after)!==expectedVersion)throw Error('Active Development version does not match deployment result; outcome uncertain.');
     const deployed=await read(prefix+'/versions/'+encodeURIComponent(expectedVersion));
+    if(verifyOnly)validateExistingVersion(after,deployed);
     if(deployed.annotations?.['workers/tag']!==TAG||deployed.annotations?.['workers/message']!==MESSAGE)throw Error('Active version candidate annotations mismatch.');
     await verifyIdentity();
     evidence.deploymentVerified=true;evidence.deploymentId=after.id;evidence.versionId=expectedVersion;evidence.outcome='verified';save();
@@ -120,9 +129,10 @@ async function release(){
     if(fs.existsSync(livePath))evidence.realGoogle=JSON.parse(fs.readFileSync(livePath,'utf8'));
     if(live.error||live.signal||live.status!==0){save();throw Error('Real Google desktop acceptance failed; inspect sanitized evidence. Development version is deployed; no automatic retry or rollback.');}
     validateBrowserEvidence(evidence.realGoogle);
-    evidence.acceptancePassed=true;evidence.acceptance='Exact candidate staged; local Fuel/Cancel/save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
+    if(verifyOnly){await verifyIdentity();validateExistingVersion(latest(await read(prefix+'/deployments')),await read(prefix+'/versions/'+VERIFIED_VERSION));}
+    evidence.acceptancePassed=true;evidence.acceptance=(verifyOnly?'Existing exact candidate verified without deployment; ':'Exact candidate staged; ')+'local Fuel/Cancel/save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
     console.log('PASS: exact Development candidate, Fuel/Cancel/save/alignment regressions, real Google desktop with synthetic state only.');
-  }catch(e){evidence.error=e.message;save();throw e;}finally{fs.writeFileSync(configFile,config);}
+  }catch(e){evidence.error=e.message;save();throw e;}finally{if(!verifyOnly)fs.writeFileSync(configFile,config);}
 }
 function validateCancelHtml(html,source){
   const spans=[
@@ -157,5 +167,5 @@ function validateBrowserEvidence(data){
   if(!data||data.provider!=='real Google Maps'||data.syntheticOnly!==true||!Array.isArray(data.errors)||data.errors.length||data.commandTargetMs!==100||data.commandTargetMet!==true||!Number.isFinite(data.commandP95)||data.commandP95<0||data.commandP95>100)
     throw Error('Real Google performance acceptance target unmet or evidence invalid; inspect sanitized evidence. Development version remains deployed; no automatic retry or rollback.');
 }
-module.exports={validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE,validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
+module.exports={validateExistingVersion,VERIFIED_VERSION,VERIFIED_DEPLOYMENT,validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE,validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
 if(require.main===module)release().catch(e=>{console.error(e.message);process.exitCode=1;});

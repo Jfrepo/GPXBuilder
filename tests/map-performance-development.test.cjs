@@ -153,3 +153,22 @@ test('Fuel acceptance augments all existing isolation, Cancel and latency gates'
  assert.ok(controller.includes('data.commandTargetMs!==100'));
  assert.ok(controller.includes('data.commandP95>100'));
 });
+test('verify-only requires exact unchanged deployment, version and candidate annotations',()=>{
+ const {validateExistingVersion,VERIFIED_VERSION,VERIFIED_DEPLOYMENT}=require('../scripts/release-map-performance-development.cjs');
+ const deployment={id:VERIFIED_DEPLOYMENT,versions:[{version_id:VERIFIED_VERSION,percentage:100}]};
+ const version={annotations:{'workers/tag':'fuel-cancel-6ac8fb56f3b7','workers/message':PIN+' '+MANIFEST}};
+ assert.doesNotThrow(()=>validateExistingVersion(deployment,version));
+ for(const bad of [{...deployment,id:'other'},{...deployment,versions:[]},{...deployment,versions:[{version_id:'other',percentage:100}]},{...deployment,versions:[{version_id:VERIFIED_VERSION,percentage:99}]}])assert.throws(()=>validateExistingVersion(bad,version));
+ for(const bad of [{},{annotations:{...version.annotations,'workers/tag':'other'}},{annotations:{...version.annotations,'workers/message':'other'}}])assert.throws(()=>validateExistingVersion(deployment,bad));
+});
+test('verify-only is explicit and fails before any deploy; same delivery and acceptance gates remain',()=>{
+ const controller=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8');
+ const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
+ assert.ok(workflow.includes("VERIFY_ONLY: ${{ inputs.operation == 'verify' }}"));
+ assert.ok(workflow.includes("(inputs.operation == 'stage' || inputs.operation == 'verify')"));
+ assert.ok(controller.indexOf('if(verifyOnly)validateExistingVersion(before,version)')<controller.indexOf('evidence.deployAttempted=true'));
+ assert.ok(controller.indexOf("if(verifyOnly)throw Error('Verify-only cannot deploy.')")<controller.indexOf('evidence.deployAttempted=true'));
+ assert.ok(controller.includes('if(verifyOnly)validateExistingVersion(after,deployed)'));
+ assert.ok(controller.indexOf('if(verifyOnly){await verifyIdentity();')<controller.indexOf('evidence.acceptancePassed=true'));
+ for(const check of ['validateCancelHtml(html,','validateFuelHtml(html,','validateBrowserEvidence(evidence.realGoogle)'])assert.ok(controller.includes(check));
+});
