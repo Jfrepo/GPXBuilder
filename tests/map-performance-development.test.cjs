@@ -14,7 +14,7 @@ test('accepts only verifiable single-version traffic',()=>{assert.throws(()=>lat
 const fs=require('node:fs'),path=require('node:path');
 test('manual staging pins only the exact combined Fuel/Cancel candidate and never deploys preparation via push',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(workflow.includes("ref: b308d0ae8e5bf5d76d71f00b8210c46cb4f38502"));
+ assert.ok(workflow.includes("ref: 6ac8fb56f3b74b1a2c96b187cc19d64442944e66"));
  assert.ok(workflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'"));
  for(const file of ['scripts/release-map-performance-development.cjs','tests/map-performance-development.test.cjs'])assert.ok(workflow.includes("      - '"+file+"'"));
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
@@ -92,7 +92,7 @@ test('causal sampling starts before navigation and adds no profiler calls or wai
 
 const {validateCancelHtml,PIN,MANIFEST}=require('../scripts/release-map-performance-development.cjs');
 test('Combined preparation pins the qualified runtime and manifest in both stage and diagnose checkouts',()=>{
- assert.equal(PIN,'b308d0ae8e5bf5d76d71f00b8210c46cb4f38502');
+ assert.equal(PIN,'6ac8fb56f3b74b1a2c96b187cc19d64442944e66');
  assert.equal(MANIFEST,'ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4');
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
  assert.equal(workflow.split('ref: '+PIN).length-1,2);

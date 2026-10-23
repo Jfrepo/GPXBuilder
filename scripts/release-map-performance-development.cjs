@@ -3,12 +3,12 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
-const PIN='b308d0ae8e5bf5d76d71f00b8210c46cb4f38502';
+const PIN='6ac8fb56f3b74b1a2c96b187cc19d64442944e66';
 const MANIFEST='ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4';
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
-const TAG='fuel-cancel-b308d0ae8e5b', MESSAGE=PIN+' '+MANIFEST;
+const TAG='fuel-cancel-6ac8fb56f3b7', MESSAGE=PIN+' '+MANIFEST;
 const EXPECTED_PREVIOUS_MESSAGE='227ec8853ef96f5de7b615f24b6748e9c96d912d bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f';
 function validatePreviousVersion(version){
   const message=version.annotations?.['workers/message'];

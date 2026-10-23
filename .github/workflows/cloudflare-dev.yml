@@ -88,7 +88,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: b308d0ae8e5bf5d76d71f00b8210c46cb4f38502
+          ref: 6ac8fb56f3b74b1a2c96b187cc19d64442944e66
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -101,7 +101,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx --no-install playwright install --with-deps chromium
-          test "$(git rev-parse HEAD)" = "b308d0ae8e5bf5d76d71f00b8210c46cb4f38502"
+          test "$(git rev-parse HEAD)" = "6ac8fb56f3b74b1a2c96b187cc19d64442944e66"
           npm run test:source
           npm run test:packaged-server
           npm run test:browser
@@ -141,7 +141,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: b308d0ae8e5bf5d76d71f00b8210c46cb4f38502
+          ref: 6ac8fb56f3b74b1a2c96b187cc19d64442944e66
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
