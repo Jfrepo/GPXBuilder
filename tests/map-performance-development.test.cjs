@@ -20,3 +20,11 @@ test('manual staging pins only the exact performance candidate and never deploys
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
  assert.ok(workflow.includes('node --test controller/tests/map-performance-development.test.cjs'));
 });
+
+const {validateBrowserEvidence}=require('../scripts/release-map-performance-development.cjs');
+test('real Google acceptance enforces the measured command latency target',()=>{
+ const valid={provider:'real Google Maps',syntheticOnly:true,errors:[],commandTargetMs:100,commandTargetMet:true,commandP95:99};
+ assert.doesNotThrow(()=>validateBrowserEvidence(valid));
+ for(const patch of [{commandP95:101},{commandP95:NaN},{commandP95:null},{commandP95:-1},{commandTargetMet:false},{commandTargetMs:200},{syntheticOnly:false},{provider:'mock'},{errors:['failure']},{errors:null}])assert.throws(()=>validateBrowserEvidence({...valid,...patch}));
+ assert.throws(()=>validateBrowserEvidence(undefined));
+});

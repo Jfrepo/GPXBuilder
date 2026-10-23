@@ -108,9 +108,14 @@ async function release(){
     const live=spawnSync(process.execPath,['scripts/check-map-performance-development.cjs'],{cwd:root,env:{...env,PERFORMANCE_LIVE_EVIDENCE:livePath},encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024});
     if(fs.existsSync(livePath))evidence.realGoogle=JSON.parse(fs.readFileSync(livePath,'utf8'));
     if(live.error||live.signal||live.status!==0){save();throw Error('Real Google desktop acceptance failed; inspect sanitized evidence. Development version is deployed; no automatic retry or rollback.');}
+    validateBrowserEvidence(evidence.realGoogle);
     evidence.acceptancePassed=true;evidence.acceptance='Exact candidate staged; local save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
     console.log('PASS: exact Development candidate, save/alignment regressions, real Google desktop with synthetic state only.');
   }catch(e){evidence.error=e.message;save();throw e;}finally{fs.writeFileSync(configFile,config);}
 }
-module.exports={requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
+function validateBrowserEvidence(data){
+  if(!data||data.provider!=='real Google Maps'||data.syntheticOnly!==true||!Array.isArray(data.errors)||data.errors.length||data.commandTargetMs!==100||data.commandTargetMet!==true||!Number.isFinite(data.commandP95)||data.commandP95<0||data.commandP95>100)
+    throw Error('Real Google performance acceptance target unmet or evidence invalid; inspect sanitized evidence. Development version remains deployed; no automatic retry or rollback.');
+}
+module.exports={validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
 if(require.main===module)release().catch(e=>{console.error(e.message);process.exitCode=1;});
