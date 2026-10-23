@@ -26,7 +26,7 @@ const MAP_3D_OVERLAY_FEATURE = String.raw`
     '<button type="button" id="mancardo3dFuelBtn" class="fuel">Fuel</button>'+
     '</div><div class="row"><label for="mancardo3dRadarMode">Radar:</label><select id="mancardo3dRadarMode">'+
     '<option value="observed">Observed</option><option value="forecast">Forecast</option><option value="chance">Chance</option></select></div>'+
-    '<div id="mancardo3dOverlayStatus">3D overlays off</div>';
+    '<div id="mancardo3dOverlayStatus" role="status">3D overlays off</div><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors · ODbL</a>';
   mapWrap.appendChild(tools);
 
   var contourBtn=tools.querySelector('#mancardo3dContoursBtn');
@@ -40,7 +40,8 @@ const MAP_3D_OVERLAY_FEATURE = String.raw`
   var contoursOn=false,radar3dOn=false,fuel3dOn=false;
   var contourEls=[],radarEls=[],fuelEls=[];
   var refreshTimer=null,refreshSeq=0;
-  var lastContourKey='',lastFuelKey='',lastRadarKey='';
+  var lastContourKey='',lastRadarKey='';
+  var fuelStop=null,fuelGeneration=0,fuelMarkers=new Map();
 
   function removeAll(arr){while(arr.length){var el=arr.pop();try{el.remove();}catch(e){}}}
   function setStatus(msg){statusEl.textContent=msg;}
@@ -114,32 +115,35 @@ const MAP_3D_OVERLAY_FEATURE = String.raw`
     }catch(err){console.warn('3D contour load failed',err);setStatus('3D contours failed to load');}
   }
 
-  async function refreshFuel(seq){
-    if(!fuel3dOn||!is3DActive())return;
-    var b=viewBox(1.15);if(!b)return;
-    var south=Math.max(-44,b.south),north=Math.min(-9,b.north),west=Math.max(112,b.west),east=Math.min(154,b.east);
-    if(south>=north||west>=east){removeAll(fuelEls);setStatus('Fuel: Australian coverage only');return;}
-    if(b.range>180000){removeAll(fuelEls);setStatus('Fuel: zoom closer to load stations');return;}
-    var key=bboxKey(b,120);if(key===lastFuelKey)return;lastFuelKey=key;
-    setStatus('Loading 3D fuel locations…');
-    try{
-      var q='[out:json][timeout:25];nwr["amenity"="fuel"]('+[south,west,north,east].map(function(n){return n.toFixed(5);}).join(',')+');out center tags;';
-      var data=await fetchFuelOverpass(q,0);if(seq!==refreshSeq||!fuel3dOn||!is3DActive())return;
-      var lib=await ensureLib();var Marker3DElement=lib.Marker3DElement;
-      removeAll(fuelEls);var seen={},count=0;
-      (data.elements||[]).forEach(function(e){
-        if(count>=180)return;
-        var t=e.tags||{};if(!fuelIsActive(t))return;
-        var lat=e.lat!=null?e.lat:(e.center&&e.center.lat),lng=e.lon!=null?e.lon:(e.center&&e.center.lon);if(lat==null||lng==null)return;
-        var k=(+lat).toFixed(5)+','+(+lng).toFixed(5);if(seen[k])return;seen[k]=1;
-        var name=t.name||t.brand||t.operator||'Fuel';
-        var marker=new Marker3DElement({position:{lat:+lat,lng:+lng,altitude:12},altitudeMode:'RELATIVE_TO_GROUND',label:name,sizePreserved:true,drawsWhenOccluded:false,zIndex:8});
-        marker.title=name;
-        map3d.append(marker);fuelEls.push(marker);count++;
-      });
-      setStatus('3D fuel: '+count+' active mapped stations · OpenStreetMap');
-    }catch(err){console.warn('3D fuel query failed',err);setStatus('3D fuel lookup temporarily unavailable');}
+  function stopFuel(){
+    fuelGeneration++;if(fuelStop)fuelStop();fuelStop=null;
   }
+  function refreshFuel(){
+    stopFuel();if(!fuel3dOn||!is3DActive())return;
+    var b=viewBox(1.15);if(!b)return;
+    var generation=fuelGeneration;
+    fuelStop=fuelData.watch(b,async function(result){
+      if(generation!==fuelGeneration||!fuel3dOn||!is3DActive())return;
+      // Each result has its own revision too: an older library await cannot
+      // overwrite a newer cache refresh for the same camera position.
+      var revision=++fuelRenderRevision;
+      try{
+        var lib=await ensureLib();
+        if(revision!==fuelRenderRevision||generation!==fuelGeneration||!fuel3dOn||!is3DActive())return;
+        var keep=new Set();
+        result.stations.slice(0,180).forEach(function(s){
+          keep.add(s.id);var marker=fuelMarkers.get(s.id),name=s.tags.name||s.tags.brand||s.tags.operator||'Fuel';
+          if(!marker){marker=new lib.Marker3DElement({position:{lat:s.lat,lng:s.lon,altitude:12},altitudeMode:'RELATIVE_TO_GROUND',label:name,sizePreserved:true,drawsWhenOccluded:false,zIndex:8});fuelMarkers.set(s.id,marker);}
+          else{marker.position={lat:s.lat,lng:s.lon,altitude:12};marker.label=name;}
+          marker.title=name;if(marker.parentNode!==map3d)map3d.append(marker);
+        });
+        fuelMarkers.forEach(function(marker,id){if(!keep.has(id)){marker.remove();fuelMarkers.delete(id);}});
+        setStatus(result.message+(result.stations.length>180?' · showing first 180 stations':''));
+      }catch(e){if(revision===fuelRenderRevision&&generation===fuelGeneration&&fuel3dOn&&is3DActive())setStatus('3D fuel display unavailable; toggle Fuel to retry');}
+    });
+  }
+  var fuelRenderRevision=0;
+  function hideFuel(){stopFuel();fuelMarkers.forEach(function(marker){marker.remove();});}
 
   function tileX(lng,z){return (lng+180)/360*Math.pow(2,z);}
   function tileY(lat,z){var rad=lat*Math.PI/180;return (1-Math.asinh(Math.tan(rad))/Math.PI)/2*Math.pow(2,z);}
@@ -196,7 +200,7 @@ const MAP_3D_OVERLAY_FEATURE = String.raw`
 
   function scheduleRefresh(){
     if(!is3DActive())return;
-    clearTimeout(refreshTimer);refreshTimer=setTimeout(function(){
+    stopFuel();clearTimeout(refreshTimer);refreshTimer=setTimeout(function(){
       var seq=++refreshSeq;
       if(contoursOn)refreshContours(seq);
       if(fuel3dOn)refreshFuel(seq);
@@ -213,12 +217,12 @@ const MAP_3D_OVERLAY_FEATURE = String.raw`
   function syncActiveState(){
     var on=is3DActive();tools.classList.toggle('on',on);
     if(on){attach3DEvents();scheduleRefresh();}
-    else{refreshSeq++;removeAll(contourEls);removeAll(radarEls);removeAll(fuelEls);lastContourKey='';lastRadarKey='';lastFuelKey='';}
+    else{refreshSeq++;removeAll(contourEls);removeAll(radarEls);removeAll(fuelEls);lastContourKey='';lastRadarKey='';hideFuel();}
   }
 
   contourBtn.onclick=function(){contoursOn=!contoursOn;contourBtn.classList.toggle('on',contoursOn);if(!contoursOn){removeAll(contourEls);lastContourKey='';}scheduleRefresh();};
   radarBtn.onclick=function(){radar3dOn=!radar3dOn;radarBtn.classList.toggle('on',radar3dOn);if(!radar3dOn){removeAll(radarEls);lastRadarKey='';}scheduleRefresh();};
-  fuelBtn.onclick=function(){fuel3dOn=!fuel3dOn;fuelBtn.classList.toggle('on',fuel3dOn);if(!fuel3dOn){removeAll(fuelEls);lastFuelKey='';}scheduleRefresh();};
+  fuelBtn.onclick=function(){fuel3dOn=!fuel3dOn;fuelBtn.classList.toggle('on',fuel3dOn);if(!fuel3dOn)hideFuel();else refreshFuel();};
   radarMode.onchange=function(){lastRadarKey='';if(radar3dOn)scheduleRefresh();};
 
   var observer=new MutationObserver(syncActiveState);
