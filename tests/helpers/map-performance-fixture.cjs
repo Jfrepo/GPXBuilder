@@ -24,4 +24,4 @@ async function fixture(browser,t,{points=100,waypoints=2,mobile=false}={}){
  await page.evaluate(n=>{const track={id:'synthetic-track',name:'Synthetic track',type:'track',visible:true,segments:[Array.from({length:n},(_,i)=>({lat:1+i*.00001,lon:2+i*.00001,ele:100+i}))]};state.library=[track];loadItem(track.id);map.setView([1,2],13,{animate:false});},points);await page.waitForTimeout(800);
  await page.evaluate(()=>{const original=render;render=function(){bump('renders');return original.apply(this,arguments)};const clone=deepClone;deepClone=function(){bump('clones');return clone.apply(this,arguments)};metrics={};});return {page,errors};
 }
-module.exports={fixture};
+module.exports={fixture,adapter};
