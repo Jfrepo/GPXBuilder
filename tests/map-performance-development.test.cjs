@@ -28,3 +28,22 @@ test('real Google acceptance enforces the measured command latency target',()=>{
  for(const patch of [{commandP95:101},{commandP95:NaN},{commandP95:null},{commandP95:-1},{commandTargetMet:false},{commandTargetMs:200},{syntheticOnly:false},{provider:'mock'},{errors:['failure']},{errors:null}])assert.throws(()=>validateBrowserEvidence({...valid,...patch}));
  assert.throws(()=>validateBrowserEvidence(undefined));
 });
+
+test('diagnostic operation has no deployment credentials or commands, and staging is explicit',()=>{
+ const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
+ const diagnostic=workflow.split('  diagnose-performance:')[1];
+ assert.ok(diagnostic.includes("inputs.operation == 'diagnose'"));
+ assert.ok(workflow.includes("inputs.operation == 'stage'"));
+ assert.ok(workflow.includes('default: diagnose'));
+ assert.ok(workflow.includes("      - 'scripts/trace-map-performance-development.cjs'"));
+ for(const prohibited of ['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID','DEV_DB','wrangler','release-map-performance-development.cjs'])assert.ok(!diagnostic.includes(prohibited));
+ assert.ok(diagnostic.includes('CF_ACCESS_CLIENT_SECRET'));
+});
+test('diagnostic instrumentation retains checker isolation and acceptance checks',()=>{
+ const {instrument}=require('../scripts/trace-map-performance-development.cjs');
+ const source="isolate();\n  const modes=[];\n({...__wheelEvidence,start:undefined,geometryUnchanged:unchanged});\nvalidate();";
+ const result=instrument(source);
+ assert.ok(result.startsWith('isolate();'));assert.ok(result.endsWith('validate();'));
+ for(const event of ['setCenter','setZoom','zoom_changed','zoomanim','longtasks'])assert.ok(result.includes(event));
+ assert.throws(()=>instrument('unexpected source'));
+});

@@ -10,7 +10,17 @@ on:
       - 'tests/waypoint-alignment-development.test.cjs'
       - 'scripts/release-map-performance-development.cjs'
       - 'tests/map-performance-development.test.cjs'
+      - 'scripts/trace-map-performance-development.cjs'
   workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Read-only timing diagnosis or explicit candidate staging'
+        type: choice
+        required: true
+        default: diagnose
+        options:
+          - diagnose
+          - stage
 
 permissions:
   contents: read
@@ -57,7 +67,7 @@ jobs:
 
   deploy-performance-candidate:
     # Manual staging of one reviewed candidate; branch runtime is never deployed.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev' && inputs.operation == 'stage'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: development
@@ -98,5 +108,46 @@ jobs:
         with:
           name: performance-development-result-${{ github.run_id }}
           path: performance-development-result.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  diagnose-performance:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev' && inputs.operation == 'diagnose'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: df14bd9da7f90a4f18e4e015269ff794985af61b
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify diagnostic and staging guards
+        run: node --test controller/tests/map-performance-development.test.cjs
+      - name: Install browser dependencies only
+        working-directory: candidate
+        run: |
+          npm ci --ignore-scripts
+          npx --no-install playwright install --with-deps chromium
+      - name: Trace existing Development candidate with synthetic state only
+        env:
+          CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+          PERFORMANCE_LIVE_EVIDENCE: ${{ github.workspace }}/performance-diagnostic.json
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node controller/scripts/trace-map-performance-development.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-diagnostic-${{ github.run_id }}
+          path: performance-diagnostic.json
           if-no-files-found: warn
           retention-days: 7
