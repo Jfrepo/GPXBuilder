@@ -170,6 +170,9 @@ const DURABLE_DELETE_BRIDGE = String.raw`
     }).catch(function(e){markStatus('conflict','Delete not applied',e&&e.message||'No deletion was applied.');console.warn('Delete authorization failed',e);return false;}).finally(function(){authorizing=false;});
   }
   window.mancardoReconciledRevisionHashes=revisionHashes;
+  // Read-only editor boundary: a confirmed deletion may still be awaiting
+  // workspace/hash checks. Do not start a cancellable edit until it settles.
+  window.mancardoEditDeletionPending=function(){return authorizing;};
   window.mancardoAuthorizedDelete=authorisedDelete;
 
   document.addEventListener('click',function(ev){
