@@ -14,7 +14,7 @@ test('accepts only verifiable single-version traffic',()=>{assert.throws(()=>lat
 const fs=require('node:fs'),path=require('node:path');
 test('manual staging pins only the exact Cancel candidate and never deploys preparation via push',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(workflow.includes("ref: 351c826a62304049cf52577dd7aa6a3f51533fb2"));
+ assert.ok(workflow.includes("ref: c221bdfb02b6791e7bfeb2c1d934570216b568bd"));
  assert.ok(workflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'"));
  for(const file of ['scripts/release-map-performance-development.cjs','tests/map-performance-development.test.cjs'])assert.ok(workflow.includes("      - '"+file+"'"));
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
@@ -92,17 +92,27 @@ test('causal sampling starts before navigation and adds no profiler calls or wai
 
 const {validateCancelHtml,PIN,MANIFEST}=require('../scripts/release-map-performance-development.cjs');
 test('Cancel preparation pins the qualified runtime and manifest in both stage and diagnose checkouts',()=>{
- assert.equal(PIN,'351c826a62304049cf52577dd7aa6a3f51533fb2');
- assert.equal(MANIFEST,'b18fd5afdd78caa779e8d559ba05b6cb7a670878b7b5648f4853707ddce1a8f5');
+ assert.equal(PIN,'c221bdfb02b6791e7bfeb2c1d934570216b568bd');
+ assert.equal(MANIFEST,'cf2699be0b590d54ac83b17b1ca261b8d62e19a3e6cca62077920b7213ce4ca8');
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
  assert.equal(workflow.split('ref: '+PIN).length-1,2);
 });
-test('delivered Cancel check rejects missing, changed or unbounded source and missing control',()=>{
- const core='// ---------- cancellable editor sessions ----------\nfunction cancelTrackEdit(){return true;}\n';
- const source=core+'// ---------- history ----------';
- const html='<button id="cancelChangeBtn">Cancel</button>'+core;
- assert.doesNotThrow(()=>validateCancelHtml(html,source));
- for(const pair of [[html.replace('return true','return false'),source],[core,source],[html,'unrecognized source'],[html,core]])assert.throws(()=>validateCancelHtml(...pair));
+test('delivered Cancel check verifies session, sole tick, modal UI and handlers',()=>{
+ const spans=[
+  ['// ---------- cancellable editor sessions ----------','// ---------- history ----------'],
+  ['<div class="mode-banner hidden" id="modeBanner">','<div class="layer-toggle">'],
+  ['<dialog id="discardEditDialog"','</dialog>'],
+  ['#discardEditDialog{','.dialog h3{'],
+  ['/* Completion is distinct from Save:','@media (prefers-color-scheme:dark)'],
+  ['els.completeChangeBtn.onclick = function(){','els.deleteTrackBtn.onclick'],
+  ['els.cancelChangeBtn.onclick = cancelTrackEdit;','els.reverseBtn.onclick']
+ ];
+ const source=spans.map(([a,b],i)=>a+'tested fragment '+i+b).join('\n')+'<button id="completeChangeBtn">tick</button><button id="cancelChangeBtn">cross</button>';
+ assert.doesNotThrow(()=>validateCancelHtml(source,source));
+ for(let i=0;i<spans.length;i++)assert.throws(()=>validateCancelHtml(source.replace('tested fragment '+i,'changed'),source));
+ for(const id of ['completeChangeBtn','cancelChangeBtn'])assert.throws(()=>validateCancelHtml(source.replace('id="'+id+'"','id="missing"'),source));
+ assert.throws(()=>validateCancelHtml(source+'<button id="finishDrawBtn">old</button>',source));
+ assert.throws(()=>validateCancelHtml(source,'unrecognized source'));
 });
 test('Cancel acceptance augments existing synthetic and real Google checks without resetting success on late failure',()=>{
  const controller=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8');

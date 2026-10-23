@@ -3,12 +3,12 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
-const PIN='351c826a62304049cf52577dd7aa6a3f51533fb2';
-const MANIFEST='b18fd5afdd78caa779e8d559ba05b6cb7a670878b7b5648f4853707ddce1a8f5';
+const PIN='c221bdfb02b6791e7bfeb2c1d934570216b568bd';
+const MANIFEST='cf2699be0b590d54ac83b17b1ca261b8d62e19a3e6cca62077920b7213ce4ca8';
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
-const TAG='cancel-351c826a6230', MESSAGE=PIN+' '+MANIFEST;
+const TAG='cancel-c221bdfb02b6', MESSAGE=PIN+' '+MANIFEST;
 function requiredEnv(env){
   if(!env.CF_TOKEN||!/^[a-f0-9]{32}$/i.test(env.CF_ACCOUNT||''))throw Error('Existing Development API token/account configuration is missing or invalid.');
   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(env.DEV_DB||'')||env.DEV_DB.toLowerCase()===PRODUCTION)throw Error('Development database ID is missing, invalid or Production.');
@@ -117,10 +117,24 @@ async function release(){
   }catch(e){evidence.error=e.message;save();throw e;}finally{fs.writeFileSync(configFile,config);}
 }
 function validateCancelHtml(html,source){
-  const start=source.indexOf('// ---------- cancellable editor sessions ----------');
-  const end=source.indexOf('// ---------- history ----------',start);
-  if(start<0||end<=start||!html.includes(source.slice(start,end))||!html.includes('id="cancelChangeBtn"'))
-    throw Error('Delivered Cancel runtime does not match pinned tested feature.');
+  const spans=[
+    ['// ---------- cancellable editor sessions ----------','// ---------- history ----------'],
+    ['<div class="mode-banner hidden" id="modeBanner">','<div class="layer-toggle">'],
+    ['<dialog id="discardEditDialog"','</dialog>'],
+    ['#discardEditDialog{','.dialog h3{'],
+    ['/* Completion is distinct from Save:','@media (prefers-color-scheme:dark)'],
+    ['els.completeChangeBtn.onclick = function(){','els.deleteTrackBtn.onclick'],
+    ['els.cancelChangeBtn.onclick = cancelTrackEdit;','els.reverseBtn.onclick']
+  ];
+  for(const [from,to] of spans){
+    const start=source.indexOf(from),end=source.indexOf(to,start);
+    if(start<0||end<=start||!html.includes(source.slice(start,end)))throw Error('Delivered Cancel runtime/UI does not match pinned tested feature.');
+  }
+  for(const id of ['completeChangeBtn','cancelChangeBtn']){
+    const button=source.match(new RegExp('<button[^>]*id="'+id+'"[\\s\\S]*?</button>'));
+    if(!button||!html.includes(button[0]))throw Error('Delivered Cancel controls do not match pinned tested feature.');
+  }
+  if(html.includes('id="finishDrawBtn"'))throw Error('Obsolete duplicate completion control delivered.');
 }
 function validateBrowserEvidence(data){
   if(!data||data.provider!=='real Google Maps'||data.syntheticOnly!==true||!Array.isArray(data.errors)||data.errors.length||data.commandTargetMs!==100||data.commandTargetMet!==true||!Number.isFinite(data.commandP95)||data.commandP95<0||data.commandP95>100)
