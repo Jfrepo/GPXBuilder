@@ -140,8 +140,8 @@ async function fixture(t) {
       }));},
       async requestRemove(){
         await page.locator('[data-track-id="fixture-one"] .track-more').evaluate(button=>button.click());
-        page.once('dialog',dialog=>dialog.accept());
         await page.locator('[data-track-id="fixture-one"] .mancardo-menu-delete').evaluate(button=>button.click());
+        await page.locator('#libraryDeleteConfirm').click();
         await eventually(()=>page.evaluate(({PENDING,LIB})=>JSON.parse(localStorage.getItem(PENDING)||'[]').some(x=>x.id==='fixture-one')&&!JSON.parse(localStorage.getItem(LIB)||'[]').some(x=>x.id==='fixture-one'),{PENDING,LIB}));
       },
       async remove(){await result.requestRemove();await eventually(()=>page.evaluate(PENDING=>JSON.parse(localStorage.getItem(PENDING)||'[]')[0]?.confirmedRevision===2,PENDING));},

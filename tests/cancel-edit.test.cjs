@@ -150,3 +150,9 @@ test('mode guidance follows wrapped layer controls without a window resize or po
  await p.waitForFunction(()=>{const layer=document.querySelector('.layer-toggle'),banner=document.getElementById('modeBanner');return layer.offsetHeight<60&&banner.style.getPropertyValue('--edit-banner-top')===(layer.offsetTop+layer.offsetHeight+12)+'px';});
  await p.locator('#cancelChangeBtn').click();assert.equal(await p.locator('#completeChangeBtn').isDisabled(),true);
 });
+
+test('Delete confirmation prevents background map zoom shortcuts',async t=>{
+ const p=await setup(t);const before=await p.evaluate(()=>{document.getElementById('libraryDeleteDialog').showModal();document.getElementById('libraryDeleteKeep').focus();return map.getZoom();});
+ await p.keyboard.press('Shift+ArrowUp');await p.keyboard.press('Shift+ArrowDown');
+ assert.equal(await p.evaluate(()=>map.getZoom()),before);await p.keyboard.press('Escape');
+});
