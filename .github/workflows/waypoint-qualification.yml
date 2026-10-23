@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   waypoint-qualification:
-    if: github.head_ref == 'feature/waypoint-labels-lookout'
+    if: github.head_ref == 'feature/waypoint-labels-lookout' || github.head_ref == 'fix/waypoint-map-alignment'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
