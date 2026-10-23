@@ -1,0 +1,50 @@
+name: Waypoint Qualification (No Deploy)
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'worker-waypoint-save.js'
+      - 'worker-shared-waypoint-cloud.js'
+      - 'tests/waypoint-display.test.cjs'
+      - 'scripts/build-waypoint-development.cjs'
+      - '.github/workflows/waypoint-qualification.yml'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  waypoint-qualification:
+    if: github.head_ref == 'feature/waypoint-labels-lookout'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Qualify exact head with synthetic checks only
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          npm run test:source
+          npm run test:packaged-server
+          npm run test:browser
+          npm run test:waypoints
+      - name: Prepare narrow Development package (unresolved binding; no deploy)
+        run: |
+          node scripts/build-waypoint-development.cjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waypoint-development-${{ github.event.pull_request.head.sha }}
+          path: dist/waypoint-development/
+          if-no-files-found: error
+          retention-days: 7

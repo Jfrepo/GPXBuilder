@@ -18,7 +18,7 @@ const key='mancardo_saved_waypoints_v1';
 const names=['Parking <img src=x onerror="window.injected=1"> & "ridge"','Second summit'];
 const rows=names.map((name,i)=>({id:'synthetic-'+i,name,icon:i?'trail':'parking',lat:1,lon:2+i/1000,visible:true,updatedAt:'2026-01-01T00:00:00Z'}));
 let browser;
-test.before(async()=>{browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});});
+test.before(async()=>{browser=await chromium.launch({headless:true,...(fs.existsSync('/usr/bin/chromium')?{executablePath:'/usr/bin/chromium'}:{}),args:['--no-sandbox']});});
 test.after(async()=>{await browser?.close();});
 async function fixture(t,mobile=false){
  const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:800},hasTouch:mobile,isMobile:mobile});t.after(()=>context.close());
