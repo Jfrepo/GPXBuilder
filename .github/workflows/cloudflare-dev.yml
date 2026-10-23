@@ -88,7 +88,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: df14bd9da7f90a4f18e4e015269ff794985af61b
+          ref: 351c826a62304049cf52577dd7aa6a3f51533fb2
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -133,7 +133,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: df14bd9da7f90a4f18e4e015269ff794985af61b
+          ref: 351c826a62304049cf52577dd7aa6a3f51533fb2
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4

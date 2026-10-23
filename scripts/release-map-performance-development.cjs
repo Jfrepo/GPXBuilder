@@ -3,12 +3,12 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
-const PIN='df14bd9da7f90a4f18e4e015269ff794985af61b';
-const MANIFEST='adfc588c9ac7587a35d3d5a3f4184e22cd41bded8cc6141068ab860a0bac9b82';
+const PIN='351c826a62304049cf52577dd7aa6a3f51533fb2';
+const MANIFEST='b18fd5afdd78caa779e8d559ba05b6cb7a670878b7b5648f4853707ddce1a8f5';
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
-const TAG='perf-df14bd9da7f9', MESSAGE=PIN+' '+MANIFEST;
+const TAG='cancel-351c826a6230', MESSAGE=PIN+' '+MANIFEST;
 function requiredEnv(env){
   if(!env.CF_TOKEN||!/^[a-f0-9]{32}$/i.test(env.CF_ACCOUNT||''))throw Error('Existing Development API token/account configuration is missing or invalid.');
   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(env.DEV_DB||'')||env.DEV_DB.toLowerCase()===PRODUCTION)throw Error('Development database ID is missing, invalid or Production.');
@@ -42,7 +42,7 @@ async function release(){
   }
   const configFile=path.join(out,'wrangler.toml'),config=fs.readFileSync(configFile,'utf8');
   if(!/^name = "mancardo-dev-test"$/m.test(config)||!/^database_name = "mancardo-private-library-dev"$/m.test(config)||(config.match(/DEV_DATABASE_ID_REQUIRED/g)||[]).length!==1||config.toLowerCase().includes(PRODUCTION))throw Error('Unsafe Development target config.');
-  const evidence={candidate:PIN,manifestSha256:MANIFEST,url:URL,isolationVerified:false,authenticationPreserved:false,deployAttempted:false,deploymentVerified:false,acceptancePassed:false};
+  const evidence={candidate:PIN,manifestSha256:MANIFEST,url:URL,isolationVerified:false,authenticationPreserved:false,deployAttempted:false,deploymentVerified:false,deliveredCancelVerified:false,cancelAcceptancePassed:false,acceptancePassed:false};
   const evidencePath=path.resolve(env.EVIDENCE_PATH||'performance-development-result.json');
   const save=()=>fs.writeFileSync(evidencePath,JSON.stringify(evidence,null,2)+'\n');
   save();
@@ -99,23 +99,32 @@ async function release(){
     const source=fs.readFileSync(path.join(root,'worker-waypoint-save.js'),'utf8');
     const feature=source.match(/const WAYPOINT_FEATURE = String.raw`([\s\S]*?)`;/)[1];
     if(!html.includes(feature))throw Error('Delivered waypoint runtime does not match pinned tested feature.');
+    validateCancelHtml(html,fs.readFileSync(path.join(root,'index.html'),'utf8'));
+    evidence.deliveredCancelVerified=true;save();
     // The pinned entrypoint does not import the optional shared-waypoint client.
     // Exact feature equality covers every category and saved-waypoint surface it serves.
     // Browser fixtures remain local and intercept every request; no account data is loaded.
-    const acceptance=spawnSync(process.execPath,['--test','--test-concurrency=1','tests/waypoint-display.test.cjs','tests/map-performance.test.cjs'],{cwd:root,env:{...env,WAYPOINT_ARTIFACT_DIR:''},encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024});
-    if(acceptance.error||acceptance.signal||acceptance.status!==0)throw Error('Post-deploy synthetic waypoint acceptance failed.');
+    const acceptance=spawnSync(process.execPath,['--test','--test-concurrency=1','tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs'],{cwd:root,env:{...env,WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root},encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024});
+    if(acceptance.error||acceptance.signal||acceptance.status!==0)throw Error('Post-deploy synthetic waypoint, map or Cancel acceptance failed.');
+    evidence.cancelAcceptancePassed=true;save();
     const livePath=path.join(path.dirname(evidencePath),'performance-development-browser.json');
     const live=spawnSync(process.execPath,['scripts/check-map-performance-development.cjs'],{cwd:root,env:{...env,PERFORMANCE_LIVE_EVIDENCE:livePath},encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024});
     if(fs.existsSync(livePath))evidence.realGoogle=JSON.parse(fs.readFileSync(livePath,'utf8'));
     if(live.error||live.signal||live.status!==0){save();throw Error('Real Google desktop acceptance failed; inspect sanitized evidence. Development version is deployed; no automatic retry or rollback.');}
     validateBrowserEvidence(evidence.realGoogle);
-    evidence.acceptancePassed=true;evidence.acceptance='Exact candidate staged; local save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
-    console.log('PASS: exact Development candidate, save/alignment regressions, real Google desktop with synthetic state only.');
+    evidence.acceptancePassed=true;evidence.acceptance='Exact candidate staged; local Cancel/save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
+    console.log('PASS: exact Development candidate, Cancel/save/alignment regressions, real Google desktop with synthetic state only.');
   }catch(e){evidence.error=e.message;save();throw e;}finally{fs.writeFileSync(configFile,config);}
+}
+function validateCancelHtml(html,source){
+  const start=source.indexOf('// ---------- cancellable editor sessions ----------');
+  const end=source.indexOf('// ---------- history ----------',start);
+  if(start<0||end<=start||!html.includes(source.slice(start,end))||!html.includes('id="cancelChangeBtn"'))
+    throw Error('Delivered Cancel runtime does not match pinned tested feature.');
 }
 function validateBrowserEvidence(data){
   if(!data||data.provider!=='real Google Maps'||data.syntheticOnly!==true||!Array.isArray(data.errors)||data.errors.length||data.commandTargetMs!==100||data.commandTargetMet!==true||!Number.isFinite(data.commandP95)||data.commandP95<0||data.commandP95>100)
     throw Error('Real Google performance acceptance target unmet or evidence invalid; inspect sanitized evidence. Development version remains deployed; no automatic retry or rollback.');
 }
-module.exports={validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
+module.exports={validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
 if(require.main===module)release().catch(e=>{console.error(e.message);process.exitCode=1;});

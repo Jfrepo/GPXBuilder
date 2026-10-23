@@ -12,9 +12,9 @@ test('fails closed on changed or unverifiable authentication',()=>{for(const alt
 test('accepts only verifiable single-version traffic',()=>{assert.throws(()=>latest({}));assert.equal(activeVersion({versions:[{version_id:'v',percentage:100}]}),'v');assert.equal(activeVersion({versions:[{version_id:'v',percentage:50}]}),null);assert.equal(activeVersion({versions:[{version_id:'v',percentage:50},{version_id:'w',percentage:50}]}),null);});
 
 const fs=require('node:fs'),path=require('node:path');
-test('manual staging pins only the exact performance candidate and never deploys preparation via push',()=>{
+test('manual staging pins only the exact Cancel candidate and never deploys preparation via push',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(workflow.includes("ref: df14bd9da7f90a4f18e4e015269ff794985af61b"));
+ assert.ok(workflow.includes("ref: 351c826a62304049cf52577dd7aa6a3f51533fb2"));
  assert.ok(workflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'"));
  for(const file of ['scripts/release-map-performance-development.cjs','tests/map-performance-development.test.cjs'])assert.ok(workflow.includes("      - '"+file+"'"));
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
@@ -88,4 +88,29 @@ test('causal sampling starts before navigation and adds no profiler calls or wai
  assert.ok(!loop.includes('cdp'));assert.ok(!loop.includes('Cdp'));assert.ok(!loop.includes('Profiler'));assert.ok(!loop.includes('clock'));
  assert.equal((loop.match(/await /g)||[]).length,1);
  assert.ok(result.includes("m.name==='NavigationStart'"));
+});
+
+const {validateCancelHtml,PIN,MANIFEST}=require('../scripts/release-map-performance-development.cjs');
+test('Cancel preparation pins the qualified runtime and manifest in both stage and diagnose checkouts',()=>{
+ assert.equal(PIN,'351c826a62304049cf52577dd7aa6a3f51533fb2');
+ assert.equal(MANIFEST,'b18fd5afdd78caa779e8d559ba05b6cb7a670878b7b5648f4853707ddce1a8f5');
+ const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
+ assert.equal(workflow.split('ref: '+PIN).length-1,2);
+});
+test('delivered Cancel check rejects missing, changed or unbounded source and missing control',()=>{
+ const core='// ---------- cancellable editor sessions ----------\nfunction cancelTrackEdit(){return true;}\n';
+ const source=core+'// ---------- history ----------';
+ const html='<button id="cancelChangeBtn">Cancel</button>'+core;
+ assert.doesNotThrow(()=>validateCancelHtml(html,source));
+ for(const pair of [[html.replace('return true','return false'),source],[core,source],[html,'unrecognized source'],[html,core]])assert.throws(()=>validateCancelHtml(...pair));
+});
+test('Cancel acceptance augments existing synthetic and real Google checks without resetting success on late failure',()=>{
+ const controller=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8');
+ assert.ok(controller.includes("'tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs'"));
+ assert.ok(controller.includes("WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root"));
+ assert.ok(controller.includes("['scripts/check-map-performance-development.cjs']"));
+ assert.ok(controller.indexOf('evidence.deploymentVerified=true')<controller.indexOf('validateCancelHtml(html,'));
+ assert.ok(controller.indexOf('evidence.cancelAcceptancePassed=true')<controller.indexOf('validateBrowserEvidence(evidence.realGoogle)'));
+ assert.ok(controller.indexOf('validateBrowserEvidence(evidence.realGoogle)')<controller.indexOf('evidence.acceptancePassed=true'));
+ assert.ok(controller.includes('Development version is deployed; no automatic retry or rollback.'));
 });
