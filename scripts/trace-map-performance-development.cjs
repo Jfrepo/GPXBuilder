@@ -9,12 +9,37 @@ function installTrace(map,provider){
  for(const name of ['zoom_changed','center_changed','bounds_changed','idle'])if(provider.addListener)provider.addListener(name,()=>record('google:'+name));
  new PerformanceObserver(list=>{if(trace.active)trace.longtasks.push(...list.getEntries().map(e=>({start:e.startTime,duration:e.duration})))}).observe({type:'longtask'});
 }
+function sanitizeProfile(profile){
+ function source(url){
+  try{const u=new URL(url);if(u.hostname==='mancardo-dev-test.jayfenno.workers.dev')return 'application';
+   if(/(^|\.)(googleapis\.com|gstatic\.com|google\.com|googleusercontent\.com)$/.test(u.hostname))return 'google-provider:'+u.pathname.split('/').pop().replace(/[^a-zA-Z0-9_.-]/g,'').slice(0,80);
+   if(u.hostname==='cdnjs.cloudflare.com')return 'public-dependency:'+u.pathname.split('/').pop().replace(/[^a-zA-Z0-9_.-]/g,'').slice(0,80);
+  }catch{}
+  return url?'other-script':'browser-or-evaluated';
+ }
+ return {startTime:profile.startTime,endTime:profile.endTime,samples:profile.samples,timeDeltas:profile.timeDeltas,nodes:profile.nodes.map(n=>({id:n.id,children:n.children||[],callFrame:{functionName:n.callFrame.functionName.slice(0,120),source:source(n.callFrame.url),lineNumber:n.callFrame.lineNumber,columnNumber:n.callFrame.columnNumber}}))};
+}
 function instrument(source){
  const needle='  const modes=[];';
  const sample='({...__wheelEvidence,start:undefined,geometryUnchanged:';
+ const wheelLine=source.split('\n').find(line=>line.includes('await page.mouse.wheel(0,-60);'));
+ if(!wheelLine||source.split('await page.mouse.wheel(0,-60);').length!==2)throw Error('Unexpected wheel instrumentation point.');
  if(source.split(needle).length!==2||source.split(sample).length!==2)throw Error('Unexpected checker source; refusing diagnostic patch.');
- source=source.replace(needle,'  await page.evaluate('+JSON.stringify('('+installTrace.toString()+')(__performanceAcceptance.map,__mancardoGoogleMap)')+');\n'+needle);
- return source.replace(sample,'({...__wheelEvidence,start:undefined,timingTrace:{events:__timingTrace.events.map(e=>({...e,at:e.at-__timingTrace.events[0].at})),longtasks:__timingTrace.longtasks.map(e=>({...e,start:e.start-__timingTrace.events[0].at}))},geometryUnchanged:');
+ if(!source.includes('for(const z of [15,13])')||!source.includes('  const latencies=')||!source.includes('const result={commandP95,'))throw Error('Unexpected warm-control instrumentation point.');
+ source=source.replace('for(const z of [15,13])','for(const z of [15,13,15])');
+ source=source.replace('  const latencies=',"  const diagnosticWarmControls=modes.map(m=>({mode:m.mode,samples:m.samples.splice(2)}));\n  const latencies=");
+ source=source.replace('const result={commandP95,',"const result={diagnosticWarmControls,profiling:'1ms CPU sampling; original eight samples retained for unchanged acceptance gate',commandP95,");
+ source='const sanitizeProfile='+sanitizeProfile.toString()+';\n'+source;
+ source=source.replace(wheelLine,`    await cdp.send('Profiler.start');
+    const clockBefore=(await cdp.send('Performance.getMetrics')).metrics.find(m=>m.name==='Timestamp').value*1000;
+    const pageNow=await page.evaluate(()=>performance.now());
+    const clockAfter=(await cdp.send('Performance.getMetrics')).metrics.find(m=>m.name==='Timestamp').value*1000;
+${wheelLine}
+    const rawProfile=await cdp.send('Profiler.stop');
+    samples[samples.length-1].cpuProfile=sanitizeProfile(rawProfile.profile);
+    samples[samples.length-1].profileClock={monotonicMinusPageMs:(clockBefore+clockAfter)/2-pageNow,uncertaintyMs:(clockAfter-clockBefore)/2};`);
+ source=source.replace(needle,'  await page.evaluate('+JSON.stringify('('+installTrace.toString()+')(__performanceAcceptance.map,__mancardoGoogleMap)')+');\n  const cdp=await context.newCDPSession(page);await cdp.send(\'Profiler.enable\');await cdp.send(\'Profiler.setSamplingInterval\',{interval:1000});await cdp.send(\'Performance.enable\');\n'+needle);
+ return source.replace(sample,'({...__wheelEvidence,start:undefined,timingTrace:{wheelPageMs:__timingTrace.events[0].at,events:__timingTrace.events.map(e=>({...e,at:e.at-__timingTrace.events[0].at})),longtasks:__timingTrace.longtasks.map(e=>({...e,start:e.start-__timingTrace.events[0].at}))},geometryUnchanged:');
 }
 async function run(){
  const fs=require('node:fs'),path=require('node:path'),Module=require('node:module');
@@ -29,7 +54,7 @@ async function run(){
  const evidence=JSON.parse(fs.readFileSync(process.env.PERFORMANCE_LIVE_EVIDENCE,'utf8'));
  evidence.sourceSha=PIN;
  evidence.measurementEndpoints={existingCommandP95:'wheel to Google zoom_changed callback',handoff:'wheel to Google setZoom entry'};
- for(const mode of evidence.modes)for(const sample of mode.samples){
+ for(const mode of [...evidence.modes,...evidence.diagnosticWarmControls])for(const sample of mode.samples){
   const events=sample.timingTrace.events,first=name=>events.find(e=>e.name===name)?.at??null;
   sample.handoffEntryMs=first('google:setZoom:entry');
   sample.providerCallbackMs=first('google:zoom_changed');
@@ -37,5 +62,5 @@ async function run(){
  fs.writeFileSync(process.env.PERFORMANCE_LIVE_EVIDENCE,JSON.stringify(evidence,null,2)+'\n');
  validateBrowserEvidence(evidence);
 }
-module.exports={installTrace,instrument};
+module.exports={installTrace,instrument,sanitizeProfile};
 if(require.main===module)run().catch(()=>{console.error('Read-only diagnostic did not meet acceptance; inspect sanitized timing evidence. No deployment was attempted.');process.exitCode=1;});

@@ -41,9 +41,17 @@ test('diagnostic operation has no deployment credentials or commands, and stagin
 });
 test('diagnostic instrumentation retains checker isolation and acceptance checks',()=>{
  const {instrument}=require('../scripts/trace-map-performance-development.cjs');
- const source="isolate();\n  const modes=[];\n({...__wheelEvidence,start:undefined,geometryUnchanged:unchanged});\nvalidate();";
+ const source="isolate();\n  const modes=[];\nawait page.mouse.wheel(0,-60);\nfor(const z of [15,13]){}\n  const latencies=[]; const result={commandP95,};\n({...__wheelEvidence,start:undefined,geometryUnchanged:unchanged});\nvalidate();";
  const result=instrument(source);
- assert.ok(result.startsWith('isolate();'));assert.ok(result.endsWith('validate();'));
+ assert.ok(result.includes('isolate();'));assert.ok(result.endsWith('validate();'));
  for(const event of ['setCenter','setZoom','zoom_changed','zoomanim','longtasks'])assert.ok(result.includes(event));
  assert.throws(()=>instrument('unexpected source'));
+});
+
+test('CPU profiles strip URLs, query credentials and unrelated frame metadata',()=>{
+ const {sanitizeProfile}=require('../scripts/trace-map-performance-development.cjs');
+ const result=sanitizeProfile({startTime:1,endTime:2,samples:[1],timeDeltas:[1],nodes:[{id:1,children:[],callFrame:{functionName:'knownSyntheticWork',url:'https://maps.googleapis.com/maps/api/js?key=DO_NOT_KEEP',lineNumber:2,columnNumber:3,unexpected:'DO_NOT_KEEP'}}]});
+ assert.equal(result.nodes[0].callFrame.source,'google-provider:js');
+ assert.ok(!JSON.stringify(result).includes('DO_NOT_KEEP'));assert.ok(!JSON.stringify(result).includes('https://'));
+ assert.deepEqual(result.samples,[1]);
 });
