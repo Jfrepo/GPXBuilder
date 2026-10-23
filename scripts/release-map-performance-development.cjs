@@ -3,12 +3,17 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
-const PIN='227ec8853ef96f5de7b615f24b6748e9c96d912d';
-const MANIFEST='bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f';
+const PIN='b308d0ae8e5bf5d76d71f00b8210c46cb4f38502';
+const MANIFEST='ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4';
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
-const TAG='cancel-227ec8853ef9', MESSAGE=PIN+' '+MANIFEST;
+const TAG='fuel-cancel-b308d0ae8e5b', MESSAGE=PIN+' '+MANIFEST;
+const EXPECTED_PREVIOUS_MESSAGE='227ec8853ef96f5de7b615f24b6748e9c96d912d bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f';
+function validatePreviousVersion(version){
+  const message=version.annotations?.['workers/message'];
+  if(message!==EXPECTED_PREVIOUS_MESSAGE&&message!==MESSAGE)throw Error('Development no longer matches the reviewed Cancel preview; recompose and coordinate before staging.');
+}
 function requiredEnv(env){
   if(!env.CF_TOKEN||!/^[a-f0-9]{32}$/i.test(env.CF_ACCOUNT||''))throw Error('Existing Development API token/account configuration is missing or invalid.');
   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(env.DEV_DB||'')||env.DEV_DB.toLowerCase()===PRODUCTION)throw Error('Development database ID is missing, invalid or Production.');
@@ -72,6 +77,7 @@ async function release(){
     const prior=activeVersion(before);
     if(!prior)throw Error('Development is not a single-version deployment; stop before changing traffic.');
     const version=await read(prefix+'/versions/'+encodeURIComponent(prior));
+    validatePreviousVersion(version);
     evidence.previousDeploymentId=before.id;evidence.previousVersionId=prior;save();
     let expectedVersion=prior;
     if(version.annotations?.['workers/tag']===TAG&&version.annotations?.['workers/message']===MESSAGE){
@@ -100,20 +106,22 @@ async function release(){
     const feature=source.match(/const WAYPOINT_FEATURE = String.raw`([\s\S]*?)`;/)[1];
     if(!html.includes(feature))throw Error('Delivered waypoint runtime does not match pinned tested feature.');
     validateCancelHtml(html,fs.readFileSync(path.join(root,'index.html'),'utf8'));
-    evidence.deliveredCancelVerified=true;save();
+    evidence.deliveredCancelVerified=true;
+    validateFuelHtml(html,fs.readFileSync(path.join(root,'index.html'),'utf8'),fs.readFileSync(path.join(root,'worker-3d-overlays.js'),'utf8'));
+    evidence.deliveredFuelVerified=true;save();
     // The pinned entrypoint does not import the optional shared-waypoint client.
     // Exact feature equality covers every category and saved-waypoint surface it serves.
     // Browser fixtures remain local and intercept every request; no account data is loaded.
-    const acceptance=spawnSync(process.execPath,['--test','--test-concurrency=1','tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs'],{cwd:root,env:{...env,WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root},encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024});
-    if(acceptance.error||acceptance.signal||acceptance.status!==0)throw Error('Post-deploy synthetic waypoint, map or Cancel acceptance failed.');
-    evidence.cancelAcceptancePassed=true;save();
+    const acceptance=spawnSync(process.execPath,['--test','--test-concurrency=1','tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs','tests/fuel-cache.test.cjs'],{cwd:root,env:{...env,WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root},encoding:'utf8',timeout:300000,maxBuffer:4*1024*1024});
+    if(acceptance.error||acceptance.signal||acceptance.status!==0)throw Error('Post-deploy synthetic waypoint, map, Cancel or Fuel acceptance failed.');
+    evidence.cancelAcceptancePassed=true;evidence.fuelAcceptancePassed=true;save();
     const livePath=path.join(path.dirname(evidencePath),'performance-development-browser.json');
     const live=spawnSync(process.execPath,['scripts/check-map-performance-development.cjs'],{cwd:root,env:{...env,PERFORMANCE_LIVE_EVIDENCE:livePath},encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024});
     if(fs.existsSync(livePath))evidence.realGoogle=JSON.parse(fs.readFileSync(livePath,'utf8'));
     if(live.error||live.signal||live.status!==0){save();throw Error('Real Google desktop acceptance failed; inspect sanitized evidence. Development version is deployed; no automatic retry or rollback.');}
     validateBrowserEvidence(evidence.realGoogle);
-    evidence.acceptancePassed=true;evidence.acceptance='Exact candidate staged; local Cancel/save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
-    console.log('PASS: exact Development candidate, Cancel/save/alignment regressions, real Google desktop with synthetic state only.');
+    evidence.acceptancePassed=true;evidence.acceptance='Exact candidate staged; local Fuel/Cancel/save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
+    console.log('PASS: exact Development candidate, Fuel/Cancel/save/alignment regressions, real Google desktop with synthetic state only.');
   }catch(e){evidence.error=e.message;save();throw e;}finally{fs.writeFileSync(configFile,config);}
 }
 function validateCancelHtml(html,source){
@@ -138,9 +146,16 @@ function validateCancelHtml(html,source){
   }
   if(html.includes('id="finishDrawBtn"'))throw Error('Obsolete duplicate completion control delivered.');
 }
+function validateFuelHtml(html,source,overlaySource){
+  const from='// Fuel data belongs to OSM',to='\n\n\nels.layerStreetsBtn.onclick';
+  const start=source.indexOf(from),end=source.indexOf(to,start);
+  if(start<0||end<=start||source.indexOf(from,start+1)!==-1||!html.includes(source.slice(start,end)))throw Error('Delivered Fuel cache/2D controls do not match pinned feature.');
+  const feature=overlaySource.match(/const MAP_3D_OVERLAY_FEATURE = String.raw`([\s\S]*?)`;/)?.[1];
+  if(!feature||!html.includes(feature))throw Error('Delivered 3D Fuel does not match pinned feature.');
+}
 function validateBrowserEvidence(data){
   if(!data||data.provider!=='real Google Maps'||data.syntheticOnly!==true||!Array.isArray(data.errors)||data.errors.length||data.commandTargetMs!==100||data.commandTargetMet!==true||!Number.isFinite(data.commandP95)||data.commandP95<0||data.commandP95>100)
     throw Error('Real Google performance acceptance target unmet or evidence invalid; inspect sanitized evidence. Development version remains deployed; no automatic retry or rollback.');
 }
-module.exports={validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
+module.exports={validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE,validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
 if(require.main===module)release().catch(e=>{console.error(e.message);process.exitCode=1;});

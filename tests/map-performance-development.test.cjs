@@ -12,9 +12,9 @@ test('fails closed on changed or unverifiable authentication',()=>{for(const alt
 test('accepts only verifiable single-version traffic',()=>{assert.throws(()=>latest({}));assert.equal(activeVersion({versions:[{version_id:'v',percentage:100}]}),'v');assert.equal(activeVersion({versions:[{version_id:'v',percentage:50}]}),null);assert.equal(activeVersion({versions:[{version_id:'v',percentage:50},{version_id:'w',percentage:50}]}),null);});
 
 const fs=require('node:fs'),path=require('node:path');
-test('manual staging pins only the exact Cancel candidate and never deploys preparation via push',()=>{
+test('manual staging pins only the exact combined Fuel/Cancel candidate and never deploys preparation via push',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(workflow.includes("ref: 227ec8853ef96f5de7b615f24b6748e9c96d912d"));
+ assert.ok(workflow.includes("ref: b308d0ae8e5bf5d76d71f00b8210c46cb4f38502"));
  assert.ok(workflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'"));
  for(const file of ['scripts/release-map-performance-development.cjs','tests/map-performance-development.test.cjs'])assert.ok(workflow.includes("      - '"+file+"'"));
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
@@ -91,9 +91,9 @@ test('causal sampling starts before navigation and adds no profiler calls or wai
 });
 
 const {validateCancelHtml,PIN,MANIFEST}=require('../scripts/release-map-performance-development.cjs');
-test('Cancel preparation pins the qualified runtime and manifest in both stage and diagnose checkouts',()=>{
- assert.equal(PIN,'227ec8853ef96f5de7b615f24b6748e9c96d912d');
- assert.equal(MANIFEST,'bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f');
+test('Combined preparation pins the qualified runtime and manifest in both stage and diagnose checkouts',()=>{
+ assert.equal(PIN,'b308d0ae8e5bf5d76d71f00b8210c46cb4f38502');
+ assert.equal(MANIFEST,'ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4');
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
  assert.equal(workflow.split('ref: '+PIN).length-1,2);
 });
@@ -118,11 +118,38 @@ test('delivered Cancel check verifies session, sole tick, modal UI and handlers'
 });
 test('Cancel acceptance augments existing synthetic and real Google checks without resetting success on late failure',()=>{
  const controller=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8');
- assert.ok(controller.includes("'tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs'"));
+ assert.ok(controller.includes("'tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs','tests/fuel-cache.test.cjs'"));
  assert.ok(controller.includes("WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root"));
  assert.ok(controller.includes("['scripts/check-map-performance-development.cjs']"));
  assert.ok(controller.indexOf('evidence.deploymentVerified=true')<controller.indexOf('validateCancelHtml(html,'));
  assert.ok(controller.indexOf('evidence.cancelAcceptancePassed=true')<controller.indexOf('validateBrowserEvidence(evidence.realGoogle)'));
  assert.ok(controller.indexOf('validateBrowserEvidence(evidence.realGoogle)')<controller.indexOf('evidence.acceptancePassed=true'));
  assert.ok(controller.includes('Development version is deployed; no automatic retry or rollback.'));
+});
+const {validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE}=require('../scripts/release-map-performance-development.cjs');
+test('newer Development previews cannot be silently overwritten by this composition',()=>{
+ assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':EXPECTED_PREVIOUS_MESSAGE}}));
+ assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':PIN+' '+MANIFEST}}));
+ assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':'newer-delete-dialog-preview'}}));
+ assert.throws(()=>validatePreviousVersion({}));
+});
+test('delivered Fuel verification rejects either old cache or old 3D implementation',()=>{
+ const source='// Fuel data belongs to OSM\nreviewed cache and controls\n\n\nels.layerStreetsBtn.onclick';
+ const overlay='const MAP_3D_OVERLAY_FEATURE = String.raw`reviewed 3D fuel`;';
+ const html=source+'reviewed 3D fuel';
+ assert.doesNotThrow(()=>validateFuelHtml(html,source,overlay));
+ assert.throws(()=>validateFuelHtml(html.replace('reviewed cache','old cache'),source,overlay));
+ assert.throws(()=>validateFuelHtml(html.replace('reviewed 3D fuel','old 3D fuel'),source,overlay));
+ assert.throws(()=>validateFuelHtml(html,'unrecognized',overlay));
+ assert.throws(()=>validateFuelHtml(html,source,'unrecognized'));
+});
+test('Fuel acceptance augments all existing isolation, Cancel and latency gates',()=>{
+ const controller=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8');
+ const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
+ assert.ok(controller.indexOf('validatePreviousVersion(version)')<controller.indexOf('evidence.deployAttempted=true'));
+ assert.ok(controller.indexOf('validateFuelHtml(html,')<controller.indexOf('evidence.fuelAcceptancePassed=true'));
+ assert.ok(controller.indexOf('evidence.fuelAcceptancePassed=true')<controller.indexOf('validateBrowserEvidence(evidence.realGoogle)'));
+ for(const command of ['npm run test:source','npm run test:packaged-server','npm run test:browser','npm run test:waypoints','npm run test:map-performance','npm run test:cancel','tests/fuel-cache.test.cjs'])assert.ok(workflow.includes(command));
+ assert.ok(controller.includes('data.commandTargetMs!==100'));
+ assert.ok(controller.includes('data.commandP95>100'));
 });

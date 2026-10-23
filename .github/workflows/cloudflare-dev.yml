@@ -88,7 +88,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 227ec8853ef96f5de7b615f24b6748e9c96d912d
+          ref: b308d0ae8e5bf5d76d71f00b8210c46cb4f38502
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -101,6 +101,14 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx --no-install playwright install --with-deps chromium
+          test "$(git rev-parse HEAD)" = "b308d0ae8e5bf5d76d71f00b8210c46cb4f38502"
+          npm run test:source
+          npm run test:packaged-server
+          npm run test:browser
+          npm run test:waypoints
+          npm run test:map-performance
+          npm run test:cancel
+          node --test tests/fuel-cache.test.cjs tests/waypoint-development-release.test.cjs
           node scripts/build-waypoint-development.cjs
       - name: Verify isolation, stage exact candidate, and verify version and synthetic acceptance
         env:
@@ -133,7 +141,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 227ec8853ef96f5de7b615f24b6748e9c96d912d
+          ref: b308d0ae8e5bf5d76d71f00b8210c46cb4f38502
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
