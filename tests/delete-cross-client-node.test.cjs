@@ -323,7 +323,7 @@ test.before(async()=>{
   const marker='(function installMancardoTrackClickFlash(){',start=html.indexOf(marker),end=html.indexOf('\n})();',start)+7;
   assert.ok(start>=0&&end>start,'Exact emitted row flash');
   const prelude=html.lastIndexOf('// ---------- Render-only track identification ----------',start);
-  selectionSource={flash:html.slice(prelude>=0?prelude:start,end),render:named('render','getCss'),library:named('renderLibrary','loadItem'),load:named('loadItem','startNewRoute'),show:named('setTrackVisible','duplicateTrack'),note:named('saveTrackNote','copyTrack')};
+  selectionSource={editGuard:named('mayLeaveEdit','beginTrackEdit'),flash:html.slice(prelude>=0?prelude:start,end),render:named('render','getCss'),library:named('renderLibrary','loadItem'),load:named('loadItem','startNewRoute'),show:named('setTrackVisible','duplicateTrack'),note:named('saveTrackNote','copyTrack')};
 });
 
 function selectionElement(tag='div'){
@@ -363,7 +363,8 @@ function installSelectionAdapter(b){
   // Selection, Show, render predicates and cloud synchronization remain emitted code.
   c.defaultTrackColour=item=>item.id;c.computeStats=()=>({});c.fmtKm=String;c.fmtDate=String;
   c.updateSelectAll=()=>{};c.updateModeBanner=()=>{};c.fitToTrack=()=>{};c.refreshDock=()=>{};
-  vm.runInContext([selectionSource.render,selectionSource.library,selectionSource.load,selectionSource.show,selectionSource.note,selectionSource.flash].join('\n'),c);
+  c.editSession=null;c.sharedPreviewRequest=0;
+  vm.runInContext([selectionSource.editGuard,selectionSource.render,selectionSource.library,selectionSource.load,selectionSource.show,selectionSource.note,selectionSource.flash].join('\n'),c);
   function dispatch(name,target){const ev={target,stopPropagation(){this.stopped=true;}};for(const fn of events[name]||[])fn(ev);if(!ev.stopped)for(const fn of target.events?.[name]||[])fn(ev);return ev;}
   function row(id){return c.els.trackList.children.find(e=>e.getAttribute('data-track-id')===id);}
   function fire(timer,evenIfCancelled=false){assert.ok(timer,'Expected scheduled timer');assert.equal(timer.fired,false,'A timer is delivered once');timer.fired=true;if(!timer.cancelled||evenIfCancelled)timer.fn();}

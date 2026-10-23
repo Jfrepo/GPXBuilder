@@ -195,7 +195,7 @@ const POINT_LIST_FEATURE = String.raw`
     // one direct straight line between those closest remaining points.
     state.current.updatedAt=new Date().toISOString();
     state.current.stats=computeStats(state.current);
-    if(state.currentId){
+    if(state.currentId&&!(typeof editSession!=='undefined'&&editSession)){
       var li=state.library.findIndex(function(t){return t.id===state.currentId;});
       if(li>=0) state.library[li]=deepClone(state.current);
       persistLibrary();
@@ -220,10 +220,10 @@ const POINT_LIST_FEATURE = String.raw`
   render=function(){baseRender();drawPointListHighlights();};
 
   var baseLoadItem=loadItem;
-  loadItem=function(id){clearPointHighlights();baseLoadItem(id);};
+  loadItem=function(id){if(typeof mayLeaveEdit==='function'&&!mayLeaveEdit())return false;clearPointHighlights();return baseLoadItem(id);};
 
   var baseStartNewRoute=startNewRoute;
-  startNewRoute=function(){clearPointHighlights();baseStartNewRoute();};
+  startNewRoute=function(){var result=baseStartNewRoute();if(result!==false)clearPointHighlights();return result;};
 
   document.addEventListener('keydown',function(ev){
     if(ev.key==='Shift') shiftHeld=true;
