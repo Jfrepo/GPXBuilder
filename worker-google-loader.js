@@ -102,7 +102,15 @@ const SAVE_STATE_FEATURE = String.raw`
     };
   }
 
-  setInterval(updateSaveState,250);
+  // Geometry edits already refresh render/dock, and load/save establish the
+  // baseline. Metadata edits (notably notes) persist without rendering.
+  // Observe that boundary instead of cloning an unchanged track four times/sec.
+  var basePersistForSaveState=persistLibrary;
+  persistLibrary=function(){
+    var result=basePersistForSaveState.apply(this,arguments);
+    updateSaveState();
+    return result;
+  };
   updateSaveState();
 })();
 `;

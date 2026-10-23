@@ -110,21 +110,35 @@ function suppressZoomedOutTrackPoints(html){
           var opts=layer.options||{};
           var strokeOpacity=opts.opacity==null?1:Number(opts.opacity);
           var fillOpacity=opts.fillOpacity==null?1:Number(opts.fillOpacity);
-          if(showTrackPoint){
-            googleTrackData.add(new google.maps.Data.Feature({
+          var pointFeature=new google.maps.Data.Feature({
               geometry:new google.maps.Data.Point(new google.maps.LatLng(ll.lat,ll.lng)),
               properties:{kind:'point',radius:opts.radius||4,fillColor:opts.fillColor||opts.color||'#2563a8',fillOpacity:fillOpacity,strokeColor:opts.color||'#ffffff',strokeOpacity:strokeOpacity,strokeWeight:opts.weight||1}
-            }));
-          }
+          });
+          googleTrackPoints.push({layer:layer,feature:pointFeature});
+          if(showTrackPoint)googleTrackData.add(pointFeature);
           if(typeof layer.setStyle==='function')layer.setStyle({opacity:0,fillOpacity:0});
           var el=typeof layer.getElement==='function'?layer.getElement():null;
           if(el)el.style.pointerEvents=showTrackPoint?'':'none';
         }`;
 
     const oldEvents = `    map.on('move zoom resize moveend zoomend',queueSync);`;
-    const newEvents = `    map.on('move zoom resize moveend zoomend',queueSync);\n    var __mancardoTrackPointsVisible=map.getZoom()>=${TRACK_POINT_MIN_ZOOM};\n    map.on('zoomend',function(){\n      var nextVisible=map.getZoom()>=${TRACK_POINT_MIN_ZOOM};\n      if(nextVisible===__mancardoTrackPointsVisible)return;\n      __mancardoTrackPointsVisible=nextVisible;\n      // Re-render only when crossing the point-visibility threshold. Calling\n      // syncGoogleTrackVisuals() directly here clears the Google track data after\n      // Leaflet's source layers have already been made transparent, which makes\n      // the route disappear until the Library row is selected again.\n      if(typeof render==='function')render();\n    });`;
+    const newEvents = `    map.on('move zoom resize moveend zoomend',queueSync);
+    var __mancardoTrackPointsVisible=map.getZoom()>=${TRACK_POINT_MIN_ZOOM};
+    map.on('zoomend',function(){
+      var nextVisible=map.getZoom()>=${TRACK_POINT_MIN_ZOOM};
+      if(nextVisible===__mancardoTrackPointsVisible)return;
+      __mancardoTrackPointsVisible=nextVisible;
+      // Retain line features and Leaflet interaction geometry. Only toggle the
+      // sampled Google point features and their Leaflet hit targets.
+      googleTrackPoints.forEach(function(point){
+        if(nextVisible)googleTrackData.add(point.feature);else googleTrackData.remove(point.feature);
+        var el=typeof point.layer.getElement==='function'?point.layer.getElement():null;
+        if(el)el.style.pointerEvents=nextVisible?'':'none';
+      });
+    });`;
 
     if(html.includes(oldBlock)&&html.includes(oldEvents)){
+      html=html.replace('function clearGoogleTrackData(){','var googleTrackPoints=[];\n    function clearGoogleTrackData(){\n      googleTrackPoints=[];');
       html=html.replace(oldBlock,newBlock);
       html=html.replace(oldEvents,newEvents);
     }

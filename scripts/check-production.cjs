@@ -11,7 +11,9 @@ const suite = process.argv[2];
 if (!suites[suite]) throw Error('Specify source or browser');
 // Source artifact test builds before comparing. Browser suite uses that exact output.
 if (suite !== 'source') require('./build-production.cjs').build();
-const result = spawnSync(process.execPath, ['--test', ...suites[suite].map(n => 'tests/' + n + '.test.cjs')], {
+// Serial browser files avoid competing Chromium processes exhausting a suite's
+// wall-clock timeout in constrained qualification environments.
+const result = spawnSync(process.execPath, ['--test', ...(suite === 'browser' ? ['--test-concurrency=1'] : []), ...suites[suite].map(n => 'tests/' + n + '.test.cjs')], {
   cwd: root, stdio: 'inherit', env: {...process.env,
     ...(suite !== 'source' ? {MANCARDO_DELETE_TEST_ENTRY: path.join(root, 'dist/production/worker-delete-durable-fix.js')} : {})},
 });

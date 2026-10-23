@@ -131,7 +131,7 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
         try{var p=map.getCenter();localStorage.setItem('mancardo_map_view_v1',JSON.stringify({lat:p.lat,lng:p.lng,zoom:map.getZoom()}));}catch(e){}
       },650);
     }
-    function sync(){var c=map.getCenter();var g=googleMap.getCenter();if(!g||Math.abs(g.lat()-c.lat)>0.000001||Math.abs(g.lng()-c.lng)>0.000001)googleMap.setCenter({lat:c.lat,lng:c.lng});if(googleMap.getZoom()!==map.getZoom())googleMap.setZoom(map.getZoom());}
+    function sync(center,zoom){var c=center||map.getCenter();var z=zoom==null?map.getZoom():zoom;var g=googleMap.getCenter();if(!g||Math.abs(g.lat()-c.lat)>0.000001||Math.abs(g.lng()-c.lng)>0.000001)googleMap.setCenter({lat:c.lat,lng:c.lng});if(googleMap.getZoom()!==z)googleMap.setZoom(z);}
     var frame=null;function queueSync(){if(frame)cancelAnimationFrame(frame);frame=requestAnimationFrame(function(){frame=null;sync();});}
     function setType(type){if(!buttons[type])type='roadmap';hideLeafletBase();googleMap.setMapTypeId(type);Object.keys(buttons).forEach(function(k){buttons[k].classList.toggle('on',k===type);});try{localStorage.setItem('mancardo_google_map_type_v1',type);}catch(e){}queueSync();}
 
@@ -139,6 +139,10 @@ const GOOGLE_PREVIEW_FEATURE = String.raw`
     els.layerTerrainBtn.onclick=function(){setType('terrain');};
     satelliteBtn.onclick=function(){setType('satellite');};
     hybridBtn.onclick=function(){setType('hybrid');};
+    // Google owns visible geometry: start its zoom at the authoritative target,
+    // not after Leaflet's invisible 250 ms CSS transition. Keep Leaflet's
+    // interaction animation and fallback behavior unchanged.
+    map.on('zoomanim',function(ev){sync(ev.center,ev.zoom);});
     map.on('move zoom resize moveend zoomend',queueSync);
     map.on('moveend zoomend',saveView);
     // Restore after the application's initial fitBounds has completed.

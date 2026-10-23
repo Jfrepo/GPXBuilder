@@ -346,7 +346,7 @@ async function observeDomWriters(page) {
 
 async function noisyTenSeconds(f) {
   // Ten distinct observer deliveries containing 100 irrelevant child changes,
-  // followed by the real 250ms Save and 1s status writers. No timer is mocked out.
+  // followed by the real 1s status writer. No timer is mocked out.
   for (let round = 0; round < 10; round++) {
     await f.page.evaluate(round => {
       let noise = document.getElementById('synthetic-traffic-noise');
@@ -367,7 +367,7 @@ async function noteText(f, expected) {
 }
 
 for (const visible of [false, true]) {
-  test('full editor: stable shared note stays quiet with real Save timers while ' + (visible ? 'visible' : 'hidden'), { timeout: 30000 }, async t => {
+  test('full editor: stable shared note stays quiet with event-driven Save state while ' + (visible ? 'visible' : 'hidden'), { timeout: 30000 }, async t => {
     const f = await fixture(t);
     assert.equal(f.requests('shared').length, 1, 'Boot must use exactly one canonical shared-list request');
     if (visible) {
@@ -379,10 +379,10 @@ for (const visible of [false, true]) {
     const requestsBefore = f.requests('shared').length, allRequestsBefore = f.model.requests.length;
     await observeDomWriters(f.page);
     await noisyTenSeconds(f);
-    assert.equal(f.requests('shared').length, requestsBefore, 'Irrelevant DOM mutations and the real Save/status timers must add zero shared requests');
+    assert.equal(f.requests('shared').length, requestsBefore, 'Irrelevant DOM mutations and the real status timer must add zero shared requests');
     assert.equal(f.model.requests.length, allRequestsBefore, 'Irrelevant DOM churn must not initiate any other API request either');
     const dom = await f.page.evaluate(() => window.__trafficDom);
-    assert.ok(dom.saveWrites >= 36, 'The actual 250ms Save text writer must run throughout the observation window');
+    assert.equal(dom.saveWrites, 0, 'An unchanged editor must not rewrite Save state periodically');
     assert.equal(dom.noteWrites, 0, 'An unchanged note must not be rewritten into its own observer');
     assert.equal(f.model.peak.shared, 1);
     assert.deepEqual(f.writes(), [], 'Decoration must never upload, publish or delete anything');
@@ -432,7 +432,7 @@ test('full editor: unresolved shared response stays single-flight through repeat
   assert.equal(f.requests('shared').length, 1, 'All repeated refreshes must join the unresolved canonical shared request');
   assert.equal(f.model.active.shared, 1);
   assert.equal(f.model.peak.shared, 1);
-  assert.ok((await f.page.evaluate(() => window.__trafficDom.saveWrites)) >= 36);
+  assert.equal(await f.page.evaluate(() => window.__trafficDom.saveWrites), 0);
   f.release('shared');
   await observed(() => f.requests('shared').length >= 2 && f.requests('shared')[1].settled);
   await noteText(f, 'Synthetic note after invalidation');
