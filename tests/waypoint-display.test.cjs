@@ -20,7 +20,7 @@ const rows=names.map((name,i)=>({id:'synthetic-'+i,name,icon:i?'trail':'parking'
 let browser;
 test.before(async()=>{browser=await chromium.launch({headless:true,...(fs.existsSync('/usr/bin/chromium')?{executablePath:'/usr/bin/chromium'}:{}),args:['--no-sandbox']});});
 test.after(async()=>{await browser?.close();});
-async function fixture(t,mobile=false){
+async function fixture(t,mobile=false,animated=false){
  const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:800},hasTouch:mobile,isMobile:mobile});t.after(()=>context.close());
  const page=await context.newPage(),errors=[];page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',route=>{
@@ -32,12 +32,12 @@ async function fixture(t,mobile=false){
  await page.evaluate(({rows,key})=>localStorage.setItem(key,JSON.stringify(rows)),{rows,key});
  async function install(){
  await page.addScriptTag({content:leafletJs});
- await page.evaluate(()=>{
+ await page.evaluate((animated)=>{
   window.markers=[];window.syntheticTrack={id:'synthetic-track',name:'Geometry fixture',type:'track',segments:[[{lat:1,lon:2,ele:30,time:'2026-01-01T00:00:00Z'},{lat:1.01,lon:2,ele:31},{lat:1.01,lon:2.01,ele:32}]],color:'#123456'};window.state={mode:'view',library:[syntheticTrack],sharedPreview:false};window.els={trackList:document.getElementById('library')};
   window.renderLibrary=()=>{};window.setLibraryView=()=>{};
-  window.map=L.map('mapDiv',{zoomControl:false,attributionControl:false,zoomAnimation:false,fadeAnimation:false,markerZoomAnimation:false}).setView([1,2.0005],17);
+  window.map=L.map('mapDiv',{zoomControl:false,attributionControl:false,zoomAnimation:animated,fadeAnimation:false,markerZoomAnimation:animated}).setView([1,2.0005],17);
 
- });
+ },animated);
  await page.addScriptTag({content:exportCode});
  await page.evaluate(()=>{window.geometryBefore=JSON.stringify(state.library);window.gpxBefore=buildGpx(syntheticTrack);});
  await page.addScriptTag({content:feature});await page.addScriptTag({content:shared});
@@ -113,5 +113,76 @@ for(const mobile of [false,true])test(`${mobile?'mobile tap':'desktop hover/clic
  assert.match(await p.evaluate(()=>buildGpx(syntheticTrack)),/<trkpt lat="1.01" lon="2.01">/);
  assert.equal(await p.evaluate(()=>state.mode),'view');
  await f.reload();assert.equal(await p.locator('.mancardo-waypoint-dot svg').count(),2);
+ assert.deepEqual(f.errors,[]);
+});
+
+// Exercise the real Google/Leaflet synchronization client against an independently
+// animated renderer. The adapter models Google's delayed rendering; it makes no
+// network calls and is not a substitute for a live Google Maps acceptance check.
+const googleFeature=fs.readFileSync(path.join(root,'worker-google-preview.js'),'utf8').match(/const GOOGLE_PREVIEW_FEATURE = String.raw`([\s\S]*?)`;/)[1].replace('var googleTrackData=new google.maps.Data({map:googleMap});','window.__mancardoGoogleMap=googleMap;var googleTrackData=new google.maps.Data({map:googleMap});');
+async function installBasemapAdapter(p){
+ await p.evaluate(()=>{
+  document.getElementById('googleBaseMap').remove();
+  const toggle=document.createElement('div');document.body.appendChild(toggle);
+  for(const key of ['layerStreetsBtn','layerTerrainBtn']){els[key]=document.createElement('button');toggle.appendChild(els[key]);}
+  window.streetsLayer=L.layerGroup();window.terrainLayer=L.layerGroup();window.render=()=>{};
+  window.trackLayerGroup=L.layerGroup([L.polyline([[1,2],[1,2.001]],{opacity:1})]).addTo(map);
+  class LatLng{constructor(lat,lng){this.a=lat;this.b=lng;}lat(){return this.a;}lng(){return this.b;}}
+  class Basemap{
+   constructor(div,o){this.div=div;this.center=o.center;this.zoom=o.zoom;this.visualCenter=o.center;this.visualZoom=o.zoom;this.overlays=[];this.points=[];window.basemap=this;}
+   getCenter(){return new LatLng(this.center.lat,this.center.lng);}getZoom(){return this.zoom;}
+   setCenter(c){this.center=c;this.animate();}setZoom(z){this.zoom=z;this.animate();}
+   setMapTypeId(t){this.type=t;this.draw();}
+   project(ll){const point=L.CRS.EPSG3857.latLngToPoint(L.latLng(ll.lat(),ll.lng()),this.visualZoom);const c=L.CRS.EPSG3857.latLngToPoint(this.visualCenter,this.visualZoom);return {x:point.x-c.x+this.div.clientWidth/2,y:point.y-c.y+this.div.clientHeight/2};}
+   animate(){clearTimeout(this.timer);cancelAnimationFrame(this.frame);const from=this.visualZoom,c=this.visualCenter;this.timer=setTimeout(()=>{const start=performance.now();const tick=now=>{const t=Math.min(1,(now-start)/180);this.visualZoom=from+(this.zoom-from)*t;this.visualCenter={lat:c.lat+(this.center.lat-c.lat)*t,lng:c.lng+(this.center.lng-c.lng)*t};this.draw();if(t<1)this.frame=requestAnimationFrame(tick);};this.frame=requestAnimationFrame(tick);},100);}
+   draw(){for(const {el,ll}of this.points){const p=this.project(ll);el.style.transform='translate('+p.x+'px,'+p.y+'px)';}for(const o of this.overlays)o.draw();}
+  }
+  class Data{
+   constructor(o){this.map=o.map;this.features=[];}setStyle(){}forEach(fn){this.features.forEach(fn);}remove(f){this.features=this.features.filter(x=>x!==f);}
+   add(f){this.features.push(f);if(f.geometry.points){const el=document.createElement('div');el.className='synthetic-track-anchor';el.style.cssText='position:absolute;width:0;height:0;left:0;top:0;box-shadow:0 0 0 3px #1262a3';this.map.div.appendChild(el);this.map.points.push({el,ll:f.geometry.points[0]});this.map.draw();}return f;}
+  }
+  Data.Feature=class{constructor(o){Object.assign(this,o);}getProperty(k){return this.properties[k];}};
+  Data.LineString=class{constructor(p){this.points=p;}};Data.Point=class{};
+  class OverlayView{setMap(m){this.map=m;if(m){m.overlays.push(this);this.onAdd();this.draw();}else this.onRemove();}getProjection(){return {fromLatLngToContainerPixel:ll=>this.map.project(ll)};}}
+  window.google={maps:{Map:Basemap,Data,LatLng,OverlayView,SymbolPath:{CIRCLE:0},event:{trigger(){}}}};
+ });
+ await p.addScriptTag({content:googleFeature});
+ await p.waitForTimeout(400);
+}
+for(const mobile of [false,true])test(`${mobile?'mobile':'desktop'} waypoint tips stay aligned with the basemap track anchor through delayed animated zoom, pan and layer changes`,async t=>{
+ const f=await fixture(t,mobile,true),p=f.page;await installBasemapAdapter(p);
+ const result=await p.evaluate(async()=>{
+  const original=localStorage.getItem('mancardo_saved_waypoints_v1'),samples=[];
+  function sample(){const marker=document.querySelector('.mancardo-saved-waypoint-marker').getBoundingClientRect(),anchor=document.querySelector('.synthetic-track-anchor').getBoundingClientRect();samples.push(Math.hypot(marker.x+marker.width/2-anchor.x,marker.bottom-anchor.y));}
+  async function frames(ms){const end=performance.now()+ms;do{await new Promise(requestAnimationFrame);sample();}while(performance.now()<end);}
+  for(const zoom of [16,18,17]){map.setZoom(zoom,{animate:true});await frames(650);}
+  map.panBy([70,-35],{animate:true,duration:.2});await frames(650);
+  for(const text of ['Terrain','Satellite','Hybrid','Roads']){[...document.querySelectorAll('button')].find(b=>b.textContent===text).click();await frames(80);}
+  sample();return {maxError:Math.max(...samples),settledError:samples.at(-1),unchanged:localStorage.getItem('mancardo_saved_waypoints_v1')===original};
+ });
+ assert.ok(result.maxError<2,'waypoint diverged from Google-rendered track anchor by '+result.maxError+'px');
+ assert.ok(result.settledError<2);assert.equal(result.unchanged,true);
+ console.log(JSON.stringify({alignment:mobile?'mobile':'desktop',...result}));
+ const marker=p.locator('.mancardo-saved-waypoint-marker').first();
+ assert.equal(await marker.evaluate(el=>!!el.closest('[aria-hidden="true"]')),false);
+ assert.equal(await marker.evaluate(el=>{const r=el.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===el;}),true);
+ await marker[mobile?'tap':'click']();
+ const popupError=await p.evaluate(async()=>{let max=0;const end=performance.now()+650;do{await new Promise(requestAnimationFrame);const m=document.querySelector('.mancardo-saved-waypoint-marker').getBoundingClientRect(),tip=document.querySelector('.leaflet-popup-tip-container').getBoundingClientRect();max=Math.max(max,Math.abs(m.x+m.width/2-tip.x-tip.width/2));}while(performance.now()<end);return max;});
+ assert.ok(popupError<2,'name popup detached from waypoint by '+popupError+'px');
+ // A neighbouring waypoint must not intercept the popup close control.
+ const popupOnTop=await p.evaluate(()=>{
+  const close=document.querySelector('.leaflet-popup-close-button').getBoundingClientRect(),bounds=map.getContainer().getBoundingClientRect();
+  const other=Object.values(map._layers).filter(m=>m instanceof L.Marker)[1],original=other.getLatLng();
+  other.setLatLng(map.containerPointToLatLng([close.x+close.width/2-bounds.x,close.y+close.height/2-bounds.y+21]));
+  const top=document.elementFromPoint(close.x+close.width/2,close.y+close.height/2);
+  const ok=!!top.closest('.mancardo-waypoint-popup');other.setLatLng(original);return ok;
+ });assert.equal(popupOnTop,true);
+
+ assert.equal(await p.locator('.mancardo-waypoint-name').textContent(),names[0]);
+ await p.keyboard.press('Escape');assert.equal(await marker.evaluate(el=>document.activeElement===el),true);
+ if(!mobile){await p.locator('h1').hover();await marker.hover();assert.equal(await p.locator('.mancardo-waypoint-name').textContent(),names[0]);}
+ if(process.env.WAYPOINT_ARTIFACT_DIR)await p.screenshot({path:path.join(process.env.WAYPOINT_ARTIFACT_DIR,mobile?'aligned-mobile.png':'aligned-desktop.png'),fullPage:true});
+ await p.evaluate(()=>map.setZoom(16,{animate:true}));assert.equal(await p.locator('.mancardo-waypoint-name').count(),0);
+ assert.equal(await p.evaluate(()=>JSON.stringify(state.library)===geometryBefore&&buildGpx(syntheticTrack)===gpxBefore),true);
  assert.deepEqual(f.errors,[]);
 });
