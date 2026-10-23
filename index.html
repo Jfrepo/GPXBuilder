@@ -303,6 +303,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
             <button class="icon-btn tool-icon" id="movePointBtn" disabled aria-label="Move point" data-tooltip="Move point" title="Move point">✥</button>
             <button class="icon-btn tool-icon" id="extendTrackBtn" disabled aria-label="Extend Track" data-tooltip="Extend Track" title="Extend Track"><svg class="tool-svg" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><rect x="9.2" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><rect x="15.4" y="13.5" width="3.4" height="3.4" rx=".4" fill="currentColor"/><path d="M25.5 5.5c-2.8 0-5 2.1-5 4.8 0 3.7 5 8.5 5 8.5s5-4.8 5-8.5c0-2.7-2.2-4.8-5-4.8zm0 2.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z" fill="currentColor"/></svg></button>
             <button class="icon-btn primary hidden tool-icon" id="completeChangeBtn" aria-label="Complete Change" data-tooltip="Complete Change" title="Complete Change">✓</button>
+            <button class="icon-btn hidden" id="cancelChangeBtn" aria-label="Cancel edit" title="Discard this edit">Cancel</button>
           </div>
           <div class="grp">
             <button class="icon-btn danger tool-icon" id="deletePointBtn" disabled aria-label="Delete point" data-tooltip="Delete point" title="Delete point">⊖</button>
@@ -396,7 +397,7 @@ var els = {};
  "fileInput","importBtn","saveBtn",
  "mapWrap","desktopToolbarHost","modeBanner","finishDrawBtn","layerStreetsBtn","layerTerrainBtn","overlayPanel","slopeOverlayToggle","slopeReveal","slopeLegend","radarOverlayToggle","radarOpacity","radarCredit","radarControls","radarMode","radarPrevBtn","radarPlayBtn","radarNextBtn","radarTime",
  "statName","statDist","statPoints","statSegs","statElev","statSel",
- "splitAfterBtn","joinNextBtn","joinToPointBtn","movePointBtn","extendTrackBtn","completeChangeBtn","deletePointBtn","deleteSegBtn",
+ "splitAfterBtn","joinNextBtn","joinToPointBtn","movePointBtn","extendTrackBtn","completeChangeBtn","cancelChangeBtn","deletePointBtn","deleteSegBtn",
  "reverseBtn","undoBtn","redoBtn","exportBtn","deleteTrackBtn",
  "pointsToggle","pointsWrap","pointsBody",
  "nameOverlay","nameDialogTitle","nameInput","nameHelp","nameCancelBtn","nameSaveBtn",
@@ -1053,6 +1054,90 @@ map.on('click', function(ev){
   }
 });
 
+// ---------- cancellable editor sessions ----------
+// Only the working copy is restored. Library rows and asynchronous save queues
+// are never rolled back, cleared or re-published by Cancel.
+var editSession=null;
+var editSaveState={capture:function(){return false;},restore:function(){}};
+function editLibraryRow(id,stored){
+  if(!id)return 'null';
+  var rows=stored?JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'):state.library;
+  return JSON.stringify(rows.find(function(t){return t.id===id;})||null);
+}
+function mayLeaveEdit(){
+  if(!editSession)return true;
+  window.alert('Finish or cancel the current edit first. Complete Change keeps your changes unsaved; Cancel discards only this edit.');
+  return false;
+}
+function beginTrackEdit(isNew,keepHistory){
+  if(editSession)return true;
+  if(window.mancardoEditDeletionPending&&window.mancardoEditDeletionPending()){window.alert('A confirmed deletion is still finishing. Wait for it to finish before editing.');return false;}
+  sharedPreviewRequest++;
+  var previousId=state.currentId,stored;
+  try{stored=editLibraryRow(previousId,true);}catch(e){stored=undefined;}
+  editSession={isNew:isNew,trackId:state.current&&state.current.id,editor:state.current,
+    previousId:previousId,library:editLibraryRow(previousId,false),stored:stored,
+    current:deepClone(state.current),selection:deepClone(state.selection),
+    pointHighlights:deepClone(state.pointHighlights||[]),pointHighlightAnchor:deepClone(state.pointHighlightAnchor||null),pointHover:deepClone(state.pointHover||null),
+    history:state.history.slice(),future:state.future.slice(),
+    sharedPreview:state.sharedPreview,sharedPreviewMeta:deepClone(state.sharedPreviewMeta),
+    historyIsolated:!keepHistory,dirty:editSaveState.capture(),geometry:JSON.stringify(state.current&&state.current.segments)};
+  if(!keepHistory){state.history=[];state.future=[];}
+  updateModeBanner();
+  return true;
+}
+function validTrackEdit(){
+  var session=editSession;
+  if(!session)return false;
+  var valid=state.current&&state.current.id===session.trackId&&state.current===session.editor;
+  try{
+    valid=valid&&session.stored!==undefined&&editLibraryRow(session.previousId,false)===session.library&&editLibraryRow(session.previousId,true)===session.stored;
+    if(session.isNew)valid=valid&&!state.library.some(function(t){return t.id===session.trackId;})&&editLibraryRow(session.trackId,true)==='null';
+  }catch(e){valid=false;}
+  if(!valid)window.alert('The saved track or editor changed outside this edit. Your edit has been kept. Export your work before reconciling the newer track; Cancel will not overwrite saved changes.');
+  return !!valid;
+}
+function removeSessionDraft(id){
+  try{var raw=localStorage.getItem(AUTO_DRAFT_KEY);if(raw&&JSON.parse(raw).id===id)localStorage.removeItem(AUTO_DRAFT_KEY);}catch(e){}
+}
+function endTrackEdit(){
+  if(editSession){if(editSession.historyIsolated)state.history=editSession.history.concat(state.history).slice(-60);editSession=null;}
+  state.mode='view';state.extend=null;state.joinFrom=null;
+  updateModeBanner();
+}
+function cancelTrackEdit(){
+  if(!editSession)return false;
+  if(!validTrackEdit())return false;
+  var session=editSession;
+  var changed=JSON.stringify(state.current.segments)!==session.geometry;
+  if(changed&&!window.confirm(session.isNew?'Discard this new unsaved track?':'Discard changes made in this edit? Earlier unsaved changes and pending saves will be kept.'))return false;
+  if(!validTrackEdit())return false;
+  if(session.isNew)removeSessionDraft(session.trackId);
+  sharedPreviewRequest++;
+  state.current=deepClone(session.current);state.currentId=session.previousId;
+  state.pointHighlights=session.pointHighlights;state.pointHighlightAnchor=session.pointHighlightAnchor;state.pointHover=session.pointHover;
+  state.selection=deepClone(session.selection);state.history=session.history;state.future=session.future;
+  state.sharedPreview=session.sharedPreview;state.sharedPreviewMeta=session.sharedPreviewMeta;
+  editSession=null;state.mode='view';state.extend=null;state.joinFrom=null;
+  closeNameDialog();editSaveState.restore(session.dirty);
+  updateModeBanner();render();renderLibrary();
+  return true;
+}
+function saveTrackEdit(name){
+  if(!validTrackEdit())return false;
+  var session=editSession,item=deepClone(state.current);
+  item.name=name;item.updatedAt=new Date().toISOString();item.stats=computeStats(item);
+  var next=state.library.slice(),index=next.findIndex(function(t){return t.id===item.id;});
+  if(index<0)next.unshift(item);else next[index]=item;
+  // Establish durable local success before exposing the new row to any scanner.
+  // Cloud acknowledgement remains asynchronous and does not extend Cancel's scope.
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next));}catch(e){window.alert('This edit could not be saved on this device. Your edit is still open; try Save again or Cancel.');return false;}
+  state.current=deepClone(item);state.currentId=item.id;state.library=next;
+  endTrackEdit();closeNameDialog();removeSessionDraft(session.trackId);
+  persistLibrary();scheduleCloudAutosave();renderLibrary();render();
+  return true;
+}
+
 // ---------- history ----------
 function pushHistory(){
   if(!state.current) return;
@@ -1063,12 +1148,14 @@ function pushHistory(){
 }
 function undo(){
   if(!state.current || !state.history.length) return;
+  if(!beginTrackEdit(false,true))return false;
   state.future.push(JSON.stringify(state.current.segments));
   state.current.segments = JSON.parse(state.history.pop());
   state.selection = null; render();
 }
 function redo(){
   if(!state.current || !state.future.length) return;
+  if(!beginTrackEdit(false,true))return false;
   state.history.push(JSON.stringify(state.current.segments));
   state.current.segments = JSON.parse(state.future.pop());
   state.selection = null; render();
@@ -1220,6 +1307,7 @@ function fetchSharedGpx(meta){
   return task;
 }
 function previewSharedTrack(meta){
+  if(!mayLeaveEdit())return false;
   var requestId=++sharedPreviewRequest;
   fetchSharedGpx(meta).then(function(gpx){
     if(requestId!==sharedPreviewRequest)return;
@@ -1294,7 +1382,7 @@ function publishTrackToShared(id){
     return r.json().catch(function(){return {};}).then(function(data){if(!r.ok){var err=new Error(data.error||('HTTP '+r.status));err.status=r.status;err.data=data;throw err;}return data;});
   }).then(function(data){
     item.sharedId=data.id;item.sharedBaseVersion=data.version;item.sharedBaseModifiedAt=data.modifiedAt;item.sharedBaseModifiedBy=data.modifiedBy;item.updatedAt=new Date().toISOString();
-    if(state.currentId===item.id)state.current=deepClone(item);
+    if(state.currentId===item.id&&!editSession)state.current=deepClone(item);
     persistLibrary();renderLibrary();loadSharedLibrary();
     alert('Published to Shared Library as v'+data.version+' · '+data.modifiedBy+'.');
   }).catch(function(e){
@@ -1345,6 +1433,8 @@ function renderLibrary(){
   });
 }
 function loadItem(id){
+  if(!mayLeaveEdit())return false;
+  sharedPreviewRequest++;
   state.sharedPreview=false;state.sharedPreviewMeta=null;
   var item = state.library.find(function(t){ return t.id===id; });
   if(!item) return;
@@ -1357,24 +1447,33 @@ function loadItem(id){
   renderLibrary();
 }
 function startNewRoute(){
+  if(!mayLeaveEdit())return false;
+  if(!beginTrackEdit(true))return false;
   state.sharedPreview=false;state.sharedPreviewMeta=null;
   var center = map.getCenter();
   state.current = {id:uid(), type:'route', name:'New route', color:'#2563a8', segments:[[]], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
   state.currentId = null; state.selection = null; state.history=[]; state.future=[]; state.extend=null;
-  state.mode='draw'; updateModeBanner();
+  state.mode='draw';
+  editSession.trackId=state.current.id;
+  editSession.editor=state.current;
+  state.pointHighlights=[];state.pointHighlightAnchor=null;state.pointHover=null;
+  editSession.geometry=JSON.stringify(state.current.segments);
+  updateModeBanner();
   render();
   renderLibrary();
 }
 function updateModeBanner(){
-  var active = state.mode==='draw' || state.mode==='move' || state.mode==='extend' || state.mode==='joinpoint';
+  var active = !!editSession || state.mode==='draw' || state.mode==='move' || state.mode==='extend' || state.mode==='joinpoint';
   els.modeBanner.classList.toggle('hidden', !active);
   var msg = els.modeBanner.querySelector('span');
   if(state.mode==='joinpoint') msg.textContent='Join To Point: select the destination point';
   else if(state.mode==='move') msg.textContent='Move point: tap the new location on the map';
   else if(state.mode==='extend') msg.textContent='Extend Track: tap map to add connected points';
-  else msg.textContent='Drawing mode — click the map to add points';
-  els.finishDrawBtn.textContent = (state.mode==='move' || state.mode==='joinpoint') ? 'Cancel' : 'Complete Change';
-  els.completeChangeBtn.classList.toggle('hidden', !(state.mode==='draw' || state.mode==='extend'));
+  else if(state.mode==='draw') msg.textContent='Drawing mode — click the map to add points';
+  else msg.textContent='Editing track — Complete Change keeps changes unsaved; Cancel discards this edit';
+  els.finishDrawBtn.textContent = !editSession && (state.mode==='move' || state.mode==='joinpoint') ? 'Cancel' : 'Complete Change';
+  els.completeChangeBtn.classList.toggle('hidden', !editSession && !(state.mode==='draw' || state.mode==='extend'));
+  els.cancelChangeBtn.classList.toggle('hidden', !editSession);
 }
 
 function fitToTrack(){
@@ -1423,7 +1522,7 @@ function showTrackHitPopup(latlng){
   L.popup({closeButton:true,offset:[0,-4]}).setLatLng(latlng).setContent(box).openOn(map);return true;
 }
 function activateTrackFromMap(id){
-  if(id!==state.currentId)loadItem(id);
+  if(id!==state.currentId&&loadItem(id)===false)return;
   highlightTrackInLibrary(true);
 }
 // Development autosave: persist changed geometry before a browser refresh.
@@ -1436,6 +1535,7 @@ function scheduleCloudAutosave(){
   },5000);
 }
 function autosaveEditor(){
+  if(editSession)return;
   if(!state.current||state.sharedPreview)return;
   var item=state.current;
   if(!Array.isArray(item.segments))return;
@@ -1486,7 +1586,7 @@ function render(){
         var p=seg[i],isEnd=(i===0||i===seg.length-1),r=isEnd?5:3;
         (function(itemId,si,i,p,r,colour){
           var m=L.circleMarker([p.lat,p.lon],{radius:r,color:'#fff',weight:1,fillColor:colour,fillOpacity:.9}).addTo(trackLayerGroup);
-          m.on('click',function(ev){L.DomEvent.stopPropagation(ev);if(state.mode==='joinpoint'){completeJoinToLibraryPoint(itemId,si,i);return;}loadItem(itemId);state.selection={seg:si,pt:i};render();highlightTrackInLibrary(true);});
+          m.on('click',function(ev){L.DomEvent.stopPropagation(ev);if(state.mode==='joinpoint'){completeJoinToLibraryPoint(itemId,si,i);return;}if(loadItem(itemId)===false)return;state.selection={seg:si,pt:i};render();highlightTrackInLibrary(true);});
         })(item.id,si,i,p,r,colour);
       }
     });
@@ -1564,13 +1664,13 @@ function splitAfter(){
   state.current.updatedAt=new Date().toISOString();
   state.current.stats=computeStats(state.current);
 
-  if(state.currentId){
+  if(state.currentId&&!editSession){
     var li=state.library.findIndex(function(t){return t.id===state.currentId;});
     if(li>=0)state.library[li]=deepClone(state.current);
     else state.library.unshift(deepClone(state.current));
   }
   state.selection=null;state.future=[];state.extend=null;
-  persistLibrary();renderLibrary();render();
+  if(editSession){state.mode='view';updateModeBanner();}else persistLibrary();renderLibrary();render();
 }
 function trackEndpointInfo(item){
   var segs=(item&&item.segments)||[],first=null,last=null;
@@ -1586,6 +1686,7 @@ function selectedSegmentEndpoint(){
   return null;
 }
 function startJoinToPoint(){
+  if(!mayLeaveEdit())return false;
   var selected=selectedSegmentEndpoint();if(!selected||state.mode!=='view')return;
   state.joinFrom={trackId:state.currentId||state.current.id,seg:selected.seg,pt:state.selection.pt,side:selected.side};
   state.mode='joinpoint';updateModeBanner();refreshToolbar();
@@ -1636,9 +1737,9 @@ function completeJoinToPoint(targetSeg,targetPt){
     state.current.segments[keep]=joined;state.current.segments.splice(drop,1);
   }
   state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
-  if(state.currentId){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
+  if(state.currentId&&!editSession){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
   state.selection=null;state.future=[];state.extend=null;state.joinFrom=null;state.mode='view';
-  persistLibrary();renderLibrary();updateModeBanner();render();
+  if(editSession){state.mode='view';updateModeBanner();}else persistLibrary();renderLibrary();updateModeBanner();render();
 }
 function joinNext(){
   var selected=selectedSegmentEndpoint();if(!selected||!state.current)return;
@@ -1648,8 +1749,8 @@ function joinNext(){
     var first=seg[0],last=seg[seg.length-1];
     if(first.lat!==last.lat||first.lon!==last.lon)seg.push(deepClone(first));
     state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
-    if(state.currentId){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
-    state.selection=null;state.future=[];state.extend=null;persistLibrary();renderLibrary();render();return;
+    if(state.currentId&&!editSession){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
+    state.selection=null;state.future=[];state.extend=null;if(editSession){state.mode='view';updateModeBanner();}else persistLibrary();renderLibrary();render();return;
   }
   var best=null;
   state.current.segments.forEach(function(seg,si){
@@ -1670,12 +1771,13 @@ function joinNext(){
   var keep=Math.min(selected.seg,best.seg),drop=Math.max(selected.seg,best.seg);
   state.current.segments[keep]=joined;state.current.segments.splice(drop,1);
   state.current.updatedAt=new Date().toISOString();state.current.stats=computeStats(state.current);
-  if(state.currentId){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
-  state.selection=null;state.future=[];state.extend=null;persistLibrary();renderLibrary();render();
+  if(state.currentId&&!editSession){var li=state.library.findIndex(function(t){return t.id===state.currentId;});if(li>=0)state.library[li]=deepClone(state.current);}
+  state.selection=null;state.future=[];state.extend=null;if(editSession){state.mode='view';updateModeBanner();}else persistLibrary();renderLibrary();render();
 }
 function deletePoint(){
   if(!state.current||!state.selection) return;
   var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
+  if(!beginTrackEdit(false))return false;
   pushHistory();
   seg.splice(pi,1);
   if(seg.length===0) state.current.segments.splice(si,1);
@@ -1684,6 +1786,7 @@ function deletePoint(){
 }
 function deleteSegment(){
   if(!state.current||!state.selection) return;
+  if(!beginTrackEdit(false))return false;
   pushHistory();
   state.current.segments.splice(state.selection.seg,1);
   if(state.current.segments.length===0) state.current.segments.push([]);
@@ -1692,17 +1795,20 @@ function deleteSegment(){
 }
 function movePoint(){
   if(!state.current || !state.selection) return;
+  if(!beginTrackEdit(false))return false;
   state.mode='move'; updateModeBanner(); refreshToolbar();
 }
 function extendTrack(){
   if(!state.current || !state.selection) return;
   var si=state.selection.seg, pi=state.selection.pt, seg=segAt(si);
   if(!seg || (pi!==0 && pi!==seg.length-1)) return;
+  if(!beginTrackEdit(false))return false;
   state.extend={seg:si, atStart:pi===0};
   state.mode='extend'; updateModeBanner(); refreshToolbar();
 }
 function reverseTrack(){
   if(!state.current) return;
+  if(!beginTrackEdit(false))return false;
   pushHistory();
   state.current.segments = state.current.segments.slice().reverse().map(function(s){ return s.slice().reverse(); });
   state.selection=null;
@@ -1792,10 +1898,11 @@ function openNameDialog(opts){
   els.nameOverlay.dataset.mode = opts.mode;
 }
 function closeNameDialog(){ els.nameOverlay.classList.add('hidden'); }
-els.nameCancelBtn.onclick = closeNameDialog;
+els.nameCancelBtn.onclick = function(){closeNameDialog();if(editSession){state.mode=editSession.isNew?'draw':'view';updateModeBanner();render();}};
 els.nameSaveBtn.onclick = function(){
   var val = els.nameInput.value.trim();
-  if(!val) return;
+  if(!val) return false;
+  if(editSession)return saveTrackEdit(val);
   closeNameDialog();
   state.current.name = val;
   state.currentId = state.current.id;
@@ -1866,7 +1973,8 @@ els.deleteSelectedBtn.onclick = deleteSelectedTracks;
 
 // ---------- top buttons ----------
 els.saveBtn.onclick = function(){
-  if(!state.current) return;
+  if(!state.current) return false;
+  if(editSession&&state.currentId)return saveTrackEdit(state.current.name);
   if(state.currentId){
     state.current.updatedAt = new Date().toISOString();
     state.current.stats = computeStats(state.current);
@@ -1878,6 +1986,11 @@ els.saveBtn.onclick = function(){
 };
 els.newRouteBtn.onclick = startNewRoute;
 els.finishDrawBtn.onclick = function(){
+  if(editSession){
+    if(!validTrackEdit())return false;
+    if(!state.currentId){openNameDialog({title:'Name this route',value:state.current.name==='New route'?'':state.current.name,help:'Save this route, or return to editing and use Cancel to discard it.',mode:'save'});return;}
+    endTrackEdit();render();return;
+  }
   var wasDraw = state.mode==='draw';
   state.mode='view'; state.extend=null; state.joinFrom=null; updateModeBanner(); render();
   if(wasDraw && !state.currentId) openNameDialog({title:'Name this route', value: state.current.name==='New route'?'':state.current.name, help:'You can keep adding points later too.', mode:'save'});
@@ -1899,6 +2012,7 @@ els.joinToPointBtn.onclick = startJoinToPoint;
 els.movePointBtn.onclick = movePoint;
 els.extendTrackBtn.onclick = extendTrack;
 els.completeChangeBtn.onclick = function(){ els.finishDrawBtn.click(); };
+els.cancelChangeBtn.onclick = cancelTrackEdit;
 els.reverseBtn.onclick = reverseTrack;
 els.undoBtn.onclick = undo;
 els.redoBtn.onclick = redo;
@@ -1936,6 +2050,34 @@ setTimeout(function(){
   if(!state.current) map.setView([-32.5,147.0], 6);
 }, 100);
 window.addEventListener('resize', function(){ map.invalidateSize(); });
+
+// Persisted metadata/publication and navigation are separate actions. Require
+// the user to finish or discard the session before crossing those boundaries.
+(function installEditBoundaryGuards(){
+  function guarded(fn){return function(){if(!mayLeaveEdit())return false;return fn.apply(this,arguments);};}
+  setTrackColour=guarded(setTrackColour);setTrackVisible=guarded(setTrackVisible);
+  toggleDraft=guarded(toggleDraft);saveTrackNote=guarded(saveTrackNote);
+  renameTrack=guarded(renameTrack);publishTrackToShared=guarded(publishTrackToShared);
+  deleteSelectedTracks=guarded(deleteSelectedTracks);
+  els.deleteSelectedBtn.onclick=deleteSelectedTracks;
+  ['deleteTrackBtn','selectAllTracks','fileInput','importConfirmBtn'].forEach(function(key){
+    var prop=key==='deleteTrackBtn'||key==='importConfirmBtn'?'onclick':'onchange';els[key][prop]=guarded(els[key][prop]);
+  });
+  // Capture before injected note/publication/delete handlers can queue work.
+  function boundaryEvent(ev){
+    if(!editSession)return;
+    var target=ev.target&&ev.target.closest?ev.target.closest('#trackList,#sharedTrackList,#selectAllTracks,#deleteTrackBtn,#deleteSelectedBtn,#importBtn,#fileInput'):null;
+    if(!target)return;
+    if(ev.type==='input'&&ev.target.tagName==='TEXTAREA'){var card=ev.target.closest('[data-track-id]'),item=card&&state.library.find(function(t){return t.id===card.getAttribute('data-track-id');});if(item)ev.target.value=item.note||'';}
+    ev.preventDefault();ev.stopImmediatePropagation();mayLeaveEdit();
+  }
+  window.addEventListener('beforeunload',function(ev){if(editSession&&state.current&&JSON.stringify(state.current.segments)!==editSession.geometry){ev.preventDefault();ev.returnValue='';}});
+  document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&editSession&&!els.nameOverlay.classList.contains('hidden')){ev.preventDefault();els.nameCancelBtn.click();}});
+  document.addEventListener('click',boundaryEvent,true);
+  document.addEventListener('beforeinput',boundaryEvent,true);
+  document.addEventListener('input',boundaryEvent,true);
+  document.addEventListener('change',boundaryEvent,true);
+})();
 
 // ---------- boot ----------
 loadLibrary();

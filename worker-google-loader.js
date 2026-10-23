@@ -50,6 +50,7 @@ const SAVE_STATE_FEATURE = String.raw`
     btn.title=dirty?'Unsaved changes — click to save':'All changes saved';
   }
 
+  editSaveState={capture:function(){return forceDirty;},restore:function(value){forceDirty=value;updateSaveState();}};
   if(state.current&&state.currentId)rememberBaseline();
 
   if(typeof pushHistory==='function'){
@@ -64,7 +65,7 @@ const SAVE_STATE_FEATURE = String.raw`
   var baseLoadItem=loadItem;
   loadItem=function(){
     var result=baseLoadItem.apply(this,arguments);
-    if(state.current&&!state.sharedPreview)rememberBaseline();
+    if(result!==false&&state.current&&!state.sharedPreview)rememberBaseline();
     updateSaveState();
     return result;
   };
@@ -87,7 +88,7 @@ const SAVE_STATE_FEATURE = String.raw`
   els.saveBtn.onclick=function(){
     var existing=!!(state.current&&state.currentId);
     var result=baseSaveClick&&baseSaveClick.apply(this,arguments);
-    if(existing)rememberBaseline();
+    if(existing&&result!==false)rememberBaseline();
     updateSaveState();
     return result;
   };
@@ -96,7 +97,7 @@ const SAVE_STATE_FEATURE = String.raw`
     var baseNameSaveClick=els.nameSaveBtn.onclick;
     els.nameSaveBtn.onclick=function(){
       var result=baseNameSaveClick&&baseNameSaveClick.apply(this,arguments);
-      if(state.current&&state.currentId)rememberBaseline();
+      if(result!==false&&state.current&&state.currentId)rememberBaseline();
       updateSaveState();
       return result;
     };
