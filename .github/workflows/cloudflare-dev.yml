@@ -18,6 +18,7 @@ on:
       - 'scripts/fuel-snapshot/**'
       - 'tests/fuel-snapshot-acquisition.test.cjs'
       - 'tests/fuel-geofabrik-*'
+      - 'tests/fuel-moruya-test.cjs'
   workflow_dispatch:
     inputs:
       operation:
@@ -31,6 +32,7 @@ on:
           - fuel-provider
           - fuel-snapshot-acquire
           - fuel-geofabrik-acquire
+          - fuel-moruya-test
           - stage
           - verify
       measurement:
@@ -335,5 +337,30 @@ jobs:
         with:
           name: fuel-geofabrik-acquisition-${{ github.run_id }}
           path: fuel-geofabrik-acquisition/
+          if-no-files-found: warn
+          retention-days: 7
+
+  test-fuel-moruya:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev' && inputs.operation == 'fuel-moruya-test'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate Moruya test without provider requests
+        run: node --test tests/fuel-moruya-test.cjs tests/map-performance-development.test.cjs tests/release-safety.test.cjs
+      - name: Test Moruya 100km once with existing primary provider
+        run: node scripts/fuel-snapshot/moruya-test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuel-moruya-test-${{ github.run_id }}
+          path: fuel-moruya-test/
           if-no-files-found: warn
           retention-days: 7
