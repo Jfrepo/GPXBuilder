@@ -26,7 +26,7 @@ test('workflow keeps diagnostic isolated from all deployment and browser jobs',(
  const w=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
  assert.ok(w.includes("if: github.event_name == 'push' && (github.ref"));
  for(const operation of ['stage','diagnose','fuel-delivery'])assert.ok(w.includes("inputs.operation == '"+operation+"'"));
- const job=w.split('  diagnose-fuel-delivery:')[1];assert.ok(job);assert.doesNotMatch(job,/wrangler|npm |playwright|DEV_DB|release-map-performance-development.cjs/);
+ const job=w.split('  diagnose-fuel-delivery:')[1].split('  diagnose-fuel-provider:')[0];assert.ok(job);assert.doesNotMatch(job,/wrangler|npm |playwright|DEV_DB|release-map-performance-development.cjs/);
  assert.ok(w.includes("- 'scripts/diagnose-fuel-delivery.cjs'"));assert.ok(w.includes("- 'tests/fuel-delivery-diagnostic.test.cjs'"));
  const code=fs.readFileSync(path.join(__dirname,'../scripts/diagnose-fuel-delivery.cjs'),'utf8');
  assert.doesNotMatch(code,/method:\s*'(POST|PUT|PATCH|DELETE)'|spawnSync|console\./);assert.ok(code.includes("method:'GET',redirect:'manual'"));assert.ok(code.includes("verify(await api('/deployments'))"));

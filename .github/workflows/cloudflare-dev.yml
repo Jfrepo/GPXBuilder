@@ -13,6 +13,8 @@ on:
       - 'scripts/trace-map-performance-development.cjs'
       - 'scripts/diagnose-fuel-delivery.cjs'
       - 'tests/fuel-delivery-diagnostic.test.cjs'
+      - 'scripts/fuel-provider/**'
+      - 'tests/fuel-provider-diagnostic.test.cjs'
   workflow_dispatch:
     inputs:
       operation:
@@ -23,6 +25,7 @@ on:
         options:
           - diagnose
           - fuel-delivery
+          - fuel-provider
           - stage
           - verify
       measurement:
@@ -219,5 +222,54 @@ jobs:
         with:
           name: fuel-delivery-diagnostic-${{ github.run_id }}
           path: fuel-delivery-diagnostic.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  diagnose-fuel-provider:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev' && inputs.operation == 'fuel-provider'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 637af20b858659d8942cfcc1fc51050070cccb8f
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare pinned candidate and isolated browser fixtures
+        working-directory: candidate
+        run: |
+          npm ci --ignore-scripts
+          npx --no-install playwright install --with-deps chromium
+          test "$(git rev-parse HEAD)" = "637af20b858659d8942cfcc1fc51050070cccb8f"
+          node scripts/build-waypoint-development.cjs
+      - name: Verify diagnostic guards and intercepted browser fixtures
+        env:
+          CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+        run: node --test controller/tests/fuel-provider-diagnostic.test.cjs controller/tests/map-performance-development.test.cjs controller/tests/fuel-delivery-diagnostic.test.cjs controller/tests/release-safety.test.cjs
+      - name: Observe one bounded Sydney Fuel attempt without deployment
+        env:
+          CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+          CONTROLLER_ROOT: ${{ github.workspace }}/controller
+          FUEL_DIAGNOSTIC_EVIDENCE: ${{ github.workspace }}/fuel-provider-diagnostic.json
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEV_DB: ${{ secrets.CLOUDFLARE_DEV_D1_DATABASE_ID }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node controller/scripts/fuel-provider/run.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuel-provider-diagnostic-${{ github.run_id }}
+          path: fuel-provider-diagnostic.json
           if-no-files-found: warn
           retention-days: 7
