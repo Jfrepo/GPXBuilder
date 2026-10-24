@@ -15,6 +15,8 @@ on:
       - 'tests/fuel-delivery-diagnostic.test.cjs'
       - 'scripts/fuel-provider/**'
       - 'tests/fuel-provider-diagnostic.test.cjs'
+      - 'scripts/fuel-snapshot/**'
+      - 'tests/fuel-snapshot-acquisition.test.cjs'
   workflow_dispatch:
     inputs:
       operation:
@@ -26,6 +28,7 @@ on:
           - diagnose
           - fuel-delivery
           - fuel-provider
+          - fuel-snapshot-acquire
           - stage
           - verify
       measurement:
@@ -272,5 +275,30 @@ jobs:
         with:
           name: fuel-provider-diagnostic-${{ github.run_id }}
           path: fuel-provider-diagnostic.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  acquire-fuel-snapshot:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev' && inputs.operation == 'fuel-snapshot-acquire'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate acquisition contract without network
+        run: node --test tests/fuel-snapshot-acquisition.test.cjs tests/map-performance-development.test.cjs tests/release-safety.test.cjs
+      - name: Acquire one bounded public Sydney station snapshot
+        run: node scripts/fuel-snapshot/acquire.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuel-snapshot-acquisition-${{ github.run_id }}
+          path: fuel-snapshot-acquisition/
           if-no-files-found: warn
           retention-days: 7
