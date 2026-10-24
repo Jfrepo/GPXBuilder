@@ -17,6 +17,7 @@ on:
       - 'tests/fuel-provider-diagnostic.test.cjs'
       - 'scripts/fuel-snapshot/**'
       - 'tests/fuel-snapshot-acquisition.test.cjs'
+      - 'tests/fuel-geofabrik-*'
   workflow_dispatch:
     inputs:
       operation:
@@ -29,6 +30,7 @@ on:
           - fuel-delivery
           - fuel-provider
           - fuel-snapshot-acquire
+          - fuel-geofabrik-acquire
           - stage
           - verify
       measurement:
@@ -300,5 +302,37 @@ jobs:
         with:
           name: fuel-snapshot-acquisition-${{ github.run_id }}
           path: fuel-snapshot-acquisition/
+          if-no-files-found: warn
+          retention-days: 7
+
+  acquire-fuel-geofabrik:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev' && inputs.operation == 'fuel-geofabrik-acquire'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned offline PBF parser
+        run: python3 -m pip install osmium==4.3.2
+      - name: Validate acquisition and geometry without external data requests
+        run: |
+          node --test tests/fuel-geofabrik-acquisition.test.cjs tests/map-performance-development.test.cjs tests/release-safety.test.cjs
+          python3 tests/fuel-geofabrik-processing.test.py
+      - name: Acquire one dated NSW extract and retain only validated Sydney stations
+        run: node scripts/fuel-snapshot/geofabrik.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuel-geofabrik-acquisition-${{ github.run_id }}
+          path: fuel-geofabrik-acquisition/
           if-no-files-found: warn
           retention-days: 7
