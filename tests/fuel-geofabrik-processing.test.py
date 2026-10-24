@@ -28,6 +28,21 @@ class GeometryTests(unittest.TestCase):
     def test_empty_and_oversized_fail(self):
         with self.assertRaises(ValueError): self.run_xml('<node id="1" lat="-35" lon="150"><tag k="amenity" v="fuel"/></node>')
         with self.assertRaises(ValueError): self.run_xml(''.join('<node id="%s" lat="-33.86" lon="151.2"><tag k="amenity" v="fuel"/></node>' % i for i in range(1, 502)))
+    def test_processing_failure_retains_safe_phase_and_validation_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp); data = root / 'bad.osm'; receipt = root / 'source.json'; out = root / 'out'
+            timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            # Missing referenced geometry must fail closed, and no arbitrary tag text reaches diagnostic.
+            data = root / 'bad.osm.pbf'; header = osmium.io.Header(); header.set('osmosis_replication_timestamp',timestamp)
+            with osmium.SimpleWriter(str(data),header=header) as writer:
+                writer.add_way(osmium.osm.mutable.Way(id=1,nodes=[90,91],tags={'amenity':'fuel','name':'UNTRUSTED_PAYLOAD'}))
+            receipt.write_text('{}')
+            result = subprocess.run([sys.executable,str(pathlib.Path(p.__file__)),str(data),str(receipt),str(out)],capture_output=True,text=True)
+            self.assertEqual(result.returncode,1); self.assertEqual(result.stderr,'')
+            diagnostic = json.loads((out/'processing-diagnostic.json').read_text())
+            self.assertEqual(diagnostic['error'],'MISSING_NODE'); self.assertEqual(diagnostic['phase'],'node-dependencies')
+            self.assertNotIn('UNTRUSTED',json.dumps(diagnostic)); self.assertFalse((out/'sydney-v1.json').exists())
+
     def test_real_pbf_reader_header_and_snapshot_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp); data = root / 'fixture.osm.pbf'; receipt = root / 'source.json'; out = root / 'out'

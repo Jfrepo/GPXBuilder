@@ -18,14 +18,23 @@ async function download(out,request=fetch){
  catch(e){stream.cancel().catch(()=>{});throw e;}finally{fs.closeSync(fd);}
  return {url:URL,filename:NAME,bytes,md5,sha256:sha.digest('hex'),retrievedAt:new Date().toISOString()};
 }
+function processingResult(r,elapsedMs){
+ return {elapsedMs,exitStatus:Number.isInteger(r.status)?r.status:null,signal:['SIGTERM','SIGKILL','SIGSEGV','SIGABRT'].includes(r.signal)?r.signal:null,errorCode:r.error?(['ETIMEDOUT','ENOBUFS','ENOENT','EACCES'].includes(r.error.code)?r.error.code:'PROCESS_SPAWN_ERROR'):null};
+}
+function runProcessor(file,receipt,out,{timeout=300000,script=path.join(__dirname,'process-geofabrik.py')}={}){
+ const started=Date.now(),r=spawnSync('python3',[script,file,receipt,out],{encoding:'utf8',timeout,maxBuffer:1000000});
+ const result=processingResult(r,Date.now()-started);
+ fs.writeFileSync(path.join(out,'processing-result.json'),JSON.stringify(result,null,2)+'\n');
+ if(r.error||r.status!==0)throw Error('PROCESSING_FAILED');
+ return result;
+}
 async function main(){
  const out=path.resolve(process.env.SNAPSHOT_OUT||'fuel-geofabrik-acquisition');fs.mkdirSync(out,{recursive:true});const tmp=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'fuel-extract-'));
- try{const receipt=await download(tmp);fs.writeFileSync(path.join(tmp,'source.json'),JSON.stringify(receipt));
-  const r=spawnSync('python3',[path.join(__dirname,'process-geofabrik.py'),path.join(tmp,NAME),path.join(tmp,'source.json'),out],{encoding:'utf8',timeout:300000,maxBuffer:1000000});
-  if(r.error||r.status!==0)throw Error('PROCESSING_FAILED');
+ try{const receipt=await download(tmp);fs.writeFileSync(path.join(out,'source.json'),JSON.stringify(receipt,null,2)+'\n');
+  runProcessor(path.join(tmp,NAME),path.join(out,'source.json'),out);
   const snapshot=fs.readFileSync(path.join(out,'sydney-v1.json'));fs.writeFileSync(path.join(out,'acquisition-result.json'),JSON.stringify({acquired:true,source:receipt,snapshotSha256:crypto.createHash('sha256').update(snapshot).digest('hex')},null,2)+'\n');
  }catch(e){const codes=['INVALID_CHECKSUM','CHECKSUM_HTTP_ERROR','CHECKSUM_SIZE','EXTRACT_HTTP_ERROR','EXTRACT_SIZE','CHECKSUM_MISMATCH','PROCESSING_FAILED'];fs.writeFileSync(path.join(out,'acquisition-result.json'),JSON.stringify({acquired:false,error:codes.includes(e.message)?e.message:'ACQUISITION_FAILED'},null,2)+'\n');process.exitCode=1;}
  finally{fs.rmSync(tmp,{recursive:true,force:true});}
 }
-module.exports={checksum,download,NAME,URL,EXPECTED_BYTES,MAX_BYTES};
+module.exports={checksum,download,processingResult,runProcessor,NAME,URL,EXPECTED_BYTES,MAX_BYTES};
 if(require.main===module)main().catch(()=>{console.error('Extract acquisition failed; no validated snapshot.');process.exitCode=1;});

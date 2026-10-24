@@ -327,6 +327,7 @@ jobs:
         run: |
           node --test tests/fuel-geofabrik-acquisition.test.cjs tests/map-performance-development.test.cjs tests/release-safety.test.cjs
           python3 tests/fuel-geofabrik-processing.test.py
+          python3 tests/fuel-geofabrik-scale.py
       - name: Acquire one dated NSW extract and retain only validated Sydney stations
         run: node scripts/fuel-snapshot/geofabrik.cjs
       - uses: actions/upload-artifact@v4
