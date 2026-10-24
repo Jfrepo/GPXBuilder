@@ -67,3 +67,10 @@ test('workflow operation is isolated, pinned and excluded from push deployment',
  assert.ok(r.includes("await context.route('**/*'"));assert.ok(r.includes('req.frame().page()!==page'));assert.ok(r.includes('const redirects=await installRedirectGuard(page)'));
  assert.ok(r.includes("u.protocol==='https:'&&!u.port&&!u.username&&!u.password"));assert.ok(r.includes('await identity();if(await current()!==deployment)'));
 });
+
+test('workflow guard suite runs from the controller checkout for relative source reads',()=>{
+ const w=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
+ const step=w.split('      - name: Verify diagnostic guards and intercepted browser fixtures\n')[1].split('      - name:')[0];
+ assert.match(step,/^        working-directory: controller$/m);
+ assert.match(step,/^        run: node --test tests\/fuel-provider-diagnostic\.test\.cjs tests\/map-performance-development\.test\.cjs tests\/fuel-delivery-diagnostic\.test\.cjs tests\/release-safety\.test\.cjs$/m);
+});

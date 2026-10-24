@@ -252,9 +252,10 @@ jobs:
           test "$(git rev-parse HEAD)" = "637af20b858659d8942cfcc1fc51050070cccb8f"
           node scripts/build-waypoint-development.cjs
       - name: Verify diagnostic guards and intercepted browser fixtures
+        working-directory: controller
         env:
           CANDIDATE_ROOT: ${{ github.workspace }}/candidate
-        run: node --test controller/tests/fuel-provider-diagnostic.test.cjs controller/tests/map-performance-development.test.cjs controller/tests/fuel-delivery-diagnostic.test.cjs controller/tests/release-safety.test.cjs
+        run: node --test tests/fuel-provider-diagnostic.test.cjs tests/map-performance-development.test.cjs tests/fuel-delivery-diagnostic.test.cjs tests/release-safety.test.cjs
       - name: Observe one bounded Sydney Fuel attempt without deployment
         env:
           CANDIDATE_ROOT: ${{ github.workspace }}/candidate
