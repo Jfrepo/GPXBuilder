@@ -92,7 +92,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 6ac8fb56f3b74b1a2c96b187cc19d64442944e66
+          ref: ${{ inputs.operation == 'verify' && '6ac8fb56f3b74b1a2c96b187cc19d64442944e66' || '637af20b858659d8942cfcc1fc51050070cccb8f' }}
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -106,7 +106,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx --no-install playwright install --with-deps chromium
-          test "$(git rev-parse HEAD)" = "6ac8fb56f3b74b1a2c96b187cc19d64442944e66"
+          test "$(git rev-parse HEAD)" = "637af20b858659d8942cfcc1fc51050070cccb8f"
           npm run test:source
           npm run test:packaged-server
           npm run test:browser

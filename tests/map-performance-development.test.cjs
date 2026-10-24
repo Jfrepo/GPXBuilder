@@ -14,7 +14,7 @@ test('accepts only verifiable single-version traffic',()=>{assert.throws(()=>lat
 const fs=require('node:fs'),path=require('node:path');
 test('manual staging pins only the exact combined Fuel/Cancel candidate and never deploys preparation via push',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(workflow.includes("ref: 6ac8fb56f3b74b1a2c96b187cc19d64442944e66"));
+ assert.ok(workflow.includes("'637af20b858659d8942cfcc1fc51050070cccb8f' }}"));
  assert.ok(workflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'"));
  for(const file of ['scripts/release-map-performance-development.cjs','tests/map-performance-development.test.cjs'])assert.ok(workflow.includes("      - '"+file+"'"));
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
@@ -95,7 +95,8 @@ test('Combined preparation pins the qualified runtime and manifest in both stage
  assert.equal(PIN,'6ac8fb56f3b74b1a2c96b187cc19d64442944e66');
  assert.equal(MANIFEST,'ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4');
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.equal(workflow.split('ref: '+PIN).length-1,3);
+ assert.equal(workflow.split('ref: '+PIN).length-1,2);
+ assert.ok(workflow.includes("inputs.operation == 'verify' && '"+PIN+"'"));
 });
 test('delivered Cancel check verifies session, sole tick, modal UI and handlers',()=>{
  const spans=[
@@ -128,10 +129,11 @@ test('Cancel acceptance augments existing synthetic and real Google checks witho
 });
 const {validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE}=require('../scripts/release-map-performance-development.cjs');
 test('newer Development previews cannot be silently overwritten by this composition',()=>{
- assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':EXPECTED_PREVIOUS_MESSAGE}}));
- assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':PIN+' '+MANIFEST}}));
+ assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':EXPECTED_PREVIOUS_MESSAGE,'workers/tag':'fuel-cancel-6ac8fb56f3b7'}}));
+ assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':require('../scripts/release-map-performance-development.cjs').STAGE_MESSAGE,'workers/tag':'fuel-cancel-delete-637af20b8586'}}));
  assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':'newer-delete-dialog-preview'}}));
  assert.throws(()=>validatePreviousVersion({}));
+ assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':EXPECTED_PREVIOUS_MESSAGE,'workers/tag':'wrong'}}));
 });
 test('delivered Fuel verification rejects either old cache or old 3D implementation',()=>{
  const source='// Fuel data belongs to OSM\nreviewed cache and controls\n\n\nels.layerStreetsBtn.onclick';
@@ -171,4 +173,29 @@ test('verify-only is explicit and fails before any deploy; same delivery and acc
  assert.ok(controller.includes('if(verifyOnly)validateExistingVersion(after,deployed)'));
  assert.ok(controller.indexOf('if(verifyOnly){await verifyIdentity();')<controller.indexOf('evidence.acceptancePassed=true'));
  for(const check of ['validateCancelHtml(html,','validateFuelHtml(html,','validateBrowserEvidence(evidence.realGoogle)'])assert.ok(controller.includes(check));
+});
+
+const {candidateFor,STAGE_PIN,STAGE_MANIFEST,STAGE_MESSAGE,validateDeleteHtml}=require('../scripts/release-map-performance-development.cjs');
+test('stage pins combined Delete while verification and diagnostics retain exact existing Fuel',()=>{
+ assert.equal(STAGE_PIN,'637af20b858659d8942cfcc1fc51050070cccb8f');assert.equal(STAGE_MANIFEST,'92791139a357b74f373b948e8a50b8bd7cc3d9640bb17c2a15a0217db3260446');
+ assert.equal(candidateFor(false).pin,STAGE_PIN);assert.equal(candidateFor(false).message,STAGE_MESSAGE);
+ assert.equal(candidateFor(true).pin,PIN);assert.equal(candidateFor(true).manifest,MANIFEST);
+ assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':'227ec8853ef96f5de7b615f24b6748e9c96d912d bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f'}}));
+ const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
+ assert.ok(workflow.includes("ref: ${{ inputs.operation == 'verify' && '"+PIN+"' || '"+STAGE_PIN+"' }}"));
+});
+test('Delete delivered-code check rejects altered UI or authorization',()=>{
+ const source='<dialog id="libraryDeleteDialog">safe dialog</dialog>\n#libraryDeleteDialog{safe style}.dialog h3{';
+ const bridge='const DURABLE_DELETE_BRIDGE = String.raw`safe authorization`;';const html=source+'safe authorization';
+ assert.doesNotThrow(()=>validateDeleteHtml(html,source,bridge));
+ for(const text of ['safe dialog','safe style','safe authorization'])assert.throws(()=>validateDeleteHtml(html.replace(text,'old'),source,bridge));
+ assert.throws(()=>validateDeleteHtml(html,'unknown',bridge));assert.throws(()=>validateDeleteHtml(html,source,'unknown'));
+});
+test('Delete acceptance is bounded, stage-only and cannot reset an overall latency failure',()=>{
+ const c=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8');
+ assert.ok(c.includes('if(!verifyOnly){validateDeleteHtml('));
+ assert.ok(c.includes('--test-name-pattern=library delete dialog|dialog confirmation reads final'));
+ assert.ok(c.includes('timeout:60000'));assert.ok(c.includes('timeout:300000'));assert.ok(c.includes('timeout:180000'));
+ assert.ok(c.indexOf('evidence.deleteAcceptancePassed=true')<c.indexOf('validateBrowserEvidence(evidence.realGoogle)'));
+ assert.ok(c.indexOf('validateBrowserEvidence(evidence.realGoogle)')<c.indexOf('evidence.acceptancePassed=true'));
 });
