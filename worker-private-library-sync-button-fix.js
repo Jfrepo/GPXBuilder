@@ -15,16 +15,17 @@ const SYNC_BUTTON_FIX=String.raw`
       var chip=document.getElementById('mancardoPrivateSyncChip');
       var old=btn.textContent;
       btn.disabled=true;
-      btn.textContent='Checking…';
+      btn.textContent='Verifying sign-in…';
       if(msg)msg.textContent='Verifying your signed-in private account…';
-      if(chip){chip.dataset.state='syncing';chip.textContent='☁ Checking';}
+      if(chip){chip.dataset.state='syncing';chip.textContent='☁ Verifying sign-in…';}
       fetch('/api/private-library/health',{credentials:'include',cache:'no-store',headers:{accept:'application/json'}})
         .then(function(r){return r.json().catch(function(){return {};}).then(function(d){return {r:r,d:d};});})
         .then(function(x){
           var h=x.d||{};
           if(h.authenticated&&h.accountKey){
             if(account)account.textContent=h.accountLabel||'Private account';
-            if(msg)msg.textContent='Account verified. Starting private My Library sync…';
+            if(msg)msg.textContent='Signed in. Starting private My Library sync…';
+            if(chip){chip.dataset.state='syncing';chip.textContent='✓ Signed in · Syncing…';}
             try{sessionStorage.setItem('__mancardo_resume_private_sync__','1');}catch(e){}
             setTimeout(function(){location.reload();},250);
             return;
