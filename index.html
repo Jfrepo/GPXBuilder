@@ -773,6 +773,8 @@ setTimeout(function(){
   if(el){el.style.marginTop='0';el.style.clear='both';}
 },0);
 
+// Retain the original overlay for restoration; saved waypoints are independent.
+const fuelOverlayEnabled=false;
 var fuelLayer=L.layerGroup().addTo(map),fuelOn=false,fuelRequest=0,fuelRefreshTimer=null,fuelLastKey='',fuelLastAt=0;
 var FUEL_OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.nchc.org.tw/api/interpreter'];
 var fuelIcon=L.divIcon({className:'',html:'<div class="fuel-marker"></div>',iconSize:[14,14],iconAnchor:[7,7]});
@@ -781,7 +783,9 @@ var FuelControl=L.Control.extend({
   onAdd:function(){
     var btn=L.DomUtil.create('button','fuel-control-btn');btn.type='button';btn.textContent='Fuel';btn.title='Show active mapped fuel stations';btn.setAttribute('aria-label','Show or hide fuel stations');
     L.DomEvent.disableClickPropagation(btn);L.DomEvent.disableScrollPropagation(btn);
+    if(!fuelOverlayEnabled){btn.hidden=true;btn.disabled=true;btn.style.setProperty('display','none','important');}
     L.DomEvent.on(btn,'click',function(){
+      if(!fuelOverlayEnabled){fuelOn=false;clearTimeout(fuelRefreshTimer);fuelLayer.clearLayers();return;}
       fuelOn=!fuelOn;btn.classList.toggle('on',fuelOn);
       if(fuelOn){fuelLastKey='';refreshFuelStations();}else{fuelRequest++;fuelLayer.clearLayers();fuelLastKey='';btn.classList.remove('loading','error');}
     });
@@ -790,6 +794,7 @@ var FuelControl=L.Control.extend({
 });
 var fuelControl=new FuelControl();map.addControl(fuelControl);
 setTimeout(function(){
+  if(!fuelOverlayEnabled)return;
   var fuelEl=fuelControl.getContainer(),overlayEl=overlayToggleControl.getContainer();
   if(fuelEl&&overlayEl&&overlayEl.parentNode){
     overlayEl.parentNode.insertBefore(fuelEl,overlayEl.nextSibling);
@@ -817,12 +822,14 @@ function fuelPopup(t,lat,lon){
     '<br><span class="muted">Active mapped fuel POI · OpenStreetMap</span></div>';
 }
 function fetchFuelOverpass(q,index){
+  if(!fuelOverlayEnabled)return Promise.reject(new Error('Fuel overlay disabled'));
   index=index||0;if(index>=FUEL_OVERPASS.length)return Promise.reject(new Error('All fuel data servers unavailable'));
   var url=FUEL_OVERPASS[index]+'?data='+encodeURIComponent(q);
   return fetch(url,{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
     .catch(function(){return fetchFuelOverpass(q,index+1);});
 }
 function refreshFuelStations(){
+  if(!fuelOverlayEnabled){fuelOn=false;clearTimeout(fuelRefreshTimer);fuelRequest++;fuelLayer.clearLayers();return;}
   if(!fuelOn)return;
   clearTimeout(fuelRefreshTimer);
   fuelRefreshTimer=setTimeout(function(){

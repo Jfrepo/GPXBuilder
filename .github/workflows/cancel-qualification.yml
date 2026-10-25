@@ -1,7 +1,7 @@
-name: Cancel Edit Qualification
+name: Minimal Cancel Delete Fuel-off Qualification
 on:
   push:
-    branches: ['chatgpt/cancel-track-edit']
+    branches: ['release/minimal-cancel-delete-fuel-off']
 permissions:
   contents: read
 jobs:
@@ -27,12 +27,13 @@ jobs:
           npm run test:waypoints
           npm run test:map-performance
           npm run test:cancel
+          node --test tests/fuel-disabled.test.cjs
           node --test tests/waypoint-development-release.test.cjs
           node scripts/build-waypoint-development.cjs
           git diff --exit-code
       - uses: actions/upload-artifact@v4
         with:
-          name: cancel-development-${{ github.sha }}
+          name: minimal-development-${{ github.sha }}
           path: dist/waypoint-development/
           if-no-files-found: error
           retention-days: 7
