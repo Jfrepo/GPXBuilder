@@ -5,6 +5,12 @@ name: Deploy Mancardo to Cloudflare Workers
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Read-only baseline inspection or explicitly approved deployment
+        required: true
+        type: choice
+        default: preflight
+        options: [preflight, deploy]
       source_sha:
         description: Exact reviewed main commit SHA (40 lowercase hex characters)
         required: true
@@ -26,8 +32,35 @@ env:
   RELEASE_MANIFEST: ${{ inputs.manifest_sha256 }}
 
 jobs:
+  preflight:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'preflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/production-preflight.test.cjs
+      - name: Read current Production baseline only
+        run: node scripts/production-preflight.cjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-preflight-${{ github.sha }}
+          path: production-preflight-result.json
+          if-no-files-found: error
+          retention-days: 7
+
   qualify:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'deploy'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -62,7 +95,7 @@ jobs:
 
   deploy:
     needs: qualify
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'deploy'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Required reviewers/prevent-self-review and these approval variables are an
