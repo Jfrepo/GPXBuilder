@@ -14,6 +14,7 @@ const css=source.match(/const WAYPOINT_CSS = String.raw`([\s\S]*?)`;/)[1];
 const shared=fs.readFileSync(path.join(root,'worker-shared-waypoint-cloud.js'),'utf8').match(/const CLIENT=String.raw`([\s\S]*?)`;/)[1].replace(/<\/?script[^>]*>/g,'');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const exportCode=html.slice(html.indexOf('function esc(s)'),html.indexOf('function fmtDate(iso)'))+html.slice(html.indexOf('function buildGpx(item)'),html.indexOf('// ---------- Leaflet map ----------'));
+const selectionCode=html.slice(html.indexOf('function updateSelectAll(){'),html.indexOf('function setLibraryView(view)'));
 const key='mancardo_saved_waypoints_v1';
 const names=['Parking <img src=x onerror="window.injected=1"> & "ridge"','Second summit'];
 const rows=names.map((name,i)=>({id:'synthetic-'+i,name,icon:i?'trail':'parking',lat:1,lon:2+i/1000,visible:true,updatedAt:'2026-01-01T00:00:00Z'}));
@@ -24,7 +25,7 @@ async function fixture(t,mobile=false,animated=false){
  const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:800},hasTouch:mobile,isMobile:mobile});t.after(()=>context.close());
  const page=await context.newPage(),errors=[];page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',route=>{
-  if(route.request().url()==='http://waypoint.test/')return route.fulfill({contentType:'text/html',body:`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${css}<style>${leafletCss}</style><style>body{font:15px sans-serif;margin:20px;background:#f7f6f1}h1{font-size:21px}.hidden{display:none!important}#mapWrap{height:300px;position:relative;margin:16px 0}#googleBaseMap{position:absolute;inset:0;z-index:0;background:#e2e9dd}#mapDiv{height:300px;position:relative;z-index:1;background:transparent!important;border:1px solid #9ba894}#map>button{position:absolute;top:150px;background:none;border:0;padding:0}.fixture-info{position:absolute;top:25px;left:24px;max-width:280px;padding:16px;background:white;box-shadow:0 2px 8px #999;border-radius:8px;z-index:2}.fixture-info button{float:right}.track-item,.shared-item{padding:12px;background:white;border-bottom:1px solid #ddd}.track-row{display:flex;align-items:center;gap:8px}.ti-name{flex:1;overflow-wrap:anywhere}.ti-meta,.shared-item-meta{font-size:12px;color:#666;margin-top:5px}.overlay{position:fixed;inset:0;background:#fff9;z-index:5;padding:30px}.dialog{background:white;max-width:400px;padding:20px}.mancardo-waypoint-icon-choice{background:white}input[type=text]{width:90%;padding:8px;margin:8px 0}</style><h1>Saved waypoint interaction fixture</h1><p>Synthetic coordinates · real Leaflet over decorative basemap · no live data</p><div id="mapWrap"><div id="googleBaseMap" aria-hidden="true"></div><div id="mapDiv"></div></div><h2>My Library</h2><div id="library"></div><h2>Shared Library</h2><div id="sharedTrackList"></div>`});
+  if(route.request().url()==='http://waypoint.test/')return route.fulfill({contentType:'text/html',body:`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${css}<style>${leafletCss}</style><style>body{font:15px sans-serif;margin:20px;background:#f7f6f1}h1{font-size:21px}.hidden{display:none!important}#mapWrap{height:300px;position:relative;margin:16px 0}#googleBaseMap{position:absolute;inset:0;z-index:0;background:#e2e9dd}#mapDiv{height:300px;position:relative;z-index:1;background:transparent!important;border:1px solid #9ba894}#map>button{position:absolute;top:150px;background:none;border:0;padding:0}.fixture-info{position:absolute;top:25px;left:24px;max-width:280px;padding:16px;background:white;box-shadow:0 2px 8px #999;border-radius:8px;z-index:2}.fixture-info button{float:right}.track-item,.shared-item{padding:12px;background:white;border-bottom:1px solid #ddd}.track-row{display:flex;align-items:center;gap:8px}.ti-name{flex:1;overflow-wrap:anywhere}.ti-meta,.shared-item-meta{font-size:12px;color:#666;margin-top:5px}.overlay{position:fixed;inset:0;background:#fff9;z-index:5;padding:30px}.dialog{background:white;max-width:400px;padding:20px}.mancardo-waypoint-icon-choice{background:white}input[type=text]{width:90%;padding:8px;margin:8px 0}</style><h1>Saved waypoint interaction fixture</h1><p>Synthetic coordinates · real Leaflet over decorative basemap · no live data</p><div id="mapWrap"><div id="googleBaseMap" aria-hidden="true"></div><div id="mapDiv"></div></div><h2>My Library</h2><div id="trackList"></div><h2>Shared Library</h2><div id="sharedTrackList"></div>`});
   if(route.request().url().includes('/api/shared-waypoints'))return route.fulfill({json:{waypoints:rows}});
   return route.abort();
  });
@@ -33,11 +34,14 @@ async function fixture(t,mobile=false,animated=false){
  async function install(){
  await page.addScriptTag({content:leafletJs});
  await page.evaluate((animated)=>{
-  window.markers=[];window.syntheticTrack={id:'synthetic-track',name:'Geometry fixture',type:'track',segments:[[{lat:1,lon:2,ele:30,time:'2026-01-01T00:00:00Z'},{lat:1.01,lon:2,ele:31},{lat:1.01,lon:2.01,ele:32}]],color:'#123456'};window.state={mode:'view',library:[syntheticTrack],sharedPreview:false};window.els={trackList:document.getElementById('library')};
-  window.renderLibrary=()=>{};window.setLibraryView=()=>{};
+  window.markers=[];window.syntheticTrack={id:'synthetic-track',name:'Geometry fixture',type:'track',segments:[[{lat:1,lon:2,ele:30,time:'2026-01-01T00:00:00Z'},{lat:1.01,lon:2,ele:31},{lat:1.01,lon:2.01,ele:32}]],color:'#123456'};window.state={mode:'view',library:[syntheticTrack],sharedPreview:false};window.els={trackList:document.getElementById('trackList')};
+  window.renderLibrary=()=>{if(window.updateSelectAll)updateSelectAll();};window.setLibraryView=()=>{};window.render=()=>{};
+  window.persistLibrary=()=>{localStorage.setItem('synthetic-tracks',JSON.stringify(state.library));};
+  const select=document.createElement('label');select.id='selectAllWrap';select.innerHTML='<input type="checkbox" id="selectAllTracks"><span>Select / Deselect all tracks</span>';document.body.appendChild(select);els.selectAllTracks=select.querySelector('input');const panel=document.createElement('section');panel.id='myLibraryPanel';els.trackList.before(panel);panel.appendChild(select);panel.appendChild(els.trackList);
   window.map=L.map('mapDiv',{zoomControl:false,attributionControl:false,zoomAnimation:animated,fadeAnimation:false,markerZoomAnimation:animated}).setView([1,2.0005],17);
 
  },animated);
+ await page.addScriptTag({content:selectionCode});
  await page.addScriptTag({content:exportCode});
  await page.evaluate(()=>{window.geometryBefore=JSON.stringify(state.library);window.gpxBefore=buildGpx(syntheticTrack);});
  await page.addScriptTag({content:feature});await page.addScriptTag({content:shared});
@@ -189,4 +193,115 @@ for(const mobile of [false,true])test(`${mobile?'mobile':'desktop'} waypoint tip
  assert.equal(await p.locator('.mancardo-waypoint-name').count(),0);
  assert.equal(await p.evaluate(()=>JSON.stringify(state.library)===geometryBefore&&buildGpx(syntheticTrack)===gpxBefore),true);
  assert.deepEqual(f.errors,[]);
+});
+
+
+test('Select/Deselect includes mixed and waypoint-only libraries without expanding export or deletion',async t=>{
+ const f=await fixture(t),p=f.page,all=p.locator('#selectAllTracks');
+ await p.evaluate(()=>{state.library.push({...syntheticTrack,id:'hidden-track',visible:false});state.current={...state.library[0]};state.sharedLibrary=[{id:'shared-filtered-out',visible:false}];renderLibrary();});
+ assert.equal(await all.evaluate(e=>e.indeterminate),true);
+ await all.check();await all.uncheck();
+ assert.equal(await p.locator('.mancardo-saved-waypoint-marker').count(),0);
+ assert.deepEqual(await p.evaluate(key=>JSON.parse(localStorage.getItem(key)).map(w=>w.visible),key),[false,false]);
+ assert.equal(await p.evaluate(()=>state.library.every(t=>t.visible===false)&&state.current.visible===false),true);
+ await all.check();assert.equal(await p.locator('.mancardo-saved-waypoint-marker').count(),2);
+ assert.equal(await p.evaluate(()=>state.library.every(t=>t.visible===true)&&state.current.visible===true),true);
+ assert.equal(await p.evaluate(()=>state.sharedLibrary[0].visible),false);
+ await p.locator('.mancardo-waypoint-item .track-show').first().uncheck();
+ assert.equal(await all.evaluate(e=>e.indeterminate&&!e.checked),true);
+ await p.evaluate(()=>renderLibrary());assert.equal(await all.evaluate(e=>e.indeterminate),true);
+ await all.check();
+ // Exercise the actual track export selector and durable-delete capture handler,
+ // replacing only their file-download/deletion sinks with ID collectors.
+ await p.evaluate(()=>{window.exports=[];window.deletes=[];window.exportTrackItem=t=>exports.push(t.id);window.authorisedDelete=ids=>deletes.push(...ids);});
+ await p.addScriptTag({content:html.slice(html.indexOf('function exportSelectedTracks(){'),html.indexOf('function deleteSelectedTracks(){'))});
+ const durable=fs.readFileSync(path.join(root,'worker-delete-durable-fix.js'),'utf8');
+ const start=durable.indexOf("  document.addEventListener('click',function(ev){");
+ await p.addScriptTag({content:durable.slice(start,durable.indexOf('  },true);',start)+11)});
+ await p.evaluate(()=>{const b=document.createElement('button');b.id='deleteSelectedBtn';document.body.appendChild(b);exportSelectedTracks();});
+ await p.waitForTimeout(400);assert.deepEqual(await p.evaluate(()=>exports),['synthetic-track','hidden-track']);
+ p.once('dialog',d=>{assert.match(d.message(),/2 selected track/);return d.dismiss();});await p.locator('#deleteSelectedBtn').click();assert.deepEqual(await p.evaluate(()=>deletes),[]);
+ p.once('dialog',d=>d.accept());await p.locator('#deleteSelectedBtn').click();assert.deepEqual(await p.evaluate(()=>deletes),['synthetic-track','hidden-track']);
+ assert.equal(await p.evaluate(key=>JSON.parse(localStorage.getItem(key)).length,key),2);
+ await p.evaluate(()=>{state.library=[];state.current=null;renderLibrary();});
+ assert.equal(await all.isEnabled(),true);assert.equal(await all.isChecked(),true);
+ await all.uncheck();assert.equal(await p.locator('.mancardo-saved-waypoint-marker').count(),0);
+ await f.reload();assert.equal(await p.locator('.mancardo-saved-waypoint-marker').count(),0);assert.equal(await all.evaluate(e=>e.indeterminate),true);
+ await all.check();
+ const persisted=await p.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);
+ assert.deepEqual(persisted.map(({visible,updatedAt,...rest})=>rest),rows.map(({visible,updatedAt,...rest})=>rest));
+ assert.deepEqual(f.errors,[]);
+});
+
+test('bulk selection keeps global scope through real search/filter/sort and preserves fresh share metadata',async t=>{
+ const f=await fixture(t),p=f.page,all=p.locator('#selectAllTracks');
+ const ui=fs.readFileSync(path.join(root,'worker-ui-optimizations.js'),'utf8');
+ await p.addScriptTag({content:"var FILTER_KEY='mancardo_library_filter_v1',filterModes={all:1,visible:1,hidden:1};"+ui.slice(ui.indexOf('  function savedFilter(){'),ui.indexOf('  function enhanceTrackCards(){'))+"ensureLibrarySearch();var originalFilteredRender=renderLibrary;renderLibrary=function(){originalFilteredRender();applyLibrarySearchAndFilter();};"});
+ const sort=fs.readFileSync(path.join(root,'worker-library-sort.js'),'utf8').match(/const LIBRARY_SORT_FEATURE = String.raw`([\s\S]*?)`;/)[1];await p.addScriptTag({content:sort});
+ await p.locator('#mancardoLibrarySearch').fill('Second summit');
+ assert.equal(await p.locator('.mancardo-waypoint-item:visible').count(),1);
+ await all.uncheck();assert.deepEqual(await p.evaluate(key=>JSON.parse(localStorage.getItem(key)).map(w=>w.visible),key),[false,false]);
+ await p.locator('#mancardoLibraryFilter').selectOption('visible');assert.equal(await p.locator('.mancardo-waypoint-item:visible').count(),0);
+ await all.check();assert.equal(await p.locator('.mancardo-waypoint-item:visible').count(),1);
+ await p.locator('#mancardoLibraryFilter').selectOption('hidden');assert.equal(await p.locator('.mancardo-waypoint-item:visible').count(),0);
+ await p.locator('#mancardoLibrarySort').selectOption('name-desc');assert.equal(await all.isChecked(),true);
+ await p.evaluate(key=>{const items=JSON.parse(localStorage.getItem(key));items[0].sharedId='synthetic-new-share';items[0].sharedBaseVersion=7;delete items[1].visible;localStorage.setItem(key,JSON.stringify(items));},key);
+ await all.uncheck();await all.check();
+ const persisted=await p.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);
+ assert.equal(persisted[0].sharedId,'synthetic-new-share');assert.equal(persisted[0].sharedBaseVersion,7);assert.equal(persisted[1].visible,true);
+ assert.deepEqual(persisted.map(w=>[w.id,w.name,w.icon,w.lat,w.lon]),rows.map(w=>[w.id,w.name,w.icon,w.lat,w.lon]));
+ // With no tracks or waypoints, bulk selection is disabled and not checked.
+ await p.evaluate(key=>localStorage.removeItem(key),key);await f.reload();await p.evaluate(()=>{state.library=[];state.current=null;renderLibrary();});
+ assert.equal(await all.isDisabled(),true);assert.equal(await all.isChecked(),false);assert.equal(await all.evaluate(e=>e.indeterminate),false);
+ assert.deepEqual(f.errors,[]);
+});
+
+for(const mobile of [false,true])test(`${mobile?'touch':'desktop'} bulk visibility repeats correctly with tracks only, then an empty library`,async t=>{
+ const f=await fixture(t,mobile),p=f.page,all=p.locator('#selectAllTracks');
+ await p.evaluate(key=>localStorage.removeItem(key),key);await f.reload();
+ assert.equal(await all.isEnabled(),true);assert.equal(await all.isChecked(),true);
+ for(let i=0;i<3;i++){
+  await all[mobile?'tap':'click']();
+  assert.equal(await all.isChecked(),false);
+  assert.equal(await p.evaluate(()=>state.library.every(t=>t.visible===false)),true);
+  await all[mobile?'tap':'click']();
+  assert.equal(await all.isChecked(),true);
+  assert.equal(await p.evaluate(()=>state.library.every(t=>t.visible===true)),true);
+ }
+ assert.equal(await p.locator('.mancardo-saved-waypoint-marker').count(),0);
+ assert.equal(await p.evaluate(key=>localStorage.getItem(key),key),null);
+ await p.evaluate(()=>{state.library=[];state.current=null;renderLibrary();});
+ assert.equal(await all.isDisabled(),true);assert.equal(await all.isChecked(),false);
+ assert.deepEqual(f.errors,[]);
+});
+
+test('touch bulk visibility toggles mixed tracks and waypoints repeatedly without metadata changes',async t=>{
+ const f=await fixture(t,true),p=f.page,all=p.locator('#selectAllTracks');
+ for(let i=0;i<3;i++){
+  await all.tap();assert.equal(await p.locator('.mancardo-saved-waypoint-marker').count(),0);
+  assert.equal(await p.evaluate(()=>state.library.every(t=>t.visible===false)),true);
+  await all.tap();assert.equal(await p.locator('.mancardo-saved-waypoint-marker').count(),2);
+  assert.equal(await p.evaluate(()=>state.library.every(t=>t.visible===true)),true);
+ }
+ assert.deepEqual(await p.evaluate(key=>JSON.parse(localStorage.getItem(key)),key),rows);
+ assert.deepEqual(f.errors,[]);
+});
+
+test('complete current editor bulk visibility changes both map surfaces and preserves GPX',async t=>{
+ const full=await require('./helpers/map-performance-fixture.cjs').fixture(browser,t);
+ const p=full.page,writes=[];p.on('request',r=>{if(!['GET','HEAD'].includes(r.method()))writes.push(r.method()+' '+r.url());});
+ const result=await p.evaluate(()=>{
+  const before=buildGpx(state.current),key='mancardo_saved_waypoints_v1',waypoints=localStorage.getItem(key);
+  const lines=()=>dataLayers.reduce((n,d)=>n+[...d.fs].filter(f=>f.getProperty('kind')==='line').length,0);
+  const initial={markers:document.querySelectorAll('.mancardo-saved-waypoint-marker').length,lines:lines()};
+  els.selectAllTracks.click();
+  const hidden={markers:document.querySelectorAll('.mancardo-saved-waypoint-marker').length,lines:lines(),checked:els.selectAllTracks.checked};
+  els.selectAllTracks.click();
+  return {initial,hidden,restored:{markers:document.querySelectorAll('.mancardo-saved-waypoint-marker').length,lines:lines(),checked:els.selectAllTracks.checked},gpxSame:before===buildGpx(state.current),waypointsSame:waypoints===localStorage.getItem(key)};
+ });
+ assert.equal(result.initial.markers,2);assert.ok(result.initial.lines>0);
+ assert.deepEqual(result.hidden,{markers:0,lines:0,checked:false});
+ assert.deepEqual(result.restored,{...result.initial,checked:true});
+ assert.equal(result.gpxSame,true);assert.equal(result.waypointsSame,true);
+ assert.deepEqual(full.errors,[]);assert.deepEqual(writes,[]);
 });
