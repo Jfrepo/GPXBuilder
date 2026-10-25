@@ -10,6 +10,7 @@ on:
       - 'tests/waypoint-alignment-development.test.cjs'
       - 'scripts/release-map-performance-development.cjs'
       - 'tests/map-performance-development.test.cjs'
+      - 'tests/minimal-release-delivery.test.cjs'
       - 'scripts/trace-map-performance-development.cjs'
       - 'scripts/diagnose-fuel-delivery.cjs'
       - 'tests/fuel-delivery-diagnostic.test.cjs'
@@ -102,7 +103,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.operation == 'verify' && '6ac8fb56f3b74b1a2c96b187cc19d64442944e66' || '637af20b858659d8942cfcc1fc51050070cccb8f' }}
+          ref: ${{ inputs.operation == 'verify' && '6ac8fb56f3b74b1a2c96b187cc19d64442944e66' || '0c3e255e444e3ba520994271330d46b80a487335' }}
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -110,20 +111,23 @@ jobs:
           node-version: '22'
       - name: Verify release-controller guards
         run: node --test controller/tests/map-performance-development.test.cjs
+      - name: Verify exact emitted minimal feature delivery offline
+        if: inputs.operation == 'stage'
+        run: node --test controller/tests/minimal-release-delivery.test.cjs
       - name: Build immutable qualified candidate
         if: inputs.operation == 'stage'
         working-directory: candidate
         run: |
           npm ci --ignore-scripts
           npx --no-install playwright install --with-deps chromium
-          test "$(git rev-parse HEAD)" = "637af20b858659d8942cfcc1fc51050070cccb8f"
+          test "$(git rev-parse HEAD)" = "0c3e255e444e3ba520994271330d46b80a487335"
           npm run test:source
           npm run test:packaged-server
           npm run test:browser
           npm run test:waypoints
           npm run test:map-performance
           npm run test:cancel
-          node --test tests/fuel-cache.test.cjs tests/waypoint-development-release.test.cjs
+          node --test tests/fuel-disabled.test.cjs tests/waypoint-development-release.test.cjs
           node scripts/build-waypoint-development.cjs
       - name: Prepare existing-version acceptance dependencies and exact package
         if: inputs.operation == 'verify'
