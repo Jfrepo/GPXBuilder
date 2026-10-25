@@ -8,6 +8,7 @@ const { chromium } = require('playwright');
 const source = fs.readFileSync(path.join(__dirname, '../worker-delete-durable-fix.js'), 'utf8');
 const client = source.match(/const DURABLE_DELETE_BRIDGE = String.raw`([\s\S]*?)`;/)[1];
 const key = 'mancardo_authorized_delete_pending_v4';
+const dialogMarkup=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8').match(/<dialog id="libraryDeleteDialog"[\s\S]*?<\/dialog>/)[0];
 let browser;
 test.before(async () => {
   browser = await chromium.launch({headless:true,
@@ -24,7 +25,7 @@ async function fixture(t, options={}) {
   const errors=[]; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/*', async route => {
     const request=route.request(), url=new URL(request.url());
-    if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><body><button id="mancardoPrivateSyncChip"></button></body>'});
+    if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><body><button id="mancardoPrivateSyncChip"></button>'+dialogMarkup+'</body>'});
     if(url.pathname.endsWith('/health'))return route.fulfill({json:{authenticated:true,storageReady:true,accountKey:model.account}});
     if(url.pathname.startsWith('/api/private-library/tracks/')) {
       const id=decodeURIComponent(url.pathname.split('/').pop());
@@ -155,9 +156,10 @@ test('main delete first click and cancellation do nothing; confirmed menu click 
   const f=await fixture(t);
   await f.page.evaluate(()=>{const button=document.createElement('button');button.id='deleteTrackBtn';document.body.appendChild(button);button.click();});
   assert.equal(f.model.requests.length,0);assert.deepEqual(await f.ids(),['one','two']);
-  await f.page.evaluate(()=>{const card=document.createElement('div');card.className='track-item';card.dataset.trackId='one';card.innerHTML='<button class="mancardo-menu-delete">Delete</button>';document.body.appendChild(card);window.confirm=()=>false;card.firstChild.click();});
+  await f.page.evaluate(()=>{const card=document.createElement('div');card.className='track-item';card.dataset.trackId='one';card.innerHTML='<button class="mancardo-menu-delete">Delete</button>';document.body.appendChild(card);card.firstChild.click();document.getElementById('libraryDeleteKeep').click();});
   assert.equal(f.model.requests.length,0);assert.deepEqual(await f.ids(),['one','two']);
   await f.page.evaluate(()=>{window.confirm=()=>true;document.querySelector('.mancardo-menu-delete').click();document.querySelector('.mancardo-menu-delete').click();});
+  await f.page.locator('#libraryDeleteConfirm').click();
   await f.page.waitForFunction(()=>state.library.length===1);
   await f.page.waitForTimeout(200);assert.equal(f.model.requests.length,1);
 });
@@ -195,4 +197,14 @@ test('selected delete requires confirmation and never deletes a hidden track',as
 test('visibility-only change does not block an otherwise reconciled deletion',async t=>{
   const f=await fixture(t);await f.page.evaluate(()=>{state.library[0].visible=false;});
   assert.equal(await f.remove(),true);assert.deepEqual(await f.ids(),['two']);assert.equal(f.model.requests.length,1);
+});
+
+test('dialog confirmation reads final workspace after delayed hashing',async t=>{
+ const f=await fixture(t);
+ await f.page.evaluate(()=>{const card=document.createElement('div');card.className='track-item';card.dataset.trackId='one';card.innerHTML='<button class="mancardo-menu-delete">Delete</button>';document.body.appendChild(card);card.firstChild.click();});
+ await f.page.waitForFunction(()=>!document.getElementById('libraryDeleteConfirm').disabled);
+ await f.page.evaluate(()=>{const original=crypto.subtle.digest.bind(crypto.subtle);const waiting=new Promise(r=>window.releaseHash=r);crypto.subtle.digest=async(...args)=>{await waiting;return original(...args);};document.getElementById('libraryDeleteConfirm').click();});
+ await f.page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('mancardo_private_sync_v2',1);q.onsuccess=()=>r(q.result);});await new Promise(r=>{const tx=db.transaction('sync','readwrite'),store=tx.objectStore('sync'),q=store.get('A|one');q.onsuccess=()=>{q.result.revision++;store.put(q.result);};tx.oncomplete=r;});db.close();window.releaseHash();});
+ await f.page.waitForFunction(()=>!window.mancardoEditDeletionPending());
+ assert.deepEqual(await f.ids(),['one','two']);assert.equal(f.model.requests.length,0);assert.deepEqual(f.errors,[]);
 });

@@ -7,7 +7,8 @@
     "test:packaged-server": "node scripts/check-production.cjs packaged-server",
     "test:browser": "node scripts/check-production.cjs browser",
     "test:waypoints": "node --test tests/waypoint-display.test.cjs",
-    "test:map-performance": "node --test tests/map-performance.test.cjs"
+    "test:map-performance": "node --test tests/map-performance.test.cjs",
+    "test:cancel": "node --test tests/cancel-edit.test.cjs"
   },
   "devDependencies": {
     "acorn": "8.15.0",

@@ -182,7 +182,11 @@ for(const mobile of [false,true])test(`${mobile?'mobile':'desktop'} waypoint tip
  await p.keyboard.press('Escape');assert.equal(await marker.evaluate(el=>document.activeElement===el),true);
  if(!mobile){await p.locator('h1').hover();await marker.hover();assert.equal(await p.locator('.mancardo-waypoint-name').textContent(),names[0]);}
  if(process.env.WAYPOINT_ARTIFACT_DIR)await p.screenshot({path:path.join(process.env.WAYPOINT_ARTIFACT_DIR,mobile?'aligned-mobile.png':'aligned-desktop.png'),fullPage:true});
- await p.evaluate(()=>map.setZoom(16,{animate:true}));assert.equal(await p.locator('.mancardo-waypoint-name').count(),0);
+ // Leaflet schedules animated zoomstart on requestAnimationFrame. Assert
+ // dismissal at that event, rather than racing the frame after setZoom returns.
+ await p.evaluate(()=>{window.waypointDismissZoomStarted=false;map.once('zoomstart',()=>{window.waypointDismissZoomStarted=true;});map.setZoom(16,{animate:true});});
+ await p.waitForFunction(()=>window.waypointDismissZoomStarted);
+ assert.equal(await p.locator('.mancardo-waypoint-name').count(),0);
  assert.equal(await p.evaluate(()=>JSON.stringify(state.library)===geometryBefore&&buildGpx(syntheticTrack)===gpxBefore),true);
  assert.deepEqual(f.errors,[]);
 });

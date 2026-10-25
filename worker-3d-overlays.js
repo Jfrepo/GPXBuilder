@@ -32,6 +32,7 @@ const MAP_3D_OVERLAY_FEATURE = String.raw`
   var contourBtn=tools.querySelector('#mancardo3dContoursBtn');
   var radarBtn=tools.querySelector('#mancardo3dRadarBtn');
   var fuelBtn=tools.querySelector('#mancardo3dFuelBtn');
+  if(!fuelOverlayEnabled){fuelBtn.hidden=true;fuelBtn.disabled=true;fuelBtn.style.setProperty('display','none','important');}
   var radarMode=tools.querySelector('#mancardo3dRadarMode');
   var statusEl=tools.querySelector('#mancardo3dOverlayStatus');
   if(els.radarMode)radarMode.value=els.radarMode.value||'observed';
@@ -115,6 +116,7 @@ const MAP_3D_OVERLAY_FEATURE = String.raw`
   }
 
   async function refreshFuel(seq){
+    if(!fuelOverlayEnabled){fuel3dOn=false;removeAll(fuelEls);lastFuelKey='';return;}
     if(!fuel3dOn||!is3DActive())return;
     var b=viewBox(1.15);if(!b)return;
     var south=Math.max(-44,b.south),north=Math.min(-9,b.north),west=Math.max(112,b.west),east=Math.min(154,b.east);
@@ -218,7 +220,7 @@ const MAP_3D_OVERLAY_FEATURE = String.raw`
 
   contourBtn.onclick=function(){contoursOn=!contoursOn;contourBtn.classList.toggle('on',contoursOn);if(!contoursOn){removeAll(contourEls);lastContourKey='';}scheduleRefresh();};
   radarBtn.onclick=function(){radar3dOn=!radar3dOn;radarBtn.classList.toggle('on',radar3dOn);if(!radar3dOn){removeAll(radarEls);lastRadarKey='';}scheduleRefresh();};
-  fuelBtn.onclick=function(){fuel3dOn=!fuel3dOn;fuelBtn.classList.toggle('on',fuel3dOn);if(!fuel3dOn){removeAll(fuelEls);lastFuelKey='';}scheduleRefresh();};
+  fuelBtn.onclick=function(){if(!fuelOverlayEnabled){fuel3dOn=false;removeAll(fuelEls);lastFuelKey='';return;}fuel3dOn=!fuel3dOn;fuelBtn.classList.toggle('on',fuel3dOn);if(!fuel3dOn){removeAll(fuelEls);lastFuelKey='';}scheduleRefresh();};
   radarMode.onchange=function(){lastRadarKey='';if(radar3dOn)scheduleRefresh();};
 
   var observer=new MutationObserver(syncActiveState);

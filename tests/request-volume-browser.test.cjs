@@ -130,6 +130,7 @@ async function fixture(t, options = {}) {
   const context = await browser.newContext({ viewport: options.viewport || { width: 1440, height: 900 }, serviceWorkers: 'block' });
   const page = await context.newPage();
   const track = trackFixture(), shared = sharedFixture();
+  if(options.trackName)track.name=options.trackName;
   if (Object.prototype.hasOwnProperty.call(options, 'visible')) {
     if (options.visible === undefined) delete track.visible;
     else track.visible = options.visible;
@@ -318,8 +319,8 @@ async function fixture(t, options = {}) {
     },
     async remove() {
       await page.locator('[data-track-id="' + track.id + '"] .track-more').evaluate(button => button.click());
-      page.once('dialog', dialog => dialog.accept());
       await page.locator('[data-track-id="' + track.id + '"] .mancardo-menu-delete').evaluate(button => button.click());
+      await page.locator('#libraryDeleteConfirm').click();
     },
     assertSafe() { assert.deepEqual(model.unexpected, [], 'All API requests must stay within the synthetic owner and declared endpoints'); assert.deepEqual(model.errors, [], 'The complete emitted page must have no uncaught errors'); },
   };
@@ -853,7 +854,7 @@ for (const visible of [false, true]) {
 // matchMedia, state, storage, hash or synchronization implementation is replaced.
 const TOOLBAR_CONTROL_IDS = [
   'splitAfterBtn', 'joinNextBtn', 'joinToPointBtn', 'movePointBtn',
-  'extendTrackBtn', 'completeChangeBtn', 'deletePointBtn', 'deleteSegBtn',
+  'extendTrackBtn', 'completeChangeBtn', 'cancelChangeBtn', 'deletePointBtn', 'deleteSegBtn',
   'reverseBtn', 'undoBtn', 'redoBtn', 'exportBtn', 'deleteTrackBtn',
 ];
 const TOOLBAR_SELECTORS = [
@@ -940,9 +941,10 @@ async function exerciseToolbarControls(f, duringEditing) {
   await f.page.locator('#movePointBtn').press('Enter');
   assert.equal(await modeHidden(), false);
   assert.match(await f.page.locator('#modeBanner span').textContent(), /^Move point:/);
-  assert.equal(await f.page.locator('#finishDrawBtn').textContent(), 'Cancel');
+  assert.equal(await f.page.locator('#completeChangeBtn').isEnabled(), true);
+  assert.equal(await f.page.locator('#cancelChangeBtn').isVisible(), true);
   assert.equal(await f.page.locator('#movePointBtn').isEnabled(), false);
-  await f.page.locator('#finishDrawBtn').press('Enter');
+  await f.page.locator('#cancelChangeBtn').press('Enter');
   assert.equal(await modeHidden(), true, 'Cancel must leave editing without a track mutation');
 
   await f.page.locator('#extendTrackBtn').press('Enter');
@@ -961,7 +963,7 @@ async function exerciseToolbarControls(f, duringEditing) {
   // while keeping this layout regression strictly free of track edits.
   await f.page.locator('#completeChangeBtn').press('Enter');
   assert.equal(await modeHidden(), true);
-  assert.equal(await f.page.locator('#completeChangeBtn').isVisible(), false);
+  assert.equal(await f.page.locator('#completeChangeBtn').isDisabled(), true);
   assert.equal(await f.page.locator('#movePointBtn').isEnabled(), true);
   assert.equal(await f.page.locator('#extendTrackBtn').isEnabled(), true);
   await points.press('Enter');
@@ -1049,3 +1051,132 @@ for (const scenario of [
     await assertToolbarDataUnchanged(f, baseline, server);
   });
 }
+
+// Cancel uses only the editor copy, even while an earlier durable Save awaits
+// acknowledgement. These cases execute the real IndexedDB outbox and API path.
+for (const origin of ['explicit Save', 'earlier rename', 'Save ACK during confirmation']) {
+  test('full editor: Cancel preserves a held ' + origin + ' upload without compensating writes', { timeout: 30000 }, async t => {
+    const f=await fixture(t);await f.identify();const held=f.hold('put');
+    if(origin!=='earlier rename'){
+      await f.page.locator('#reverseBtn').evaluate(b=>b.click());
+      await f.page.locator('#saveBtn').evaluate(b=>b.click());
+      await f.page.clock.runFor(40);
+    }else await f.rename('Saved before cancellable edit');
+    const first=await held.entered;
+    let durable=await f.durableState();
+    await f.page.locator('#reverseBtn').evaluate(b=>b.click());
+    await f.page.locator('#cancelChangeBtn').evaluate(b=>b.click());
+    if(origin==='Save ACK during confirmation'){f.release('put');await observed(()=>f.requests('put')[0].settled);await f.page.clock.runFor(6000);durable=await f.durableState();}
+    await f.page.locator('#discardEditConfirm').click();
+    assert.deepEqual(await f.durableState(),durable,'Cancel must not touch library, outbox, sync revision or pending deletes');
+    if(origin!=='Save ACK during confirmation')f.release('put');await observed(()=>f.requests('put')[0].settled);
+    await f.page.clock.runFor(6000);await f.startSync();assert.equal(await f.finishSync(),true);
+    assert.equal(f.requests('put').length,1);assert.deepEqual(f.model.row.track,first.body.track);
+    assert.deepEqual(f.writes().map(r=>r.method),['PUT']);f.assertSafe();
+  });
+}
+test('full editor: blocked note editing during Cancel session never publishes Shared GPX', { timeout:30000 },async t=>{
+ const f=await fixture(t,{linkedShared:true});await f.identify();await f.note('Prior saved note');await f.page.clock.runFor(3000);await f.startSync();await f.finishSync();
+ const writes=f.writes().length,publishes=f.requests('publish').length;
+ await f.page.locator('#reverseBtn').evaluate(b=>b.click());
+ f.page.once('dialog',d=>d.accept());await f.page.locator('.track-note textarea').evaluate(el=>{el.value='Blocked edit';el.dispatchEvent(new Event('input',{bubbles:true}));});
+ await f.page.locator('#cancelChangeBtn').evaluate(b=>b.click());await f.page.locator('#discardEditConfirm').click();
+ await f.page.clock.runFor(6000);await f.startSync();await f.finishSync();assert.equal(f.requests('publish').length,publishes);assert.equal(f.writes().length,writes);assert.equal((await f.tracks())[0].note,'Prior saved note');f.assertSafe();
+});
+test('full editor: publication begun before editing cannot replace the active working copy', {timeout:30000},async t=>{
+ const f=await fixture(t,{linkedShared:true});await f.identify();const held=f.hold('publish');
+ await f.page.locator('[data-track-id="'+f.track.id+'"] .track-more').evaluate(b=>b.click());
+ await f.page.locator('.track-menu').getByRole('button',{name:/^(Share|Publish to Shared)$/}).evaluate(b=>b.click());
+ await held.entered;
+ await f.page.locator('#reverseBtn').evaluate(b=>b.click());
+ const points=await f.page.locator('#pointsToggle').evaluate(b=>{b.click();return document.getElementById('pointsBody').textContent;});
+ await f.page.locator('#cancelChangeBtn').evaluate(b=>b.click());
+ assert.equal(await f.page.locator('#discardEditDialog').isVisible(),true);
+ f.page.once('dialog',d=>d.accept());f.release('publish');await observed(()=>f.requests('publish')[0].settled);
+ await f.page.clock.runFor(1500);
+ assert.equal(await f.page.locator('#pointsBody').textContent(),points,'Publication ACK must not replace in-progress geometry');
+ const before=await f.durableState();f.page.once('dialog',d=>d.accept());await f.page.locator('#discardEditConfirm').click();
+ assert.equal(await f.page.locator('#pointsBody').textContent(),points,'Conflict leaves editor intact');assert.deepEqual(await f.durableState(),before,'Conflict must not roll back publication identity');assert.equal(f.requests('publish').length,1);f.assertSafe();
+});
+test('full editor: an edit cannot begin during confirmed deletion authorization', {timeout:30000},async t=>{
+ const f=await fixture(t);await f.identify();f.page.once('dialog',d=>d.accept());
+ const r=await f.page.evaluate(id=>{window.__cancelDelete=window.mancardoAuthorizedDelete([id]);const pending=window.mancardoEditDeletionPending();document.getElementById('reverseBtn').click();return {pending,cancelVisible:!document.getElementById('cancelChangeBtn').classList.contains('hidden')};},f.track.id);
+ assert.deepEqual(r,{pending:true,cancelVisible:false});assert.equal(await f.page.evaluate(()=>window.__cancelDelete),true);assert.deepEqual(f.writes().map(r=>r.method),['DELETE']);f.assertSafe();
+});
+
+async function openLibraryDelete(f){
+  await f.page.locator('[data-track-id="'+f.track.id+'"] .track-more').evaluate(b=>b.click());
+  await f.page.locator('[data-track-id="'+f.track.id+'"] .mancardo-menu-delete').evaluate(b=>b.click());
+  await observed(()=>f.page.locator('#libraryDeleteConfirm').isEnabled());
+}
+for(const dismissal of ['Keep track','Escape','close','backdrop','Enter'])test('library delete dialog safely dismisses: '+dismissal,async t=>{
+  const f=await fixture(t),before=await f.durableState();await openLibraryDelete(f);
+  assert.equal(await f.page.evaluate(()=>document.activeElement.id),'libraryDeleteKeep');
+  if(dismissal==='Escape'||dismissal==='Enter')await f.page.keyboard.press(dismissal);
+  else if(dismissal==='backdrop')await f.page.mouse.click(5,5);
+  else await f.page.locator(dismissal==='close'?'#libraryDeleteClose':'#libraryDeleteKeep').click();
+  assert.equal(await f.page.locator('#libraryDeleteDialog').evaluate(d=>d.open),false);
+  assert.deepEqual(await f.durableState(),before);assert.deepEqual(f.writes(),[]);f.assertSafe();
+});
+for(const change of ['owner','revision','hash','deleted'])test('library delete dialog rejects changed '+change,async t=>{
+  const f=await fixture(t);await openLibraryDelete(f);
+  await f.page.evaluate(async({change,account,id})=>{
+    const db=await new Promise(r=>{const q=indexedDB.open('mancardo_private_sync_v2',1);q.onsuccess=()=>r(q.result);});
+    await new Promise((resolve,reject)=>{const tx=db.transaction(['meta','sync'],'readwrite');
+      if(change==='owner')tx.objectStore('meta').put({key:'boundAccountKey',value:'another-synthetic-owner'});
+      else {const store=tx.objectStore('sync'),q=store.get(account+'|'+id);q.onsuccess=()=>{const row=q.result;if(change==='revision')row.revision++;if(change==='hash')row.sha256='changed';if(change==='deleted')row.deleted=true;store.put(row);};}
+      tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+  },{change,account:ACCOUNT,id:f.track.id});
+  const before=await f.durableState();await f.page.locator('#libraryDeleteConfirm').click();
+  await observed(()=>f.page.evaluate(()=>!window.mancardoEditDeletionPending()));
+  assert.deepEqual(await f.durableState(),before);assert.deepEqual(f.writes(),[]);f.assertSafe();
+});
+for(const width of [2048,390,320])test('library delete dialog accessible layout '+width,async t=>{
+  const f=await fixture(t,{viewport:{width,height:width===2048?1221:844},trackName:'<img src=x onerror=alert(1)> '+ 'A'.repeat(120)});
+  await openLibraryDelete(f);
+  assert.ok((await f.page.locator('#libraryDeleteDescription').textContent()).includes(f.track.name));
+  assert.equal(await f.page.locator('#libraryDeleteDescription img').count(),0);
+  const box=await f.page.locator('#libraryDeleteDialog').boundingBox();assert.ok(box.x>=0&&box.x+box.width<=width);
+  assert.equal(await f.page.locator('#libraryDeleteDialog').evaluate(d=>d.scrollWidth<=d.clientWidth),true);
+  await f.page.locator('#libraryDeleteConfirm').focus();await f.page.keyboard.press('Tab');assert.equal(await f.page.evaluate(()=>document.activeElement.id),'libraryDeleteClose');
+  await f.page.keyboard.press('Shift+Tab');assert.equal(await f.page.evaluate(()=>document.activeElement.id),'libraryDeleteConfirm');
+  if(process.env.DELETE_SCREENSHOT_DIR){fs.mkdirSync(process.env.DELETE_SCREENSHOT_DIR,{recursive:true});await f.page.screenshot({path:path.join(process.env.DELETE_SCREENSHOT_DIR,'delete-'+width+'.png')});}
+  await f.page.keyboard.press('Escape');assert.deepEqual(f.writes(),[]);f.assertSafe();
+});
+test('library delete dialog affirmative repeated clicks delete only pinned record once',async t=>{
+  const f=await fixture(t);await openLibraryDelete(f);
+  await f.page.locator('#libraryDeleteConfirm').evaluate(b=>{b.click();b.click();});
+  await observed(()=>f.requests('delete').some(r=>r.settled));
+  assert.equal(f.requests('delete').length,1);assert.equal(f.model.row.deleted,true);assert.equal((await f.pending())[0].baseRevision,4);f.assertSafe();
+});
+for(const change of ['stored row','selection'])test('library delete dialog rejects concurrent '+change,async t=>{
+ const f=await fixture(t);await openLibraryDelete(f);
+ if(change==='stored row')await f.page.evaluate(LIB=>{const a=JSON.parse(localStorage.getItem(LIB));a[0].name='Updated in another tab';localStorage.setItem(LIB,JSON.stringify(a));},LIB);
+ else await f.identify();
+ const before=await f.durableState();await f.page.locator('#libraryDeleteConfirm').click();
+ await observed(()=>f.page.evaluate(()=>!window.mancardoEditDeletionPending()));
+ assert.deepEqual(await f.durableState(),before);assert.deepEqual(f.writes(),[]);f.assertSafe();
+});
+test('library delete dialog ignores late binding after dismissal and can reopen',async t=>{
+ const f=await fixture(t);await f.page.locator('[data-track-id="'+f.track.id+'"] .track-more').evaluate(b=>b.click());
+ await f.page.locator('.mancardo-menu-delete').evaluate(b=>{b.click();document.getElementById('libraryDeleteKeep').click();});
+ assert.equal(await f.page.locator('#libraryDeleteDialog').evaluate(d=>d.open),false);
+ await f.page.locator('.mancardo-menu-delete').evaluate(b=>{b.click();b.click();});
+ await observed(()=>f.page.locator('#libraryDeleteConfirm').isEnabled());assert.equal(await f.page.locator('dialog[open]').count(),1);
+ await f.page.keyboard.press('Escape');assert.equal(await f.page.evaluate(()=>document.activeElement.classList.contains('mancardo-menu-delete')),true);assert.deepEqual(f.writes(),[]);f.assertSafe();
+});
+
+test('library delete dialog external close releases its token',async t=>{
+ const f=await fixture(t);await openLibraryDelete(f);await f.page.locator('#libraryDeleteDialog').evaluate(d=>d.close());
+ await observed(()=>f.page.evaluate(()=>!window.mancardoEditDeletionPending()));
+ await f.page.locator('.mancardo-menu-delete').evaluate(b=>b.click());await observed(()=>f.page.locator('#libraryDeleteConfirm').isEnabled());
+ await f.page.keyboard.press('Escape');assert.deepEqual(f.writes(),[]);f.assertSafe();
+});
+
+test('library delete dialog preserves storage changes already present before opening',async t=>{
+ const f=await fixture(t);
+ await f.page.evaluate(LIB=>{const a=JSON.parse(localStorage.getItem(LIB));a[0].name='Newer work in another tab';localStorage.setItem(LIB,JSON.stringify(a));},LIB);
+ await openLibraryDelete(f);const before=await f.durableState();await f.page.locator('#libraryDeleteConfirm').click();
+ await observed(()=>f.page.evaluate(()=>!window.mancardoEditDeletionPending()));
+ assert.deepEqual(await f.durableState(),before);assert.deepEqual(f.writes(),[]);f.assertSafe();
+});
