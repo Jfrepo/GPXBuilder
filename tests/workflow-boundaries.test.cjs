@@ -70,7 +70,32 @@ test('Production release is manual-only and requires qualification before protec
   assert.doesNotMatch(productionWorkflow, /^  (?:push|pull_request):/m);
   assert.match(productionWorkflow, /needs: qualify/);
   assert.match(productionWorkflow, /environment: production/);
-  assert.equal((productionWorkflow.match(/if: github.event_name == 'workflow_dispatch' && github.ref == 'refs\/heads\/main'/g) || []).length, 2);
+  const jobEntries = [...productionWorkflow.split('jobs:\n')[1].matchAll(/^  ([a-z-]+):\n([\s\S]*?)(?=^  [a-z-]+:\n|$(?![\s\S]))/gm)];
+  const jobs = Object.fromEntries(jobEntries.map(m => [m[1], m[2]]));
+  assert.deepEqual(Object.keys(jobs), ['preflight', 'qualify', 'deploy']);
+  assert.match(productionWorkflow, /default: preflight\n        options: \[preflight, deploy\]/);
+  for (const [name, job] of Object.entries(jobs)) {
+    const condition = job.match(/^    if: (.+)$/m)?.[1];
+    const operation = name === 'preflight' ? 'preflight' : 'deploy';
+    assert.equal(condition, "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == '" + operation + "'");
+    for (const event_name of ['workflow_dispatch', 'push', 'pull_request']) {
+      for (const ref of ['refs/heads/main', 'refs/heads/dev', 'refs/tags/main']) {
+        for (const selected of ['preflight', 'deploy', '', 'invalid']) {
+          assert.equal(vm.runInNewContext(condition, {github: {event_name, ref}, inputs: {operation: selected}}),
+            event_name === 'workflow_dispatch' && ref === 'refs/heads/main' && selected === operation,
+            name + ': ' + event_name + '/' + ref + '/' + selected);
+        }
+      }
+    }
+  }
+  assert.match(jobs.preflight, /^    environment: production$/m);
+  assert.match(jobs.preflight, /run: node --test tests\/production-preflight.test.cjs/);
+  assert.match(jobs.preflight, /run: node scripts\/production-preflight.cjs/);
+  assert.doesNotMatch(jobs.preflight, /wrangler|verify-production|check-production|needs:/);
+  assert.match(jobs.deploy, /^    needs: qualify$/m);
+  assert.match(jobs.deploy, /^    environment: production$/m);
+  assert.match(jobs.deploy, /node scripts\/verify-production.cjs --approved/);
+
   for (const suite of ['source', 'packaged-server', 'browser']) assert.ok(productionWorkflow.includes('node scripts/check-production.cjs ' + suite));
   assert.match(productionWorkflow, /node scripts\/verify-production.cjs --approved/);
   assert.match(productionWorkflow, /npx --no-install wrangler deploy --config dist\/production\/wrangler.toml/);
