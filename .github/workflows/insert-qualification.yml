@@ -1,0 +1,40 @@
+name: Insert and Waypoint Candidate Qualification
+on:
+  push:
+    branches: ['staging/insert-point-development']
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Qualify exact candidate with synthetic tests only
+        run: |
+          test "$(git rev-parse HEAD)" = "b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7"
+          npm run test:source
+          npm run test:packaged-server
+          npm run test:browser
+          npm run test:waypoints
+          npm run test:map-performance
+          npm run test:cancel
+          node --test tests/insert-track-point.test.cjs
+          node --test tests/fuel-disabled.test.cjs
+          node --test tests/waypoint-development-release.test.cjs
+          node scripts/build-waypoint-development.cjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: insert-development-b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7
+          path: dist/waypoint-development/
+          if-no-files-found: error
+          retention-days: 7

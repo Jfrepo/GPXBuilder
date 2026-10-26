@@ -5,15 +5,15 @@ const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
 const PIN='6ac8fb56f3b74b1a2c96b187cc19d64442944e66';
 const MANIFEST='ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4';
-const STAGE_PIN='0c3e255e444e3ba520994271330d46b80a487335';
-const STAGE_MANIFEST='21b44943697a3d90d61479aac2c2d035f21264d2a2b45c22e3628f59076391b7';
-const STAGE_TAG='minimal-cancel-delete-0c3e255e444e',STAGE_MESSAGE=STAGE_PIN+' '+STAGE_MANIFEST;
+const STAGE_PIN='b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7';
+const STAGE_MANIFEST='dd04c4f71486771841d9751c26688daf83e09547e5b582eff0eaec4f2b350b8e';
+const STAGE_TAG='insert-waypoints-b74e22be5efc',STAGE_MESSAGE=STAGE_PIN+' '+STAGE_MANIFEST;
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
 const TAG='fuel-cancel-6ac8fb56f3b7', MESSAGE=PIN+' '+MANIFEST;
-const CURRENT_VERSION='bd6fa40e-4696-4183-a713-3ee08c975d97';
-const CURRENT_MESSAGE='637af20b858659d8942cfcc1fc51050070cccb8f 92791139a357b74f373b948e8a50b8bd7cc3d9640bb17c2a15a0217db3260446',CURRENT_TAG='fuel-cancel-delete-637af20b8586';
+const CURRENT_VERSION='c49d5141-cd59-4dec-bd7a-31aaab78a9cc';
+const CURRENT_MESSAGE='0c3e255e444e3ba520994271330d46b80a487335 21b44943697a3d90d61479aac2c2d035f21264d2a2b45c22e3628f59076391b7',CURRENT_TAG='minimal-cancel-delete-0c3e255e444e';
 function validateStagePreviousVersion(deployment,version){
   if(activeVersion(deployment)!==CURRENT_VERSION||version.annotations?.['workers/message']!==CURRENT_MESSAGE||version.annotations?.['workers/tag']!==CURRENT_TAG)throw Error('Minimal stage requires the exact currently reviewed Development version; stop and coordinate before any write.');
 }
@@ -128,6 +128,8 @@ async function release(){
     if(!html.includes(feature))throw Error('Delivered waypoint runtime does not match pinned tested feature.');
     validateCancelHtml(html,fs.readFileSync(path.join(root,'index.html'),'utf8'));
     evidence.deliveredCancelVerified=true;
+    if(!verifyOnly){validateInsertHtml(html,fs.readFileSync(path.join(root,'index.html'),'utf8'));evidence.deliveredInsertVerified=true;}
+    evidence.deliveredWaypointSelectionVerified=!verifyOnly;
     (verifyOnly?validateFuelHtml:validateFuelDisabledHtml)(html,fs.readFileSync(path.join(root,'index.html'),'utf8'),fs.readFileSync(path.join(root,'worker-3d-overlays.js'),'utf8'));
     evidence.fuelOverlayDisabledVerified=!verifyOnly;
     evidence.deliveredFuelVerified=true;save();
@@ -135,9 +137,9 @@ async function release(){
     // The pinned entrypoint does not import the optional shared-waypoint client.
     // Exact feature equality covers every category and saved-waypoint surface it serves.
     // Browser fixtures remain local and intercept every request; no account data is loaded.
-    const acceptance=spawnSync(process.execPath,['--test','--test-concurrency=1','tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs',verifyOnly?'tests/fuel-cache.test.cjs':'tests/fuel-disabled.test.cjs'],{cwd:root,env:{...env,WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root},encoding:'utf8',timeout:300000,maxBuffer:4*1024*1024});
+    const acceptance=spawnSync(process.execPath,['--test','--test-concurrency=1','tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs',verifyOnly?'tests/fuel-cache.test.cjs':'tests/fuel-disabled.test.cjs',...(!verifyOnly?['tests/insert-track-point.test.cjs']:[])],{cwd:root,env:{...env,WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root},encoding:'utf8',timeout:300000,maxBuffer:4*1024*1024});
     if(acceptance.error||acceptance.signal||acceptance.status!==0)throw Error('Post-deploy synthetic waypoint, map, Cancel or Fuel acceptance failed.');
-    evidence.cancelAcceptancePassed=true;evidence.fuelAcceptancePassed=true;save();
+    evidence.cancelAcceptancePassed=true;evidence.fuelAcceptancePassed=true;evidence.insertAcceptancePassed=!verifyOnly;evidence.waypointSelectionAcceptancePassed=!verifyOnly;save();
     if(!verifyOnly){
       const deletion=spawnSync(process.execPath,['--test','--test-concurrency=1','--test-name-pattern=library delete dialog|dialog confirmation reads final','tests/request-volume-browser.test.cjs','tests/delete-behavior.test.cjs'],{cwd:root,env:{...env,DELETE_SCREENSHOT_DIR:''},encoding:'utf8',timeout:60000,maxBuffer:4*1024*1024});
       if(deletion.error||deletion.signal||deletion.status!==0)throw Error('Post-deploy synthetic Delete dialog acceptance failed.');
@@ -153,6 +155,16 @@ async function release(){
     evidence.acceptancePassed=true;evidence.acceptance=(verifyOnly?'Existing exact candidate verified without deployment; ':'Exact candidate staged; ')+'local Fuel/Cancel/save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
     console.log('PASS: exact Development candidate, Fuel/Cancel/save/alignment regressions, real Google desktop with synthetic state only.');
   }catch(e){evidence.error=e.message;save();throw e;}finally{if(!verifyOnly)fs.writeFileSync(configFile,config);}
+}
+function validateInsertHtml(html,source){
+  const spans=[['// Insert uses the full stored geometry,','function movePoint(){'],["map.on('click', function(ev){",'// ---------- cancellable editor sessions ----------']];
+  for(const [from,to] of spans){const start=source.indexOf(from),end=source.indexOf(to,start);if(start<0||end<=start||source.indexOf(from,start+1)!==-1||!html.includes(source.slice(start,end)))throw Error('Delivered Insert behavior does not match pinned candidate.');}
+  // Cover emitted routing, preview, history and toolbar hooks as well as core functions.
+  const hooks=source.split('\n').filter(line=>line.includes('pendingInsert')||line.includes('chooseInsertPoint')||line.includes('insertPointBtn'));
+  if(hooks.length<15)throw Error('Incomplete Insert hook source.');
+  for(const line of new Set(hooks))if(html.split(line).length!==source.split(line).length)throw Error('Delivered Insert hook does not match pinned candidate.');
+  const button=source.match(/<button[^>]*id="insertPointBtn"[^>]*>[\s\S]*?<\/button>/)?.[0];
+  if(!button||!html.includes(button)||!html.includes('els.insertPointBtn.onclick = insertPoint;'))throw Error('Delivered Insert control does not match pinned candidate.');
 }
 function validateCancelHtml(html,source){
   const spans=[
@@ -202,5 +214,5 @@ function validateBrowserEvidence(data){
   if(!data||data.provider!=='real Google Maps'||data.syntheticOnly!==true||!Array.isArray(data.errors)||data.errors.length||data.commandTargetMs!==100||data.commandTargetMet!==true||!Number.isFinite(data.commandP95)||data.commandP95<0||data.commandP95>100)
     throw Error('Real Google performance acceptance target unmet or evidence invalid; inspect sanitized evidence. Development version remains deployed; no automatic retry or rollback.');
 }
-module.exports={validateFuelDisabledHtml,validateStagePreviousVersion,CURRENT_VERSION,CURRENT_MESSAGE,CURRENT_TAG,candidateFor,STAGE_PIN,STAGE_MANIFEST,STAGE_TAG,STAGE_MESSAGE,validateDeleteHtml,validateExistingVersion,VERIFIED_VERSION,VERIFIED_DEPLOYMENT,validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE,validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
+module.exports={validateInsertHtml,validateFuelDisabledHtml,validateStagePreviousVersion,CURRENT_VERSION,CURRENT_MESSAGE,CURRENT_TAG,candidateFor,STAGE_PIN,STAGE_MANIFEST,STAGE_TAG,STAGE_MESSAGE,validateDeleteHtml,validateExistingVersion,VERIFIED_VERSION,VERIFIED_DEPLOYMENT,validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE,validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
 if(require.main===module)release().catch(e=>{console.error(e.message);process.exitCode=1;});

@@ -14,7 +14,7 @@ test('accepts only verifiable single-version traffic',()=>{assert.throws(()=>lat
 const fs=require('node:fs'),path=require('node:path');
 test('manual staging pins only the exact combined Fuel/Cancel candidate and never deploys preparation via push',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(workflow.includes("'0c3e255e444e3ba520994271330d46b80a487335' }}"));
+ assert.ok(workflow.includes("'b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7' }}"));
  assert.ok(workflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'"));
  for(const file of ['scripts/release-map-performance-development.cjs','tests/map-performance-development.test.cjs'])assert.ok(workflow.includes("      - '"+file+"'"));
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
@@ -130,7 +130,7 @@ test('Cancel acceptance augments existing synthetic and real Google checks witho
 const {validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE}=require('../scripts/release-map-performance-development.cjs');
 test('newer Development previews cannot be silently overwritten by this composition',()=>{
  assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':EXPECTED_PREVIOUS_MESSAGE,'workers/tag':'fuel-cancel-6ac8fb56f3b7'}}));
- assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':require('../scripts/release-map-performance-development.cjs').CURRENT_MESSAGE,'workers/tag':'fuel-cancel-delete-637af20b8586'}}));
+ assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':require('../scripts/release-map-performance-development.cjs').CURRENT_MESSAGE,'workers/tag':'minimal-cancel-delete-0c3e255e444e'}}));
  assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':'newer-delete-dialog-preview'}}));
  assert.throws(()=>validatePreviousVersion({}));
  assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':EXPECTED_PREVIOUS_MESSAGE,'workers/tag':'wrong'}}));
@@ -177,7 +177,7 @@ test('verify-only is explicit and fails before any deploy; same delivery and acc
 
 const {candidateFor,STAGE_PIN,STAGE_MANIFEST,STAGE_MESSAGE,validateDeleteHtml}=require('../scripts/release-map-performance-development.cjs');
 test('stage pins combined Delete while verification and diagnostics retain exact existing Fuel',()=>{
- assert.equal(STAGE_PIN,'0c3e255e444e3ba520994271330d46b80a487335');assert.equal(STAGE_MANIFEST,'21b44943697a3d90d61479aac2c2d035f21264d2a2b45c22e3628f59076391b7');
+ assert.equal(STAGE_PIN,'b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7');assert.equal(STAGE_MANIFEST,'dd04c4f71486771841d9751c26688daf83e09547e5b582eff0eaec4f2b350b8e');
  assert.equal(candidateFor(false).pin,STAGE_PIN);assert.equal(candidateFor(false).message,STAGE_MESSAGE);
  assert.equal(candidateFor(true).pin,PIN);assert.equal(candidateFor(true).manifest,MANIFEST);
  assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':'227ec8853ef96f5de7b615f24b6748e9c96d912d bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f'}}));
@@ -217,6 +217,14 @@ test('disabled Fuel delivery requires full exact 2D/3D spans with false flag',()
 });
 test('stage uses Fuel-off acceptance while historical verify retains cache checks and live latency remains required',()=>{
  const c=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8'),w=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(c.includes("verifyOnly?'tests/fuel-cache.test.cjs':'tests/fuel-disabled.test.cjs'"));assert.ok(w.includes('node --test tests/fuel-disabled.test.cjs tests/waypoint-development-release.test.cjs'));
+ assert.ok(c.includes("verifyOnly?'tests/fuel-cache.test.cjs':'tests/fuel-disabled.test.cjs'"));assert.ok(w.includes('node --test tests/fuel-disabled.test.cjs tests/insert-track-point.test.cjs tests/waypoint-development-release.test.cjs'));
  assert.ok(c.includes('evidence.fuelOverlayDisabledVerified=!verifyOnly'));assert.ok(c.indexOf('validateBrowserEvidence(evidence.realGoogle)')<c.indexOf('evidence.acceptancePassed=true'));
+});
+
+test('Insert and waypoint acceptance run before overall pass; qualification cannot deploy',()=>{
+ const c=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8'),w=fs.readFileSync(path.join(__dirname,'../.github/workflows/insert-qualification.yml'),'utf8');
+ assert.ok(c.includes("...(!verifyOnly?['tests/insert-track-point.test.cjs']:[])"));
+ for(const flag of ['deliveredInsertVerified','deliveredWaypointSelectionVerified','insertAcceptancePassed','waypointSelectionAcceptancePassed'])assert.ok(c.indexOf('evidence.'+flag+'=')<c.indexOf('evidence.acceptancePassed=true'));
+ assert.ok(w.includes('ref: '+STAGE_PIN));assert.ok(w.includes('node --test tests/insert-track-point.test.cjs'));
+ assert.ok(!/secrets\.|environment:|wrangler deploy|workflow_dispatch/.test(w));
 });
