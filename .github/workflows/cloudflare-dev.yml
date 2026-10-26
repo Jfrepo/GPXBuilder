@@ -13,6 +13,8 @@ on:
       - 'tests/minimal-release-delivery.test.cjs'
       - 'scripts/dev-metadata-preflight.cjs'
       - 'tests/dev-metadata-preflight.test.cjs'
+      - 'scripts/verify-export-qualification.cjs'
+      - 'tests/export-qualification.test.cjs'
       - '.github/workflows/insert-qualification.yml'
       - 'scripts/trace-map-performance-development.cjs'
       - 'scripts/diagnose-fuel-delivery.cjs'
@@ -107,14 +109,17 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.operation == 'verify' && '6ac8fb56f3b74b1a2c96b187cc19d64442944e66' || 'b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7' }}
+          ref: ${{ inputs.operation == 'verify' && '6ac8fb56f3b74b1a2c96b187cc19d64442944e66' || 'e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade' }}
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Require successful immutable export qualification
+        if: inputs.operation == 'stage'
+        run: node controller/scripts/verify-export-qualification.cjs
       - name: Verify release-controller guards
-        run: node --test controller/tests/map-performance-development.test.cjs
+        run: node --test controller/tests/map-performance-development.test.cjs controller/tests/export-qualification.test.cjs
       - name: Verify exact emitted minimal feature delivery offline
         if: inputs.operation == 'stage'
         run: node --test controller/tests/minimal-release-delivery.test.cjs
@@ -124,11 +129,12 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx --no-install playwright install --with-deps chromium
-          test "$(git rev-parse HEAD)" = "b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7"
+          test "$(git rev-parse HEAD)" = "e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade"
           npm run test:source
           npm run test:packaged-server
           npm run test:browser
           npm run test:waypoints
+          npm run test:waypoint-export
           npm run test:map-performance
           npm run test:cancel
           node --test tests/fuel-disabled.test.cjs tests/insert-track-point.test.cjs tests/waypoint-development-release.test.cjs

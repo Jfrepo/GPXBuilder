@@ -1,0 +1,5 @@
+const RUN='40316373283',HEAD='6dcd1109eb4179e89d9ffd70528ba06e6ca4792c';
+function validate(r){if(String(r?.id)!==RUN||r.head_sha!==HEAD||r.head_branch!=='staging/waypoint-export-development'||r.path!=='.github/workflows/insert-qualification.yml'||r.event!=='push'||r.status!=='completed'||r.conclusion!=='success'||r.repository?.full_name!=='Jfrepo/GPXBuilder')throw Error('Immutable export qualification has not passed; no staging authorized.');}
+async function check(request=fetch){const r=await request('https://api.github.com/repos/Jfrepo/GPXBuilder/actions/runs/'+RUN,{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Accept:'application/vnd.github+json','User-Agent':'Mancardo-Development-qualification'}});if(r.status!==200)throw Error('Qualification receipt unavailable; stop without retry.');validate(await r.json());}
+module.exports={validate,check,RUN,HEAD};
+if(require.main===module)check().then(()=>console.log('PASS: immutable export qualification succeeded.')).catch(()=>{console.error('Export qualification gate failed. No deployment attempted.');process.exitCode=1;});

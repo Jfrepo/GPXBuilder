@@ -5,17 +5,18 @@ const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
 const PIN='6ac8fb56f3b74b1a2c96b187cc19d64442944e66';
 const MANIFEST='ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4';
-const STAGE_PIN='b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7';
-const STAGE_MANIFEST='dd04c4f71486771841d9751c26688daf83e09547e5b582eff0eaec4f2b350b8e';
-const STAGE_TAG='insert-waypoints-b74e22be5efc',STAGE_MESSAGE=STAGE_PIN+' '+STAGE_MANIFEST;
+const STAGE_PIN='e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade';
+const STAGE_MANIFEST='ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76';
+const STAGE_TAG='waypoint-export-e1c63a4c86ca',STAGE_MESSAGE=STAGE_PIN+' '+STAGE_MANIFEST;
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
 const TAG='fuel-cancel-6ac8fb56f3b7', MESSAGE=PIN+' '+MANIFEST;
-const CURRENT_VERSION='c49d5141-cd59-4dec-bd7a-31aaab78a9cc';
-const CURRENT_MESSAGE='0c3e255e444e3ba520994271330d46b80a487335 21b44943697a3d90d61479aac2c2d035f21264d2a2b45c22e3628f59076391b7',CURRENT_TAG='minimal-cancel-delete-0c3e255e444e';
+const CURRENT_VERSION='1c117296-13ca-4073-a727-9592e33c06d8';
+const CURRENT_DEPLOYMENT='74010022-6d03-4c57-a4bf-d0bc06e6f379';
+const CURRENT_MESSAGE='b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7 dd04c4f71486771841d9751c26688daf83e09547e5b582eff0eaec4f2b350b8e',CURRENT_TAG='insert-waypoints-b74e22be5efc';
 function validateStagePreviousVersion(deployment,version){
-  if(activeVersion(deployment)!==CURRENT_VERSION||version.annotations?.['workers/message']!==CURRENT_MESSAGE||version.annotations?.['workers/tag']!==CURRENT_TAG)throw Error('Minimal stage requires the exact currently reviewed Development version; stop and coordinate before any write.');
+  if(deployment.id!==CURRENT_DEPLOYMENT||activeVersion(deployment)!==CURRENT_VERSION||version.annotations?.['workers/message']!==CURRENT_MESSAGE||version.annotations?.['workers/tag']!==CURRENT_TAG)throw Error('Minimal stage requires the exact currently reviewed Development version; stop and coordinate before any write.');
 }
 const EXPECTED_PREVIOUS_MESSAGE=PIN+' '+MANIFEST;
 const VERIFIED_VERSION='7e6aed39-3549-4d1a-947d-8bd6caf9730a',VERIFIED_DEPLOYMENT='b29387d1-19d2-4240-ac4e-2d201d3774b0';
@@ -130,6 +131,7 @@ async function release(){
     evidence.deliveredCancelVerified=true;
     if(!verifyOnly){validateInsertHtml(html,fs.readFileSync(path.join(root,'index.html'),'utf8'));evidence.deliveredInsertVerified=true;}
     evidence.deliveredWaypointSelectionVerified=!verifyOnly;
+    if(!verifyOnly){validateExportHtml(html,fs.readFileSync(path.join(root,'worker-gpx-export.js'),'utf8'));evidence.deliveredWaypointExportVerified=true;}
     (verifyOnly?validateFuelHtml:validateFuelDisabledHtml)(html,fs.readFileSync(path.join(root,'index.html'),'utf8'),fs.readFileSync(path.join(root,'worker-3d-overlays.js'),'utf8'));
     evidence.fuelOverlayDisabledVerified=!verifyOnly;
     evidence.deliveredFuelVerified=true;save();
@@ -137,9 +139,9 @@ async function release(){
     // The pinned entrypoint does not import the optional shared-waypoint client.
     // Exact feature equality covers every category and saved-waypoint surface it serves.
     // Browser fixtures remain local and intercept every request; no account data is loaded.
-    const acceptance=spawnSync(process.execPath,['--test','--test-concurrency=1','tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs',verifyOnly?'tests/fuel-cache.test.cjs':'tests/fuel-disabled.test.cjs',...(!verifyOnly?['tests/insert-track-point.test.cjs']:[])],{cwd:root,env:{...env,WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root},encoding:'utf8',timeout:300000,maxBuffer:4*1024*1024});
+    const acceptance=spawnSync(process.execPath,['--test','--test-concurrency=1','tests/waypoint-display.test.cjs','tests/map-performance.test.cjs','tests/cancel-edit.test.cjs',verifyOnly?'tests/fuel-cache.test.cjs':'tests/fuel-disabled.test.cjs',...(!verifyOnly?['tests/insert-track-point.test.cjs','tests/waypoint-export.test.cjs']:[])],{cwd:root,env:{...env,WAYPOINT_ARTIFACT_DIR:'',MANCARDO_PERF_ROOT:root},encoding:'utf8',timeout:300000,maxBuffer:4*1024*1024});
     if(acceptance.error||acceptance.signal||acceptance.status!==0)throw Error('Post-deploy synthetic waypoint, map, Cancel or Fuel acceptance failed.');
-    evidence.cancelAcceptancePassed=true;evidence.fuelAcceptancePassed=true;evidence.insertAcceptancePassed=!verifyOnly;evidence.waypointSelectionAcceptancePassed=!verifyOnly;save();
+    evidence.cancelAcceptancePassed=true;evidence.fuelAcceptancePassed=true;evidence.insertAcceptancePassed=!verifyOnly;evidence.waypointSelectionAcceptancePassed=!verifyOnly;evidence.waypointExportAcceptancePassed=!verifyOnly;save();
     if(!verifyOnly){
       const deletion=spawnSync(process.execPath,['--test','--test-concurrency=1','--test-name-pattern=library delete dialog|dialog confirmation reads final','tests/request-volume-browser.test.cjs','tests/delete-behavior.test.cjs'],{cwd:root,env:{...env,DELETE_SCREENSHOT_DIR:''},encoding:'utf8',timeout:60000,maxBuffer:4*1024*1024});
       if(deletion.error||deletion.signal||deletion.status!==0)throw Error('Post-deploy synthetic Delete dialog acceptance failed.');
@@ -155,6 +157,13 @@ async function release(){
     evidence.acceptancePassed=true;evidence.acceptance=(verifyOnly?'Existing exact candidate verified without deployment; ':'Exact candidate staged; ')+'local Fuel/Cancel/save/alignment regression tests and actual Google desktop synthetic checks passed. Physical touch and actual 3D remain outstanding.';save();
     console.log('PASS: exact Development candidate, Fuel/Cancel/save/alignment regressions, real Google desktop with synthetic state only.');
   }catch(e){evidence.error=e.message;save();throw e;}finally{if(!verifyOnly)fs.writeFileSync(configFile,config);}
+}
+function validateExportHtml(html,source){
+ const start=source.indexOf('export function serializeGpxSelection('),end=source.indexOf('\nconst EXPORT_CSS=',start);
+ if(start<0||end<=start)throw Error('Invalid export serializer source.');
+ const serializer=source.slice(start,end).trim().replace(/^export /,'');
+ const ui=source.match(/const EXPORT_UI=String.raw`([\s\S]*?)`;/)?.[1],css=source.match(/const EXPORT_CSS=String.raw`([\s\S]*?)`;/)?.[1];
+ for(const span of [serializer,ui,css])if(!span||html.split(span).length!==2)throw Error('Delivered waypoint export does not match pinned feature.');
 }
 function validateInsertHtml(html,source){
   const spans=[['// Insert uses the full stored geometry,','function movePoint(){'],["map.on('click', function(ev){",'// ---------- cancellable editor sessions ----------']];
@@ -214,5 +223,5 @@ function validateBrowserEvidence(data){
   if(!data||data.provider!=='real Google Maps'||data.syntheticOnly!==true||!Array.isArray(data.errors)||data.errors.length||data.commandTargetMs!==100||data.commandTargetMet!==true||!Number.isFinite(data.commandP95)||data.commandP95<0||data.commandP95>100)
     throw Error('Real Google performance acceptance target unmet or evidence invalid; inspect sanitized evidence. Development version remains deployed; no automatic retry or rollback.');
 }
-module.exports={validateInsertHtml,validateFuelDisabledHtml,validateStagePreviousVersion,CURRENT_VERSION,CURRENT_MESSAGE,CURRENT_TAG,candidateFor,STAGE_PIN,STAGE_MANIFEST,STAGE_TAG,STAGE_MESSAGE,validateDeleteHtml,validateExistingVersion,VERIFIED_VERSION,VERIFIED_DEPLOYMENT,validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE,validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
+module.exports={validateExportHtml,CURRENT_DEPLOYMENT,validateInsertHtml,validateFuelDisabledHtml,validateStagePreviousVersion,CURRENT_VERSION,CURRENT_MESSAGE,CURRENT_TAG,candidateFor,STAGE_PIN,STAGE_MANIFEST,STAGE_TAG,STAGE_MESSAGE,validateDeleteHtml,validateExistingVersion,VERIFIED_VERSION,VERIFIED_DEPLOYMENT,validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE,validateCancelHtml,validateBrowserEvidence,requiredEnv,identity,latest,activeVersion,PIN,MANIFEST};
 if(require.main===module)release().catch(e=>{console.error(e.message);process.exitCode=1;});
