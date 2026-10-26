@@ -1,7 +1,7 @@
 name: Waypoint Export Candidate Qualification
 on:
   push:
-    branches: ['staging/waypoint-export-development']
+    branches: ['staging/waypoint-export-repair-qualification']
 permissions:
   contents: read
 jobs:
@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade
+          ref: 60994306d017c227da3246d2465611733c5043d2
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -20,23 +20,24 @@ jobs:
       - run: npx --no-install playwright install --with-deps chromium
       - name: Qualify exact candidate with synthetic tests only
         run: |
-          test "$(git rev-parse HEAD)" = "e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade"
+          test "$(git rev-parse HEAD)" = "60994306d017c227da3246d2465611733c5043d2"
           npm run test:source
           npm run test:packaged-server
           npm run test:browser
           npm run test:waypoints
           npm run test:waypoint-export
+          npm run test:waypoint-export-bundled
           npm run test:map-performance
           npm run test:cancel
           node --test tests/insert-track-point.test.cjs
           node --test tests/fuel-disabled.test.cjs
           node --test tests/waypoint-development-release.test.cjs
           node scripts/build-waypoint-development.cjs
-          echo "ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76  dist/waypoint-development/manifest.json" | sha256sum --check
+          echo "20e1a44dfd83c1b8ffba2b04a5d582c89b4b820a52873204bdf5a1fe764db369  dist/waypoint-development/manifest.json" | sha256sum --check
           git diff --exit-code
       - uses: actions/upload-artifact@v4
         with:
-          name: waypoint-export-development-e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade
+          name: waypoint-export-development-60994306d017c227da3246d2465611733c5043d2
           path: dist/waypoint-development/
           if-no-files-found: error
           retention-days: 7

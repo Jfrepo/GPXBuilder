@@ -226,9 +226,9 @@ test('Insert and waypoint acceptance run before overall pass; qualification cann
  assert.ok(c.includes("...(!verifyOnly?['tests/insert-track-point.test.cjs','tests/waypoint-export.test.cjs']:[])"));
  for(const flag of ['deliveredInsertVerified','deliveredWaypointSelectionVerified','insertAcceptancePassed','waypointSelectionAcceptancePassed'])assert.ok(c.indexOf('evidence.'+flag+'=')<c.indexOf('evidence.acceptancePassed=true'));
  // Qualification may precede fresh live identity acquisition; it cannot change stage pins.
- assert.ok(w.includes('ref: e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade'));
- assert.ok(w.includes("branches: ['staging/waypoint-export-development']"));
- assert.ok(w.includes('ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76  dist/waypoint-development/manifest.json'));
- for(const command of ['npm run test:source','npm run test:packaged-server','npm run test:browser','npm run test:waypoint-export','node --test tests/insert-track-point.test.cjs','node --test tests/fuel-disabled.test.cjs'])assert.ok(w.includes(command));
+ assert.ok(w.includes('ref: 60994306d017c227da3246d2465611733c5043d2'));
+ assert.ok(w.includes("branches: ['staging/waypoint-export-repair-qualification']"));
+ assert.ok(w.includes('20e1a44dfd83c1b8ffba2b04a5d582c89b4b820a52873204bdf5a1fe764db369  dist/waypoint-development/manifest.json'));
+ for(const command of ['npm run test:source','npm run test:packaged-server','npm run test:browser','npm run test:waypoint-export','npm run test:waypoint-export-bundled','node --test tests/insert-track-point.test.cjs','node --test tests/fuel-disabled.test.cjs'])assert.ok(w.includes(command));
  assert.ok(!/secrets\.|environment:|wrangler deploy|workflow_dispatch/.test(w));
 });
