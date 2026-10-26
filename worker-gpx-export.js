@@ -1,7 +1,7 @@
 import baseWorker from './worker-waypoint-save.js';
 
 // Pure serializer: explicit selected saved items only; never creates corner waypoints.
-export function serializeGpxSelection(tracks, waypoints) {
+export const GPX_SERIALIZER=String.raw`function serializeGpxSelection(tracks, waypoints) {
   function text(value) {
     const s=String(value==null?'':value);
     for(const c of s){const n=c.codePointAt(0);if(!(n===9||n===10||n===13||(n>=32&&n<=0xd7ff)||(n>=0xe000&&n<=0xfffd)||(n>=0x10000&&n<=0x10ffff)))throw Error('An item contains text that cannot be written to XML.');}
@@ -35,7 +35,7 @@ export function serializeGpxSelection(tracks, waypoints) {
     if(!route)xml+='</trk>';
   }
   return xml+'</gpx>\n';
-}
+}`;
 
 const EXPORT_CSS=String.raw`<style id="mancardo-gpx-export-style">
 #mancardoGpxExport{width:min(540px,calc(100vw - 32px));max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);box-sizing:border-box;overflow:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface,#fff);color:var(--text,#222);padding:20px}
@@ -73,4 +73,4 @@ const EXPORT_UI=String.raw`
  addCardExports();
 })();
 `;
-export default {async fetch(request,env,ctx){const response=await baseWorker.fetch(request,env,ctx);if(!(response.headers.get('content-type')||'').includes('text/html'))return response;let html=await response.text();if(!html.includes('function installGpxExport()')){html=html.replace('</head>',EXPORT_CSS+'</head>');html=html.replace('// ---------- boot ----------',serializeGpxSelection.toString()+'\n'+EXPORT_UI+'\n// ---------- boot ----------');}const headers=new Headers(response.headers);headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store');return new Response(html,{status:response.status,statusText:response.statusText,headers});}};
+export default {async fetch(request,env,ctx){const response=await baseWorker.fetch(request,env,ctx);if(!(response.headers.get('content-type')||'').includes('text/html'))return response;let html=await response.text();if(!html.includes('function installGpxExport()')){html=html.replace('</head>',EXPORT_CSS+'</head>');html=html.replace('// ---------- boot ----------',GPX_SERIALIZER+'\n'+EXPORT_UI+'\n// ---------- boot ----------');}const headers=new Headers(response.headers);headers.delete('content-length');headers.delete('etag');headers.set('cache-control','no-store');return new Response(html,{status:response.status,statusText:response.statusText,headers});}};
