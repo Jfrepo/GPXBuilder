@@ -225,6 +225,10 @@ test('Insert and waypoint acceptance run before overall pass; qualification cann
  const c=fs.readFileSync(path.join(__dirname,'../scripts/release-map-performance-development.cjs'),'utf8'),w=fs.readFileSync(path.join(__dirname,'../.github/workflows/insert-qualification.yml'),'utf8');
  assert.ok(c.includes("...(!verifyOnly?['tests/insert-track-point.test.cjs']:[])"));
  for(const flag of ['deliveredInsertVerified','deliveredWaypointSelectionVerified','insertAcceptancePassed','waypointSelectionAcceptancePassed'])assert.ok(c.indexOf('evidence.'+flag+'=')<c.indexOf('evidence.acceptancePassed=true'));
- assert.ok(w.includes('ref: '+STAGE_PIN));assert.ok(w.includes('node --test tests/insert-track-point.test.cjs'));
+ // Qualification may precede fresh live identity acquisition; it cannot change stage pins.
+ assert.ok(w.includes('ref: e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade'));
+ assert.ok(w.includes("branches: ['staging/waypoint-export-development']"));
+ assert.ok(w.includes('ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76  dist/waypoint-development/manifest.json'));
+ for(const command of ['npm run test:source','npm run test:packaged-server','npm run test:browser','npm run test:waypoint-export','node --test tests/insert-track-point.test.cjs','node --test tests/fuel-disabled.test.cjs'])assert.ok(w.includes(command));
  assert.ok(!/secrets\.|environment:|wrangler deploy|workflow_dispatch/.test(w));
 });
