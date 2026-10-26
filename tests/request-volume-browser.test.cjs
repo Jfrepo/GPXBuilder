@@ -938,10 +938,12 @@ async function exerciseToolbarControls(f, duringEditing) {
   assert.equal(await f.page.locator('#movePointBtn').isEnabled(), true);
   assert.equal(await f.page.locator('#extendTrackBtn').isEnabled(), true);
 
-  assert.equal(await f.page.locator('#insertPointBtn').isEnabled(), true);
-  await f.page.locator('#insertPointBtn').press('Enter');
-  assert.match(await f.page.locator('#modeBanner span').textContent(), /^Insert point:/);
-  await f.page.locator('#cancelChangeBtn').press('Enter');
+  assert.equal(await f.page.locator('#insertPointBtn').isEnabled(), f.track.visible !== false, 'Insert requires a visible track segment');
+  if (f.track.visible !== false) {
+    await f.page.locator('#insertPointBtn').press('Enter');
+    assert.match(await f.page.locator('#modeBanner span').textContent(), /^Insert point:/);
+    await f.page.locator('#cancelChangeBtn').press('Enter');
+  }
 
   await f.page.locator('#movePointBtn').press('Enter');
   assert.equal(await modeHidden(), false);
