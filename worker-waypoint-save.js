@@ -359,6 +359,7 @@ const WAYPOINT_FEATURE = String.raw`
   function setWaypointVisible(id,visible){
     var w=waypointById(id);if(!w)return;
     w.visible=visible;w.updatedAt=new Date().toISOString();saveWaypoints();renderWaypointMarkers();
+    if(typeof updateSelectAll==='function')updateSelectAll();
   }
   function setWaypointIcon(id,icon){
     var w=waypointById(id);if(!w)return;
@@ -397,6 +398,7 @@ const WAYPOINT_FEATURE = String.raw`
     return d;
   }
   function renderWaypointLibrary(){
+    if(typeof updateSelectAll==='function')updateSelectAll();
     var wrap=els.trackList;if(!wrap)return;
     Array.prototype.forEach.call(wrap.querySelectorAll('.mancardo-waypoint-item'),function(n){n.remove();});
     if(!waypoints.length){
@@ -407,6 +409,34 @@ const WAYPOINT_FEATURE = String.raw`
     var frag=document.createDocumentFragment();
     waypoints.slice().sort(function(a,b){return String(b.updatedAt||'').localeCompare(String(a.updatedAt||''));}).forEach(function(w){frag.appendChild(buildWaypointCard(w));});
     wrap.insertBefore(frag,wrap.firstChild);
+  }
+
+  // Selection is the existing durable Show state, not a separate delete list.
+  // Keep track export/delete handlers unchanged: their scope remains tracks.
+  if(els.selectAllTracks&&typeof updateSelectAll==='function'){
+    updateSelectAll=function(){
+      var items=(state.library||[]).concat(waypoints);
+      var shown=items.filter(function(item){return item.visible!==false;}).length;
+      els.selectAllTracks.checked=items.length>0&&shown===items.length;
+      els.selectAllTracks.indeterminate=shown>0&&shown<items.length;
+      els.selectAllTracks.disabled=items.length===0;
+    };
+    var baseSelectAllForWaypoints=els.selectAllTracks.onchange;
+    els.selectAllTracks.onchange=function(ev){
+      var visible=els.selectAllTracks.checked,changed=false;
+      // Share can update metadata in localStorage independently of this client.
+      // Read the latest records before changing only their visibility.
+      loadWaypoints();
+      waypoints.forEach(function(w){if(w.visible!==visible){w.visible=visible;changed=true;}});
+      if(changed)saveWaypoints();
+      renderWaypointMarkers();
+      if(baseSelectAllForWaypoints)baseSelectAllForWaypoints.call(this,ev);
+      else renderLibrary();
+      updateSelectAll();
+    };
+    var selectLabel=document.querySelector('#selectAllWrap span');
+    if(selectLabel)selectLabel.textContent='Select / Deselect all tracks and waypoints';
+    els.selectAllTracks.title='Show or hide all My Library tracks and waypoints, including items hidden by search or filters';
   }
 
   var baseRenderLibraryForWaypoints=renderLibrary;

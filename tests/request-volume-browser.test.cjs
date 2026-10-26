@@ -853,7 +853,7 @@ for (const visible of [false, true]) {
 // identities and counts delivered resize events only; no application function,
 // matchMedia, state, storage, hash or synchronization implementation is replaced.
 const TOOLBAR_CONTROL_IDS = [
-  'splitAfterBtn', 'joinNextBtn', 'joinToPointBtn', 'movePointBtn',
+  'splitAfterBtn', 'joinNextBtn', 'joinToPointBtn', 'movePointBtn', 'insertPointBtn',
   'extendTrackBtn', 'completeChangeBtn', 'cancelChangeBtn', 'deletePointBtn', 'deleteSegBtn',
   'reverseBtn', 'undoBtn', 'redoBtn', 'exportBtn', 'deleteTrackBtn',
 ];
@@ -937,6 +937,13 @@ async function exerciseToolbarControls(f, duringEditing) {
   assert.equal(await f.page.locator('#pointsBody tr').first().evaluate(row => row.classList.contains('sel')), true);
   assert.equal(await f.page.locator('#movePointBtn').isEnabled(), true);
   assert.equal(await f.page.locator('#extendTrackBtn').isEnabled(), true);
+
+  assert.equal(await f.page.locator('#insertPointBtn').isEnabled(), f.track.visible !== false, 'Insert requires a visible track segment');
+  if (f.track.visible !== false) {
+    await f.page.locator('#insertPointBtn').press('Enter');
+    assert.match(await f.page.locator('#modeBanner span').textContent(), /^Insert point:/);
+    await f.page.locator('#cancelChangeBtn').press('Enter');
+  }
 
   await f.page.locator('#movePointBtn').press('Enter');
   assert.equal(await modeHidden(), false);
