@@ -1,0 +1,11 @@
+# Saved waypoint GPX export
+
+The existing **Export Selected** and editor download controls remain track-only and unchanged. The new **Export GPX…** library action opens a separate, temporary selection list of saved tracks/routes and saved waypoints. Nothing is preselected. Map visibility and library filters do not determine export choices. A waypoint card's **Export GPX…** action preselects only that waypoint.
+
+Use **Download GPX** on a computer or phone. **Share GPX…** is enabled only when the browser reports support for sharing this file. Native sharing requires a supporting secure browser and a user click. Cancellation does not trigger a download. If sharing is unavailable or rejected, Download remains available; on iPhone the downloaded file can be handled through the browser/Files. Physical iPhone and Garmin import testing has not been performed.
+
+One file contains the selected saved items. Waypoint-only files contain GPX `wpt` elements and no dummy tracks. Combined files contain waypoints, routes and tracks in GPX 1.1 order, without adding calculated corner waypoints. Disconnected route segments are separate `rte` elements to avoid inventing connecting lines. Track segment boundaries and all original point coordinates are preserved. Save track edits first: this picker exports the saved library, not an unfinished editor copy.
+
+Names and applicable coordinates/elevation/time/comment/description/symbol/type are escaped and validated. Icon, note and existing creation/update metadata use namespaced extensions; account/sync identifiers are excluded. Unknown device support for icons/extensions is not assumed. Invalid selected data fails the entire export with a message. Changes to saved records while the picker is open require reopening it; no export action writes to saved library records.
+
+No Cloudflare, D1 schema, authentication, dependency or network-service changes. Standards references: [GPX 1.1](https://www.topografix.com/GPX/1/1/) and [Web Share API](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/share). Tests parse XML and assert documented element ordering/values. Fetching the official XSD from this execution environment was blocked by proxy CONNECT403; full XSD validation is not claimed.
