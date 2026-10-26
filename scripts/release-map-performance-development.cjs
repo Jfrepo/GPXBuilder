@@ -5,16 +5,16 @@ const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
 const PIN='6ac8fb56f3b74b1a2c96b187cc19d64442944e66';
 const MANIFEST='ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4';
-const STAGE_PIN='e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade';
-const STAGE_MANIFEST='ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76';
-const STAGE_TAG='waypoint-export-e1c63a4c86ca',STAGE_MESSAGE=STAGE_PIN+' '+STAGE_MANIFEST;
+const STAGE_PIN='60994306d017c227da3246d2465611733c5043d2';
+const STAGE_MANIFEST='20e1a44dfd83c1b8ffba2b04a5d582c89b4b820a52873204bdf5a1fe764db369';
+const STAGE_TAG='waypoint-export-60994306d017',STAGE_MESSAGE=STAGE_PIN+' '+STAGE_MANIFEST;
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
 const TAG='fuel-cancel-6ac8fb56f3b7', MESSAGE=PIN+' '+MANIFEST;
-const CURRENT_VERSION='1c117296-13ca-4073-a727-9592e33c06d8';
-const CURRENT_DEPLOYMENT='74010022-6d03-4c57-a4bf-d0bc06e6f379';
-const CURRENT_MESSAGE='b74e22be5efc115bfdf8b4d6b5c2509d5dbfdee7 dd04c4f71486771841d9751c26688daf83e09547e5b582eff0eaec4f2b350b8e',CURRENT_TAG='insert-waypoints-b74e22be5efc';
+const CURRENT_VERSION='0e6cb503-d3ca-4559-a98e-77a06aec6abb';
+const CURRENT_DEPLOYMENT='33c7b6bb-9bd7-44b3-984f-82a43fc228d8';
+const CURRENT_MESSAGE='e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76',CURRENT_TAG='waypoint-export-e1c63a4c86ca';
 function validateStagePreviousVersion(deployment,version){
   if(deployment.id!==CURRENT_DEPLOYMENT||activeVersion(deployment)!==CURRENT_VERSION||version.annotations?.['workers/message']!==CURRENT_MESSAGE||version.annotations?.['workers/tag']!==CURRENT_TAG)throw Error('Minimal stage requires the exact currently reviewed Development version; stop and coordinate before any write.');
 }
@@ -159,9 +159,7 @@ async function release(){
   }catch(e){evidence.error=e.message;save();throw e;}finally{if(!verifyOnly)fs.writeFileSync(configFile,config);}
 }
 function validateExportHtml(html,source){
- const start=source.indexOf('export function serializeGpxSelection('),end=source.indexOf('\nconst EXPORT_CSS=',start);
- if(start<0||end<=start)throw Error('Invalid export serializer source.');
- const serializer=source.slice(start,end).trim().replace(/^export /,'');
+ const serializer=source.match(/export const GPX_SERIALIZER=String.raw`([\s\S]*?)`;/)?.[1];
  const ui=source.match(/const EXPORT_UI=String.raw`([\s\S]*?)`;/)?.[1],css=source.match(/const EXPORT_CSS=String.raw`([\s\S]*?)`;/)?.[1];
  for(const span of [serializer,ui,css])if(!span||html.split(span).length!==2)throw Error('Delivered waypoint export does not match pinned feature.');
 }

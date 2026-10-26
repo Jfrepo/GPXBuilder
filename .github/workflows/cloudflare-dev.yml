@@ -109,7 +109,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.operation == 'verify' && '6ac8fb56f3b74b1a2c96b187cc19d64442944e66' || 'e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade' }}
+          ref: ${{ inputs.operation == 'verify' && '6ac8fb56f3b74b1a2c96b187cc19d64442944e66' || '60994306d017c227da3246d2465611733c5043d2' }}
           path: candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -129,12 +129,13 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx --no-install playwright install --with-deps chromium
-          test "$(git rev-parse HEAD)" = "e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade"
+          test "$(git rev-parse HEAD)" = "60994306d017c227da3246d2465611733c5043d2"
           npm run test:source
           npm run test:packaged-server
           npm run test:browser
           npm run test:waypoints
           npm run test:waypoint-export
+          npm run test:waypoint-export-bundled
           npm run test:map-performance
           npm run test:cancel
           node --test tests/fuel-disabled.test.cjs tests/insert-track-point.test.cjs tests/waypoint-development-release.test.cjs

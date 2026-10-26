@@ -14,7 +14,7 @@ test('accepts only verifiable single-version traffic',()=>{assert.throws(()=>lat
 const fs=require('node:fs'),path=require('node:path');
 test('manual staging pins only the exact combined Fuel/Cancel candidate and never deploys preparation via push',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/cloudflare-dev.yml'),'utf8');
- assert.ok(workflow.includes("'e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade' }}"));
+ assert.ok(workflow.includes("'60994306d017c227da3246d2465611733c5043d2' }}"));
  assert.ok(workflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/mancardo-dev'"));
  for(const file of ['scripts/release-map-performance-development.cjs','tests/map-performance-development.test.cjs'])assert.ok(workflow.includes("      - '"+file+"'"));
  assert.ok(workflow.includes('node controller/tests/map-performance-development.test.cjs')===false);
@@ -130,7 +130,7 @@ test('Cancel acceptance augments existing synthetic and real Google checks witho
 const {validateFuelHtml,validatePreviousVersion,EXPECTED_PREVIOUS_MESSAGE}=require('../scripts/release-map-performance-development.cjs');
 test('newer Development previews cannot be silently overwritten by this composition',()=>{
  assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':EXPECTED_PREVIOUS_MESSAGE,'workers/tag':'fuel-cancel-6ac8fb56f3b7'}}));
- assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':require('../scripts/release-map-performance-development.cjs').CURRENT_MESSAGE,'workers/tag':'insert-waypoints-b74e22be5efc'}}));
+ assert.doesNotThrow(()=>validatePreviousVersion({annotations:{'workers/message':require('../scripts/release-map-performance-development.cjs').CURRENT_MESSAGE,'workers/tag':'waypoint-export-e1c63a4c86ca'}}));
  assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':'newer-delete-dialog-preview'}}));
  assert.throws(()=>validatePreviousVersion({}));
  assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':EXPECTED_PREVIOUS_MESSAGE,'workers/tag':'wrong'}}));
@@ -177,7 +177,7 @@ test('verify-only is explicit and fails before any deploy; same delivery and acc
 
 const {candidateFor,STAGE_PIN,STAGE_MANIFEST,STAGE_MESSAGE,validateDeleteHtml}=require('../scripts/release-map-performance-development.cjs');
 test('stage pins combined Delete while verification and diagnostics retain exact existing Fuel',()=>{
- assert.equal(STAGE_PIN,'e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade');assert.equal(STAGE_MANIFEST,'ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76');
+ assert.equal(STAGE_PIN,'60994306d017c227da3246d2465611733c5043d2');assert.equal(STAGE_MANIFEST,'20e1a44dfd83c1b8ffba2b04a5d582c89b4b820a52873204bdf5a1fe764db369');
  assert.equal(candidateFor(false).pin,STAGE_PIN);assert.equal(candidateFor(false).message,STAGE_MESSAGE);
  assert.equal(candidateFor(true).pin,PIN);assert.equal(candidateFor(true).manifest,MANIFEST);
  assert.throws(()=>validatePreviousVersion({annotations:{'workers/message':'227ec8853ef96f5de7b615f24b6748e9c96d912d bf8407a3acc2b7779b6bdefa3ab544078f3b4f28c404305e5e419b384ebb249f'}}));
@@ -226,9 +226,9 @@ test('Insert and waypoint acceptance run before overall pass; qualification cann
  assert.ok(c.includes("...(!verifyOnly?['tests/insert-track-point.test.cjs','tests/waypoint-export.test.cjs']:[])"));
  for(const flag of ['deliveredInsertVerified','deliveredWaypointSelectionVerified','insertAcceptancePassed','waypointSelectionAcceptancePassed'])assert.ok(c.indexOf('evidence.'+flag+'=')<c.indexOf('evidence.acceptancePassed=true'));
  // Qualification may precede fresh live identity acquisition; it cannot change stage pins.
- assert.ok(w.includes('ref: e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade'));
- assert.ok(w.includes("branches: ['staging/waypoint-export-development']"));
- assert.ok(w.includes('ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76  dist/waypoint-development/manifest.json'));
- for(const command of ['npm run test:source','npm run test:packaged-server','npm run test:browser','npm run test:waypoint-export','node --test tests/insert-track-point.test.cjs','node --test tests/fuel-disabled.test.cjs'])assert.ok(w.includes(command));
+ assert.ok(w.includes('ref: 60994306d017c227da3246d2465611733c5043d2'));
+ assert.ok(w.includes("branches: ['staging/waypoint-export-repair-qualification']"));
+ assert.ok(w.includes('20e1a44dfd83c1b8ffba2b04a5d582c89b4b820a52873204bdf5a1fe764db369  dist/waypoint-development/manifest.json'));
+ for(const command of ['npm run test:source','npm run test:packaged-server','npm run test:browser','npm run test:waypoint-export','npm run test:waypoint-export-bundled','node --test tests/insert-track-point.test.cjs','node --test tests/fuel-disabled.test.cjs'])assert.ok(w.includes(command));
  assert.ok(!/secrets\.|environment:|wrangler deploy|workflow_dispatch/.test(w));
 });
