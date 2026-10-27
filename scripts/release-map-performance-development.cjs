@@ -5,16 +5,16 @@ const {execFileSync,spawnSync}=require('node:child_process');
 const crypto=require('node:crypto');
 const PIN='6ac8fb56f3b74b1a2c96b187cc19d64442944e66';
 const MANIFEST='ee19c52be5768caaba1e63d35d40faba38096b5652c0b932efa54d2e1997dde4';
-const STAGE_PIN='60994306d017c227da3246d2465611733c5043d2';
-const STAGE_MANIFEST='20e1a44dfd83c1b8ffba2b04a5d582c89b4b820a52873204bdf5a1fe764db369';
-const STAGE_TAG='waypoint-export-60994306d017',STAGE_MESSAGE=STAGE_PIN+' '+STAGE_MANIFEST;
+const STAGE_PIN='dd8b591e1f688559335d28ebedaf196ddac7fe6f';
+const STAGE_MANIFEST='161f2078e476aa1f86ad8f3d206f194408251b56212d99ec1ae32fcc77218cb2';
+const STAGE_TAG='waypoint-export-dd8b591e1f68',STAGE_MESSAGE=STAGE_PIN+' '+STAGE_MANIFEST;
 const WORKER='mancardo-dev-test', DB_NAME='mancardo-private-library-dev';
 const PRODUCTION='6ada726b-aae6-441b-a698-69dc0789c7b7';
 const URL='https://mancardo-dev-test.jayfenno.workers.dev/';
 const TAG='fuel-cancel-6ac8fb56f3b7', MESSAGE=PIN+' '+MANIFEST;
-const CURRENT_VERSION='0e6cb503-d3ca-4559-a98e-77a06aec6abb';
-const CURRENT_DEPLOYMENT='33c7b6bb-9bd7-44b3-984f-82a43fc228d8';
-const CURRENT_MESSAGE='e1c63a4c86ca89f5831bcc0a3ddd6ba70b0d7ade ee4ea247ea394f2a1582110f0eeacbfadc07ba4cf0c374899b613fb7d558fa76',CURRENT_TAG='waypoint-export-e1c63a4c86ca';
+const CURRENT_VERSION='5d8573de-1637-416f-a087-a15883bbd9b0';
+const CURRENT_DEPLOYMENT='de63befd-5d58-4b92-8c30-b27a29208bb2';
+const CURRENT_MESSAGE='60994306d017c227da3246d2465611733c5043d2 20e1a44dfd83c1b8ffba2b04a5d582c89b4b820a52873204bdf5a1fe764db369',CURRENT_TAG='waypoint-export-60994306d017';
 function validateStagePreviousVersion(deployment,version){
   if(deployment.id!==CURRENT_DEPLOYMENT||activeVersion(deployment)!==CURRENT_VERSION||version.annotations?.['workers/message']!==CURRENT_MESSAGE||version.annotations?.['workers/tag']!==CURRENT_TAG)throw Error('Minimal stage requires the exact currently reviewed Development version; stop and coordinate before any write.');
 }
