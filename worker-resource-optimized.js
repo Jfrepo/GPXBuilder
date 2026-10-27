@@ -28,8 +28,8 @@ const CONSOLIDATED_BODY=String.raw`<script id="mancardo-final-ui-behaviour">
     var exportBtn=document.getElementById('exportSelectedBtn');
     if(exportBtn){
       exportBtn.textContent='Export';
-      exportBtn.setAttribute('aria-label','Export selected tracks');
-      exportBtn.title='Export selected tracks';
+      exportBtn.setAttribute('aria-label','Export ticked tracks and waypoints');
+      exportBtn.title='Export ticked tracks and waypoints';
     }
     var deleteBtn=document.getElementById('deleteSelectedBtn');
     if(deleteBtn)deleteBtn.textContent='Delete';
