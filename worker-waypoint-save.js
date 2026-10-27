@@ -412,7 +412,7 @@ const WAYPOINT_FEATURE = String.raw`
   }
 
   // Selection is the existing durable Show state, not a separate delete list.
-  // Keep track export/delete handlers unchanged: their scope remains tracks.
+  // This handler changes Show state only; Export and Delete define their own scopes.
   if(els.selectAllTracks&&typeof updateSelectAll==='function'){
     updateSelectAll=function(){
       var items=(state.library||[]).concat(waypoints);

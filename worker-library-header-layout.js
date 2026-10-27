@@ -1,4 +1,4 @@
-import baseWorker from './worker-waypoint-save.js';
+import baseWorker from './worker-gpx-export.js';
 
 const LIBRARY_HEADER_CSS = String.raw`
 <style id="mancardo-library-header-layout-styles">
