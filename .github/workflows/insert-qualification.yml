@@ -1,7 +1,7 @@
 name: Waypoint Export Candidate Qualification
 on:
   push:
-    branches: ['staging/waypoint-export-repair-qualification']
+    branches: ['staging/unified-export-qualification']
 permissions:
   contents: read
 jobs:
@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 60994306d017c227da3246d2465611733c5043d2
+          ref: dd8b591e1f688559335d28ebedaf196ddac7fe6f
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -20,7 +20,7 @@ jobs:
       - run: npx --no-install playwright install --with-deps chromium
       - name: Qualify exact candidate with synthetic tests only
         run: |
-          test "$(git rev-parse HEAD)" = "60994306d017c227da3246d2465611733c5043d2"
+          test "$(git rev-parse HEAD)" = "dd8b591e1f688559335d28ebedaf196ddac7fe6f"
           npm run test:source
           npm run test:packaged-server
           npm run test:browser
@@ -33,11 +33,11 @@ jobs:
           node --test tests/fuel-disabled.test.cjs
           node --test tests/waypoint-development-release.test.cjs
           node scripts/build-waypoint-development.cjs
-          echo "20e1a44dfd83c1b8ffba2b04a5d582c89b4b820a52873204bdf5a1fe764db369  dist/waypoint-development/manifest.json" | sha256sum --check
+          echo "161f2078e476aa1f86ad8f3d206f194408251b56212d99ec1ae32fcc77218cb2  dist/waypoint-development/manifest.json" | sha256sum --check
           git diff --exit-code
       - uses: actions/upload-artifact@v4
         with:
-          name: waypoint-export-development-60994306d017c227da3246d2465611733c5043d2
+          name: waypoint-export-development-dd8b591e1f688559335d28ebedaf196ddac7fe6f
           path: dist/waypoint-development/
           if-no-files-found: error
           retention-days: 7
