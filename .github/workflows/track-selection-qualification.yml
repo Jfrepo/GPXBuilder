@@ -1,0 +1,29 @@
+name: Track Selection Qualification (No Deploy)
+on:
+  push:
+    branches: ['chatgpt/preserve-track-selection-view']
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Qualify exact source with isolated synthetic fixtures
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          npm run test:source
+          npm run test:packaged-server
+          npm run test:browser
+          node --test --test-concurrency=1 tests/track-selection-view.test.cjs tests/insert-track-point.test.cjs tests/cancel-edit.test.cjs tests/waypoint-display.test.cjs tests/map-performance.test.cjs tests/waypoint-export.test.cjs tests/fuel-disabled.test.cjs tests/waypoint-development-release.test.cjs tests/production-preflight.test.cjs
+          npm run test:waypoint-export-bundled
+          git diff --exit-code
