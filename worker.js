@@ -220,7 +220,7 @@ const POINT_LIST_FEATURE = String.raw`
   render=function(){baseRender();drawPointListHighlights();};
 
   var baseLoadItem=loadItem;
-  loadItem=function(id){if(typeof mayLeaveEdit==='function'&&!mayLeaveEdit())return false;clearPointHighlights();return baseLoadItem(id);};
+  loadItem=function(id){if(typeof mayLeaveEdit==='function'&&!mayLeaveEdit())return false;clearPointHighlights();return baseLoadItem.apply(this,arguments);};
 
   var baseStartNewRoute=startNewRoute;
   startNewRoute=function(){var result=baseStartNewRoute();if(result!==false)clearPointHighlights();return result;};

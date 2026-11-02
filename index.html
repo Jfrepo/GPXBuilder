@@ -1531,7 +1531,7 @@ function renderLibrary(){
     wrap.appendChild(d);
   });
 }
-function loadItem(id){
+function loadItem(id,options){
   if(!mayLeaveEdit())return false;
   sharedPreviewRequest++;
   state.sharedPreview=false;state.sharedPreviewMeta=null;
@@ -1542,7 +1542,8 @@ function loadItem(id){
   state.selection = null; state.history=[]; state.future=[]; state.extend=null;
   state.mode='view'; updateModeBanner();
   render();
-  fitToTrack();
+  // Map selection keeps the spot the user clicked; Library/import navigation still fits.
+  if(!options||!options.preserveView)fitToTrack();
   renderLibrary();
 }
 function startNewRoute(){
@@ -1644,7 +1645,7 @@ function showTrackHitPopup(latlng){
   L.popup({closeButton:true,offset:[0,-4]}).setLatLng(latlng).setContent(box).openOn(map);return true;
 }
 function activateTrackFromMap(id){
-  if(id!==state.currentId&&loadItem(id)===false)return;
+  if(id!==state.currentId&&loadItem(id,{preserveView:true})===false)return;
   highlightTrackInLibrary(true);
 }
 // Development autosave: persist changed geometry before a browser refresh.
@@ -1708,7 +1709,7 @@ function render(){
         var p=seg[i],isEnd=(i===0||i===seg.length-1),r=isEnd?5:3;
         (function(itemId,si,i,p,r,colour){
           var m=L.circleMarker([p.lat,p.lon],{radius:r,color:'#fff',weight:1,fillColor:colour,fillOpacity:.9}).addTo(trackLayerGroup);
-          m.on('click',function(ev){L.DomEvent.stopPropagation(ev);if(pendingInsert){placeInsertPoint(L.latLng(p.lat,p.lon));return;}if(state.mode==='insert'){chooseInsertPoint(L.latLng(p.lat,p.lon));return;}if(state.mode==='joinpoint'){completeJoinToLibraryPoint(itemId,si,i);return;}if(loadItem(itemId)===false)return;state.selection={seg:si,pt:i};render();highlightTrackInLibrary(true);});
+          m.on('click',function(ev){L.DomEvent.stopPropagation(ev);if(pendingInsert){placeInsertPoint(L.latLng(p.lat,p.lon));return;}if(state.mode==='insert'){chooseInsertPoint(L.latLng(p.lat,p.lon));return;}if(state.mode==='joinpoint'){completeJoinToLibraryPoint(itemId,si,i);return;}if(loadItem(itemId,{preserveView:true})===false)return;state.selection={seg:si,pt:i};render();highlightTrackInLibrary(true);});
         })(item.id,si,i,p,r,colour);
       }
     });
