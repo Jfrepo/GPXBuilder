@@ -1967,8 +1967,15 @@ function trackIntegrityDrawDirections(report){
     }
   });
   var a=segments[0][0],b=segments[0][1],last=segments[segments.length-1];
-  trackIntegrityMarker(a,'➜','#168653',trackIntegrityBearing(a,b)-90,'Start / direction in');
-  trackIntegrityMarker(last[last.length-1],'➜','#8a45b4',trackIntegrityBearing(last[last.length-2],last[last.length-1])-90,'Finish / direction out');
+  trackIntegrityMarker(a,'➜','#168653',trackIntegrityBearing(a,b)-90,'Current track beginning / direction in');
+  trackIntegrityMarker(last[last.length-1],'➜','#8a45b4',trackIntegrityBearing(last[last.length-2],last[last.length-1])-90,'Current track ending / direction out (not confirmed)');
+  if(trackIntegrityStart&&trackIntegrityLastId===(state.current.id||state.currentId)){
+    var designated=state.current.segments[trackIntegrityStart.segment];
+    if(designated&&designated.length>1){
+      var startPoint=trackIntegrityStart.reversed?designated[designated.length-1]:designated[0];
+      trackIntegrityMarker(startPoint,'S','#15803d',0,'Confirmed intended trail start');
+    }
+  }
   if(report)report.original.joins.forEach(function(join){
     if(join.status!=='review')return;
     var from=state.current.segments[join.fromSegment-1];
