@@ -1,0 +1,24 @@
+name: Track Integrity Read-Only Regression
+on:
+  push:
+    branches:
+      - chatgpt/track-integrity-readonly-v1
+  pull_request:
+    branches:
+      - mancardo-dev
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  track-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run geometry and Moruya regression checks
+        run: node --test tests/track-integrity.test.cjs
+      - name: Run existing release safety regressions
+        run: node --test tests/release-safety.test.cjs

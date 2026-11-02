@@ -318,6 +318,12 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
             <button class="icon-btn danger tool-icon" id="deleteTrackBtn" disabled aria-label="Delete track" data-tooltip="Delete track" title="Delete track">🗑</button>
           </div>
         </div>
+        <div style="display:flex;gap:.35rem;flex-wrap:wrap;padding:.35rem .25rem">
+          <button class="icon-btn" type="button" id="validateTrackBtn">Validate track</button>
+          <button class="icon-btn" type="button" id="flagTrailStartBtn">Flag selected endpoint as start</button>
+          <button class="icon-btn" type="button" id="directionArrowsBtn" aria-pressed="true">Direction arrows: On</button>
+        </div>
+        <div id="trackIntegrityReport" role="status" aria-live="polite" style="padding:.35rem .6rem;font-size:.78rem;white-space:pre-line"></div>
         <button class="points-toggle" id="pointsToggle">Show point list</button>
         <div class="points-table-wrap hidden" id="pointsWrap">
           <table class="points">
@@ -362,6 +368,7 @@ table.points tr:hover{background:var(--surface-2); cursor:pointer;}
       + '</div>');
   }
 </script>
+<script src="./track-integrity.js"></script>
 <script>
 (function(){
 "use strict";
@@ -1929,6 +1936,101 @@ setTimeout(function(){
   if(!state.current) map.setView([-32.5,147.0], 6);
 }, 100);
 window.addEventListener('resize', function(){ map.invalidateSize(); });
+
+
+// ---------- Track integrity: read-only validation and direction overlays ----------
+var trackIntegrityStart=null,trackIntegrityLastId=null,trackIntegrityArrowsOn=true;
+var trackIntegrityLayer=L.layerGroup().addTo(map);
+function trackIntegrityBearing(a,b){
+  var lat1=a.lat*Math.PI/180,lat2=b.lat*Math.PI/180,dl=(b.lon-a.lon)*Math.PI/180;
+  var y=Math.sin(dl)*Math.cos(lat2),x=Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(dl);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function trackIntegrityMarker(p,glyph,color,angle,title){
+  if(!p||!Number.isFinite(p.lat)||!Number.isFinite(p.lon))return;
+  var icon=L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],
+    html:'<div aria-hidden="true" style="width:26px;height:26px;display:grid;place-items:center;background:'+color+
+    ';border:2px solid white;border-radius:50%;color:white;font:bold 17px sans-serif;transform:rotate('+angle+'deg)">'+glyph+'</div>'});
+  L.marker([p.lat,p.lon],{icon:icon,interactive:false,keyboard:false,title:title}).addTo(trackIntegrityLayer);
+}
+function trackIntegrityDrawDirections(report){
+  trackIntegrityLayer.clearLayers();
+  if(!state.current||!trackIntegrityArrowsOn)return;
+  var segments=(state.current.segments||[]).filter(function(s){return s&&s.length>=2;});
+  if(!segments.length)return;
+  segments.forEach(function(seg){
+    var step=Math.max(1,Math.ceil((seg.length-1)/5));
+    for(var i=0;i<seg.length-1;i+=step){
+      var a=seg[i],b=seg[Math.min(i+step,seg.length-1)];
+      if(!a||!b||haversine(a,b)<1)continue;
+      trackIntegrityMarker({lat:(a.lat+b.lat)/2,lon:(a.lon+b.lon)/2},'➜','#2563eb',trackIntegrityBearing(a,b)-90,'Travel direction');
+    }
+  });
+  var a=segments[0][0],b=segments[0][1],last=segments[segments.length-1];
+  trackIntegrityMarker(a,'➜','#168653',trackIntegrityBearing(a,b)-90,'Current track beginning / direction in');
+  trackIntegrityMarker(last[last.length-1],'➜','#8a45b4',trackIntegrityBearing(last[last.length-2],last[last.length-1])-90,'Current track ending / direction out (not confirmed)');
+  if(trackIntegrityStart&&trackIntegrityLastId===(state.current.id||state.currentId)){
+    var designated=state.current.segments[trackIntegrityStart.segment];
+    if(designated&&designated.length>1){
+      var startPoint=trackIntegrityStart.reversed?designated[designated.length-1]:designated[0];
+      trackIntegrityMarker(startPoint,'S','#15803d',0,'Confirmed intended trail start');
+    }
+  }
+  if(report)report.original.joins.forEach(function(join){
+    if(join.status!=='review')return;
+    var from=state.current.segments[join.fromSegment-1];
+    var to=state.current.segments[join.toSegment-1];
+    if(!from||!to||!from.length||!to.length)return;
+    var left=from[from.length-1],right=to[0];
+    // Mark both sides; never draw an implied trail across the gap.
+    trackIntegrityMarker(left,'!','#b45309',0,'Disconnection before segment '+join.toSegment);
+    trackIntegrityMarker(right,'!','#b45309',0,'Disconnection after segment '+join.fromSegment);
+  });
+}
+function trackIntegrityValidate(){
+  var el=document.getElementById('trackIntegrityReport');
+  if(!state.current){el.textContent='Select a track to validate.';trackIntegrityLayer.clearLayers();return;}
+  if(!window.MancardoTrackIntegrity){el.textContent='Validator could not load.';return;}
+  var id=state.current.id||state.currentId;
+  if(trackIntegrityLastId!==id){trackIntegrityStart=null;trackIntegrityLastId=id;}
+  var report=MancardoTrackIntegrity.analyze(state.current,{start:trackIntegrityStart});
+  var originalGaps=report.original.joins.filter(function(j){return j.status==='review';});
+  var proposedGaps=report.proposal.joins.filter(function(j){return j.status==='review';});
+  var sequence=report.proposal.order.map(function(o){return o.segment+(o.reversed?' reversed':'');}).join(' → ');
+  var lines=['Status: '+report.status.toUpperCase()+' · '+report.counts.segments+' segments · '+report.counts.points+' points',
+    'Current segment gaps: '+originalGaps.length+'. Proposed order: '+(sequence||'not available')+'.',
+    'Proposed unverified joins: '+proposedGaps.length+'. Start: '+(trackIntegrityStart?'flagged':'not confirmed')+'.',
+    'Read-only: no geometry or waypoint changes have been applied.'];
+  if(proposedGaps.length)lines.push('Review gap distances: '+proposedGaps.map(function(j){return Math.round(j.distanceMeters)+' m ('+j.fromSegment+'→'+j.toSegment+')';}).join(', '));
+  el.textContent=lines.join('\n');
+  trackIntegrityDrawDirections(report);
+}
+document.getElementById('validateTrackBtn').onclick=trackIntegrityValidate;
+document.getElementById('flagTrailStartBtn').onclick=function(){
+  if(!state.current||!state.selection){alert('Select the first or last point of the intended starting segment.');return;}
+  var sel=state.selection,seg=state.current.segments[sel.seg]||[];
+  if(seg.length<2||(sel.pt!==0&&sel.pt!==seg.length-1)){alert('Start must be an endpoint of a segment.');return;}
+  trackIntegrityStart={segment:sel.seg,reversed:sel.pt===seg.length-1};
+  trackIntegrityLastId=state.current.id||state.currentId;
+  trackIntegrityValidate();
+};
+document.getElementById('directionArrowsBtn').onclick=function(){
+  trackIntegrityArrowsOn=!trackIntegrityArrowsOn;
+  this.textContent='Direction arrows: '+(trackIntegrityArrowsOn?'On':'Off');
+  this.setAttribute('aria-pressed',String(trackIntegrityArrowsOn));
+  trackIntegrityValidate();
+};
+var trackIntegrityBaseRender=render;
+render=function(){
+  var result=trackIntegrityBaseRender.apply(this,arguments);
+  if(!state.current){trackIntegrityLayer.clearLayers();return result;}
+  // Recompute the overlay from the current (possibly unsaved) editor geometry.
+  if(window.MancardoTrackIntegrity){
+    var report=MancardoTrackIntegrity.analyze(state.current,{start:trackIntegrityLastId===(state.current.id||state.currentId)?trackIntegrityStart:null});
+    trackIntegrityDrawDirections(report);
+  }
+  return result;
+};
 
 // ---------- boot ----------
 loadLibrary();
